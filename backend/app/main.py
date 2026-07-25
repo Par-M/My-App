@@ -1,14 +1,18 @@
 from fastapi import FastAPI
-app = FastAPI()
 
+app = FastAPI(
+    title="My App API",
+    version="1.0.0"
+)
 
 @app.get("/")
 def root():
-    return {"message": "Hello World"}
+    return {
+        "message": "AI Scheduler API"
+    }
 
 @app.get("/health")
-def root():
-    return {"status": "Healthy"}
-    
-    
-    
+def health():
+    return {
+        "status": "healthy"
+    }

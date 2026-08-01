@@ -8,6 +8,21 @@ jobs:
   backend:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: Parthiv
+          POSTGRES_PASSWORD: testing123
+          POSTGRES_DB: myapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: backend
@@ -23,5 +38,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - run: |
-          python -m compileall app
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://Parthiv:testing123@localhost:5432/myapp_test
+        run: alembic upgrade head
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+psycopg://Parthiv:testing123@localhost:5432/myapp_test
+        run: python -m pytest tests -q

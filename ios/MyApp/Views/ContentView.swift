@@ -1,24 +1,24 @@
-//
-//  ContentView.swift
-//  MyApp
-//
-//  Created by Parthiv Manj on 2026-07-18.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AuthenticationService.self) private var authService
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            switch authService.state {
+            case .unknown:
+                ProgressView()
+            case .signedOut:
+                LoginView()
+            case .signedIn:
+                DashboardView()
+            }
         }
-        .padding()
+        .animation(.default, value: authService.state == .signedIn)
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AuthenticationService())
 }

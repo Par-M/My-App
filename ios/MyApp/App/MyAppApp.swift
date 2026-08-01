@@ -1,17 +1,16 @@
-//
-//  MyAppApp.swift
-//  MyApp
-//
-//  Created by Parthiv Manj on 2026-07-18.
-//
-
 import SwiftUI
 
 @main
 struct MyAppApp: App {
+    @State private var authService = AuthenticationService()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(authService)
+                .task {
+                    await authService.restoreSession()
+                }
         }
     }
 }

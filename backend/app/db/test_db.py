@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from app.db.session import SessionLocal
+from app.db.database import SessionLocal
 from app.models.user import User
 
 db = SessionLocal()

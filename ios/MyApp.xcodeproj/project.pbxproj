@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A1B2C3D4E5F60718293A4B5C /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C1B2C3D4E5F60718293A4B5C /* GoogleSignIn */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		98DBC6E7300C029100DC6DB4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F60718293A4B5C /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = MyApp;
 			packageProductDependencies = (
+				C1B2C3D4E5F60718293A4B5C /* GoogleSignIn */,
 			);
 			productName = MyApp;
 			productReference = 98DBC6D9300C028F00DC6DB4 /* MyApp.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 98DBC6D0300C028F00DC6DB4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F1B2C3D4E5F60718293A4B5C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 98DBC6DA300C028F00DC6DB4 /* Products */;
 			projectDirPath = "";
@@ -605,6 +614,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F1B2C3D4E5F60718293A4B5C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C1B2C3D4E5F60718293A4B5C /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1B2C3D4E5F60718293A4B5C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 98DBC6D1300C028F00DC6DB4 /* Project object */;
 }

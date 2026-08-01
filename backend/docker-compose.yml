@@ -1,0 +1,19 @@
+services:
+    postgres:
+        image: postgres:17
+        container_name: my_app_db
+        restart: unless-stopped
+        
+        environment:
+            POSTGRES_USER: Parthiv
+            POSTGRES_PASSWORD: testing123
+            POSTGRES_DB: myapp_db
+            
+        ports:
+          - "5432:5432"
+          
+        volumes:
+         - postgres_data:/var/lib/postgresql/data
+         
+volumes:
+    postgres_data:

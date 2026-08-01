@@ -1,18 +1,14 @@
 from fastapi import FastAPI
 
+from app.api.auth import router as auth_router
+
 app = FastAPI(
-    title="My App API",
-    version="1.0.0"
+    title="AI Scheduler API"
 )
+
+app.include_router(auth_router)
+
 
 @app.get("/")
 def root():
-    return {
-        "message": "AI Scheduler API"
-    }
-
-@app.get("/health")
-def health():
-    return {
-        "status": "healthy"
-    }
+    return {"message": "AI Scheduler API"}

@@ -40,14 +40,14 @@ final class APIClient {
             var request = URLRequest(url: url)
             request.httpMethod = HTTPMethod.post.rawValue
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(RefreshRequest(refreshToken: refreshToken))
+            request.httpBody = try JSONCoding.encoder.encode(RefreshRequest(refreshToken: refreshToken))
 
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw NetworkError.unauthorized
             }
 
-            let session = try JSONDecoder().decode(AuthSession.self, from: data)
+            let session = try JSONCoding.decoder.decode(AuthSession.self, from: data)
             keychain.save(session)
             return session
         }
@@ -56,6 +56,10 @@ final class APIClient {
         defer { activeRefresh = nil }
 
         return try await task.value
+    }
+
+    func request<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+        try await send(endpoint)
     }
 
     private func send<T: Decodable>(_ endpoint: Endpoint, didRetry: Bool = false) async throws -> T {
@@ -79,14 +83,18 @@ final class APIClient {
         }
 
         do {
-            return try JSONDecoder().decode(T.self, from: data)
+            return try JSONCoding.decoder.decode(T.self, from: data)
         } catch {
             throw NetworkError.decoding(error)
         }
     }
 
     private func makeRequest(_ endpoint: Endpoint) throws -> URLRequest {
-        let url = baseURL.appending(path: endpoint.path)
+        var components = URLComponents(url: baseURL.appending(path: endpoint.path), resolvingAgainstBaseURL: false)
+        components?.queryItems = endpoint.queryItems
+        guard let url = components?.url else {
+            throw NetworkError.invalidResponse
+        }
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -96,13 +104,13 @@ final class APIClient {
         }
 
         if let body = endpoint.body {
-            request.httpBody = try JSONEncoder().encode(body)
+            request.httpBody = try JSONCoding.encoder.encode(body)
         }
 
         return request
     }
 }
 
-private struct MessageResponse: Decodable {
+struct MessageResponse: Decodable {
     let message: String
 }

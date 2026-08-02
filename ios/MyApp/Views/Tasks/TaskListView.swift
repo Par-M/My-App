@@ -1,0 +1,248 @@
+import SwiftUI
+
+struct TaskRow: View {
+    let task: TaskItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                PriorityBadge(priority: task.priority)
+                Text(task.title)
+                    .font(.body.weight(.medium))
+                    .strikethrough(task.status == .completed, color: .secondary)
+                    .lineLimit(1)
+            }
+
+            HStack(spacing: 12) {
+                if let deadline = task.deadline {
+                    Label(
+                        deadline.formatted(date: .abbreviated, time: .omitted),
+                        systemImage: "calendar"
+                    )
+                }
+                if let category = task.category, !category.isEmpty {
+                    Text(category)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct PriorityBadge: View {
+    let priority: TaskPriority
+
+    private var color: Color {
+        switch priority {
+        case .low: .green
+        case .medium: .orange
+        case .high: .red
+        }
+    }
+
+    var body: some View {
+        Image(systemName: "flag.fill")
+            .font(.caption)
+            .foregroundStyle(color)
+            .accessibilityLabel("\(priority.label) priority")
+    }
+}
+
+struct TaskListView: View {
+    @Environment(TaskService.self) private var taskService
+    @Environment(AuthenticationService.self) private var authService
+
+    @State private var searchText = ""
+    @State private var priorityFilter: TaskPriority?
+    @State private var statusFilter: TaskStatus?
+    @State private var sortOption: TaskService.SortOption = .created
+    @State private var sortAscending = false
+    @State private var showAddTask = false
+    @State private var errorDismissed = false
+
+    private struct LoadKey: Hashable {
+        let search: String
+        let priority: TaskPriority?
+        let status: TaskStatus?
+        let archived: Bool
+        let sort: TaskService.SortOption
+        let order: String
+        let dataVersion: Int
+    }
+
+    private var loadKey: LoadKey {
+        LoadKey(
+            search: searchText,
+            priority: priorityFilter,
+            status: statusFilter,
+            archived: taskService.showingArchived,
+            sort: sortOption,
+            order: sortAscending ? "asc" : "desc",
+            dataVersion: taskService.dataVersion
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if taskService.isLoading && taskService.tasks.isEmpty {
+                    ProgressView("Loading tasks…")
+                } else if taskService.tasks.isEmpty {
+                    ContentUnavailableView(
+                        taskService.showingArchived ? "No Archived Tasks" : "No Tasks Yet",
+                        systemImage: "checklist",
+                        description: Text(
+                            taskService.showingArchived
+                                ? "Tasks you archive will appear here."
+                                : "Tap + to create your first task."
+                        )
+                    )
+                } else {
+                    List {
+                        ForEach(taskService.tasks) { task in
+                            NavigationLink(value: task) {
+                                TaskRow(task: task)
+                            }
+                        }
+                        .onDelete(perform: deleteTasks)
+                    }
+                    .searchable(text: $searchText, prompt: "Search tasks")
+                }
+            }
+            .navigationTitle(taskService.showingArchived ? "Archived" : "Tasks")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        if let name = authService.user?.name {
+                            Text(name)
+                        }
+                        if let email = authService.user?.email {
+                            Text(email)
+                        }
+                        Divider()
+                        Button("Log Out", role: .destructive) {
+                            authService.signOut()
+                        }
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                            .accessibilityLabel("Account")
+                    }
+                }
+
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        showAddTask = true
+                    } label: {
+                        Label("Add Task", systemImage: "plus")
+                    }
+                    .accessibilityIdentifier("addTaskButton")
+
+                    Menu {
+                        ForEach(TaskService.SortOption.allCases) { option in
+                            Button {
+                                if sortOption == option {
+                                    sortAscending.toggle()
+                                } else {
+                                    sortOption = option
+                                    sortAscending = option != .deadline
+                                }
+                            } label: {
+                                if sortOption == option {
+                                    Label(
+                                        option.label,
+                                        systemImage: sortAscending ? "arrow.up" : "arrow.down"
+                                    )
+                                } else {
+                                    Text(option.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                    }
+
+                    Menu {
+                        Menu("Priority") {
+                            Button("All") { priorityFilter = nil }
+                            ForEach(TaskPriority.allCases) { priority in
+                                Button(priority.label) { priorityFilter = priority }
+                            }
+                        }
+                        Menu("Status") {
+                            Button("All") { statusFilter = nil }
+                            ForEach(TaskStatus.allCases) { status in
+                                Button(status.label) { statusFilter = status }
+                            }
+                        }
+                    } label: {
+                        Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityIdentifier("filterMenuButton")
+
+                    Button {
+                        taskService.setShowingArchived(!taskService.showingArchived)
+                    } label: {
+                        Label(
+                            taskService.showingArchived ? "Active" : "Archived",
+                            systemImage: "archivebox"
+                        )
+                    }
+                    .accessibilityIdentifier("archiveToggleButton")
+                }
+            }
+            .navigationDestination(for: TaskItem.self) { task in
+                TaskDetailView(task: task)
+            }
+            .sheet(isPresented: $showAddTask) {
+                TaskFormView(mode: .add)
+            }
+            .task(id: loadKey) {
+                await taskService.loadTasks(
+                    search: searchText,
+                    priority: priorityFilter,
+                    status: statusFilter,
+                    sort: sortOption,
+                    order: sortAscending ? "asc" : "desc"
+                )
+            }
+            .overlay(alignment: .bottom) {
+                if let errorMessage = taskService.errorMessage, !errorDismissed {
+                    VStack {
+                        HStack {
+                            Text(errorMessage)
+                                .font(.footnote)
+                            Spacer()
+                            Button {
+                                errorDismissed = true
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                        }
+                        .padding()
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding()
+                    }
+                }
+            }
+        }
+    }
+
+    private func deleteTasks(at offsets: IndexSet) {
+        Task {
+            for index in offsets {
+                let task = taskService.tasks[index]
+                try? await taskService.deleteTask(task)
+            }
+        }
+    }
+}
+
+#Preview {
+    TaskListView()
+        .environment(TaskService())
+}

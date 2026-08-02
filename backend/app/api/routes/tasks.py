@@ -1,0 +1,139 @@
+import uuid
+
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi import status
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.db.session import get_db
+from app.models.task import TaskPriority
+from app.models.task import TaskStatus
+from app.models.user import User
+from app.schemas.task import TaskCreate
+from app.schemas.task import TaskListResponse
+from app.schemas.task import TaskResponse
+from app.schemas.task import TaskUpdate
+from app.services.task_service import InvalidSortError
+from app.services.task_service import TaskNotFoundError
+from app.services.task_service import TaskService
+
+router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _service(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TaskService:
+    return TaskService(db, current_user.id)
+
+
+def _handle_service_errors(exc: Exception) -> None:
+    if isinstance(exc, TaskNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    if isinstance(exc, InvalidSortError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        )
+    raise exc
+
+
+@router.post(
+    "",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_task(
+    payload: TaskCreate,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    return service.create_task(payload)
+
+
+@router.get("", response_model=TaskListResponse)
+def list_tasks(
+    search: str | None = Query(default=None, max_length=255),
+    priority: TaskPriority | None = Query(default=None),
+    status_filter: TaskStatus | None = Query(default=None, alias="status"),
+    category: str | None = Query(default=None, max_length=100),
+    archived: bool = Query(default=False),
+    sort: str | None = Query(default=None),
+    order: str = Query(default="asc", pattern="^(asc|desc)$"),
+    service: TaskService = Depends(_service),
+) -> TaskListResponse:
+    try:
+        tasks = service.list_tasks(
+            search=search,
+            priority=priority,
+            status=status_filter,
+            category=category,
+            archived=archived,
+            sort=sort,
+            order=order,
+        )
+    except (InvalidSortError, ValueError) as exc:
+        _handle_service_errors(exc)
+    return TaskListResponse(items=tasks, total=len(tasks))
+
+
+@router.get("/{task_id}", response_model=TaskResponse)
+def get_task(
+    task_id: uuid.UUID,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.get_task(task_id)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+def update_task(
+    task_id: uuid.UUID,
+    payload: TaskUpdate,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.update_task(task_id, payload)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.delete("/{task_id}")
+def delete_task(
+    task_id: uuid.UUID,
+    service: TaskService = Depends(_service),
+) -> dict[str, str]:
+    try:
+        service.delete_task(task_id)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+    return {"message": "Task deleted"}
+
+
+@router.post("/{task_id}/archive", response_model=TaskResponse)
+def archive_task(
+    task_id: uuid.UUID,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.archive_task(task_id)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.post("/{task_id}/restore", response_model=TaskResponse)
+def restore_task(
+    task_id: uuid.UUID,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.restore_task(task_id)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)

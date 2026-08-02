@@ -29,6 +29,7 @@ def setup_database():
 def clean_database():
     yield
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM tasks"))
         conn.execute(text("DELETE FROM users"))
 
 

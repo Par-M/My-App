@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import relationship
 
 from app.db.base import Base
 
@@ -21,7 +22,6 @@ class User(Base):
             name="uq_users_provider_user_id",
         ),
     )
-
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -61,4 +61,9 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    tasks: Mapped[list["Task"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

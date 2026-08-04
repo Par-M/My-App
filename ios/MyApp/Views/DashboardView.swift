@@ -26,6 +26,7 @@ struct DashboardView: View {
         .environment(AuthenticationService())
         .environment(TaskService())
         .environment(PlannerService())
+        .environment(NotificationService.shared)
         .environment(CalendarService())
         .environment(ScheduleService())
 }

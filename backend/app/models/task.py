@@ -79,6 +79,21 @@ class Task(Base):
         nullable=True,
     )
 
+    actual_duration: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     category: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,

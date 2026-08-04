@@ -1,8 +1,15 @@
 import uuid
+from datetime import datetime
+from datetime import timedelta
+from datetime import time as dt_time
+from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.calendar_block import CalendarBlock
 from app.models.task import Task
+from app.models.task import TaskStatus
 from app.repositories import task_repository
 from app.repositories.task_repository import SORT_FIELDS
 from app.schemas.task import TaskCreate
@@ -15,6 +22,14 @@ class TaskNotFoundError(Exception):
 
 class InvalidSortError(Exception):
     pass
+
+
+class InvalidTaskTransitionError(Exception):
+    pass
+
+
+def _utc() -> ZoneInfo:
+    return ZoneInfo("UTC")
 
 
 class TaskService:
@@ -92,3 +107,93 @@ class TaskService:
         self.db.commit()
         self.db.refresh(task)
         return task
+
+    def start_task(self, task_id: uuid.UUID) -> Task:
+        task = self.get_task(task_id)
+        if task.status == TaskStatus.completed:
+            raise InvalidTaskTransitionError(
+                "A completed task cannot be started"
+            )
+        task.status = TaskStatus.in_progress
+        if task.started_at is None:
+            task.started_at = datetime.now(_utc())
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    def complete_task(
+        self, task_id: uuid.UUID, actual_minutes: int | None = None
+    ) -> Task:
+        task = self.get_task(task_id)
+        if task.status == TaskStatus.completed:
+            self.db.refresh(task)
+            return task
+        task.status = TaskStatus.completed
+        task.completed_at = datetime.now(_utc())
+        if actual_minutes is not None:
+            task.actual_duration = (task.actual_duration or 0) + actual_minutes
+        elif task.actual_duration is None:
+            if task.started_at is not None:
+                elapsed = (
+                    datetime.now(_utc()) - task.started_at
+                ).total_seconds() / 60
+                task.actual_duration = int(max(1, round(elapsed)))
+            else:
+                task.actual_duration = 0
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    def snooze_task(
+        self,
+        task_id: uuid.UUID,
+        minutes: int,
+        timezone_name: str = "UTC",
+    ) -> tuple[Task, list[CalendarBlock]]:
+        task = self.get_task(task_id)
+        if task.status == TaskStatus.completed:
+            raise InvalidTaskTransitionError(
+                "A completed task cannot be snoozed"
+            )
+
+        tz = ZoneInfo(timezone_name)
+        now = datetime.now(tz)
+        today_start = datetime.combine(now.date(), dt_time.min, tzinfo=tz)
+        today_end = datetime.combine(now.date(), dt_time.max, tzinfo=tz)
+
+        blocks = list(
+            self.db.scalars(
+                select(CalendarBlock)
+                .where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.start_at > now,
+                    CalendarBlock.start_at <= today_end,
+                    CalendarBlock.start_at >= today_start,
+                )
+                .order_by(CalendarBlock.start_at)
+            ).all()
+        )
+
+        if not blocks:
+            self.db.refresh(task)
+            return task, []
+
+        for block in blocks:
+            new_start = block.start_at + timedelta(minutes=minutes)
+            new_end = block.end_at + timedelta(minutes=minutes)
+            if new_end > today_end:
+                duration = block.end_at - block.start_at
+                new_end = today_end
+                new_start = today_end - duration
+                if new_start < today_start:
+                    new_start = today_start
+                    new_end = today_start
+            block.start_at = new_start
+            block.end_at = new_end
+
+        self.db.commit()
+        self.db.refresh(task)
+        for block in blocks:
+            self.db.refresh(block)
+        return task, blocks

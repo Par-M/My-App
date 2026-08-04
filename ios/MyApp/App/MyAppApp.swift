@@ -4,6 +4,7 @@ import SwiftUI
 struct MyAppApp: App {
     @State private var authService = AuthenticationService()
     @State private var taskService = TaskService()
+    @State private var plannerService = PlannerService()
     @State private var calendarService: CalendarService
     @State private var scheduleService: ScheduleService
 
@@ -18,6 +19,7 @@ struct MyAppApp: App {
             ContentView()
                 .environment(authService)
                 .environment(taskService)
+                .environment(plannerService)
                 .environment(calendarService)
                 .environment(scheduleService)
                 .task {

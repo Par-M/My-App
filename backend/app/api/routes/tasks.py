@@ -12,11 +12,15 @@ from app.db.session import get_db
 from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.user import User
+from app.schemas.task import CompleteTaskRequest
+from app.schemas.task import SnoozeRequest
+from app.schemas.task import SnoozeResponse
 from app.schemas.task import TaskCreate
 from app.schemas.task import TaskListResponse
 from app.schemas.task import TaskResponse
 from app.schemas.task import TaskUpdate
 from app.services.task_service import InvalidSortError
+from app.services.task_service import InvalidTaskTransitionError
 from app.services.task_service import TaskNotFoundError
 from app.services.task_service import TaskService
 
@@ -34,6 +38,11 @@ def _handle_service_errors(exc: Exception) -> None:
     if isinstance(exc, TaskNotFoundError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    if isinstance(exc, InvalidTaskTransitionError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         )
     if isinstance(exc, InvalidSortError):
@@ -137,3 +146,41 @@ def restore_task(
         return service.restore_task(task_id)
     except TaskNotFoundError as exc:
         _handle_service_errors(exc)
+
+
+@router.post("/{task_id}/start", response_model=TaskResponse)
+def start_task(
+    task_id: uuid.UUID,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.start_task(task_id)
+    except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
+        _handle_service_errors(exc)
+
+
+@router.post("/{task_id}/complete", response_model=TaskResponse)
+def complete_task(
+    task_id: uuid.UUID,
+    payload: CompleteTaskRequest,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.complete_task(task_id, payload.actual_minutes)
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.post("/{task_id}/snooze", response_model=SnoozeResponse)
+def snooze_task(
+    task_id: uuid.UUID,
+    payload: SnoozeRequest,
+    service: TaskService = Depends(_service),
+) -> SnoozeResponse:
+    try:
+        task, blocks = service.snooze_task(
+            task_id, payload.minutes, payload.timezone
+        )
+    except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
+        _handle_service_errors(exc)
+    return SnoozeResponse(task=task, blocks=blocks)

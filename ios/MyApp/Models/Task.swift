@@ -84,6 +84,37 @@ struct TaskCreateRequest: Codable, Sendable {
     let estimatedDuration: Int?
     let category: String?
     let notes: String?
+
+    init(
+        title: String,
+        description: String?,
+        deadline: Date?,
+        priority: TaskPriority,
+        status: TaskStatus,
+        estimatedDuration: Int?,
+        category: String?,
+        notes: String?
+    ) {
+        self.title = title
+        self.description = description
+        self.deadline = deadline
+        self.priority = priority
+        self.status = status
+        self.estimatedDuration = estimatedDuration
+        self.category = category
+        self.notes = notes
+    }
+
+    init(from local: LocalTask) {
+        title = local.title
+        description = local.taskDescription
+        deadline = local.deadline
+        priority = TaskPriority(rawValue: local.priorityRaw) ?? .medium
+        status = TaskStatus(rawValue: local.statusRaw) ?? .pending
+        estimatedDuration = local.estimatedDuration
+        category = local.category
+        notes = local.notes
+    }
 }
 
 struct TaskUpdateRequest: Encodable, Sendable {
@@ -105,6 +136,17 @@ struct TaskUpdateRequest: Encodable, Sendable {
         estimatedDuration = task.estimatedDuration
         category = task.category
         notes = task.notes
+    }
+
+    init(from local: LocalTask) {
+        title = local.title
+        description = local.taskDescription
+        deadline = local.deadline
+        priority = TaskPriority(rawValue: local.priorityRaw) ?? .medium
+        status = TaskStatus(rawValue: local.statusRaw) ?? .pending
+        estimatedDuration = local.estimatedDuration
+        category = local.category
+        notes = local.notes
     }
 
     func encode(to encoder: Encoder) throws {

@@ -13,20 +13,35 @@ final class ScheduleService {
 
     private let client: APIClient
     private let calendarService: CalendarService
+    private let store: LocalStore?
+    private let connectivity: ConnectivityMonitor
 
-    init(client: APIClient? = nil, calendarService: CalendarService? = nil) {
+    init(
+        client: APIClient? = nil,
+        calendarService: CalendarService? = nil,
+        store: LocalStore? = nil,
+        connectivity: ConnectivityMonitor? = nil
+    ) {
         self.client = client ?? APIClient()
         self.calendarService = calendarService ?? CalendarService()
+        self.store = store
+        self.connectivity = connectivity ?? ConnectivityMonitor()
     }
 
     func loadBlocks() async {
         do {
             let response: CalendarBlockListResponse = try await client.request(
-                CalendarEndpoint.listBlocks
+                CalendarEndpoint.listBlocks()
             )
             blocks = response.items.sorted { $0.startAt < $1.startAt }
+            store?.upsertServerBlocks(response.items)
         } catch {
-            errorMessage = error.localizedDescription
+            if let store, isNetworkUnavailable(error) || !connectivity.isConnected {
+                blocks = store.blocks()
+                errorMessage = "Offline — showing saved schedule."
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -117,10 +132,30 @@ final class ScheduleService {
     }
 
     func updateBlockTime(_ block: CalendarBlock, start: Date, end: Date) async throws {
+        if !connectivity.isConnected, let store {
+            let local = CalendarBlock(
+                id: block.id,
+                userId: block.userId,
+                taskId: block.taskId,
+                calendarEventId: block.calendarEventId,
+                title: block.title,
+                startAt: start,
+                endAt: end,
+                createdAt: block.createdAt,
+                updatedAt: Date()
+            )
+            store.upsert(local, dirty: true)
+            if let index = blocks.firstIndex(where: { $0.id == block.id }) {
+                blocks[index] = local
+            }
+            return
+        }
+
         let request = CalendarBlockUpdateRequest(startAt: start, endAt: end)
         let updated: CalendarBlock = try await client.request(
             CalendarEndpoint.updateBlock(id: block.id, request: request)
         )
+        store?.upsert(updated)
         if let eventId = block.calendarEventId {
             do {
                 try calendarService.updateTaskBlock(
@@ -138,7 +173,20 @@ final class ScheduleService {
     }
 
     func deleteBlock(_ block: CalendarBlock) async throws {
-        _ = try await client.request(CalendarEndpoint.deleteBlock(block.id)) as MessageResponse
+        if !connectivity.isConnected, let store {
+            store.markDeleted(blockId: block.id)
+        } else {
+            do {
+                _ = try await client.request(CalendarEndpoint.deleteBlock(block.id)) as MessageResponse
+                store?.purgeBlock(id: block.id)
+            } catch {
+                if let store, isNetworkUnavailable(error) {
+                    store.markDeleted(blockId: block.id)
+                } else {
+                    throw error
+                }
+            }
+        }
         if let eventId = block.calendarEventId {
             try? calendarService.deleteTaskBlock(eventIdentifier: eventId)
         }

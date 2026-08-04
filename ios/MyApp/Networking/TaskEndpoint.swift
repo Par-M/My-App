@@ -8,7 +8,8 @@ enum TaskEndpoint: Endpoint {
         category: String?,
         archived: Bool,
         sort: String?,
-        order: String
+        order: String,
+        since: Date? = nil
     )
     case create(TaskCreateRequest)
     case get(UUID)
@@ -82,7 +83,7 @@ enum TaskEndpoint: Endpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .list(let search, let priority, let status, let category, let archived, let sort, let order):
+        case .list(let search, let priority, let status, let category, let archived, let sort, let order, let since):
             var items: [URLQueryItem] = []
             if let search, !search.isEmpty {
                 items.append(URLQueryItem(name: "search", value: search))
@@ -104,6 +105,11 @@ enum TaskEndpoint: Endpoint {
             }
             if order != "asc" {
                 items.append(URLQueryItem(name: "order", value: order))
+            }
+            if let since {
+                items.append(
+                    URLQueryItem(name: "since", value: JSONCoding.sinceFormatter.string(from: since))
+                )
             }
             return items.isEmpty ? nil : items
         default:

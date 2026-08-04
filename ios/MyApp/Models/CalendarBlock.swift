@@ -36,6 +36,22 @@ struct CalendarBlockCreateRequest: Encodable, Sendable {
     let endAt: Date
     let calendarEventId: String?
 
+    init(taskId: UUID, title: String, startAt: Date, endAt: Date, calendarEventId: String? = nil) {
+        self.taskId = taskId
+        self.title = title
+        self.startAt = startAt
+        self.endAt = endAt
+        self.calendarEventId = calendarEventId
+    }
+
+    init(from local: LocalBlock) {
+        taskId = local.taskId
+        title = local.title
+        startAt = local.startAt
+        endAt = local.endAt
+        calendarEventId = local.calendarEventId
+    }
+
     enum CodingKeys: String, CodingKey {
         case taskId = "task_id"
         case title
@@ -61,6 +77,13 @@ struct CalendarBlockUpdateRequest: Encodable, Sendable {
         self.startAt = startAt
         self.endAt = endAt
         self.calendarEventId = calendarEventId
+    }
+
+    init(from local: LocalBlock) {
+        title = local.title
+        startAt = local.startAt
+        endAt = local.endAt
+        calendarEventId = local.calendarEventId
     }
 
     private enum CodingKeys: String, CodingKey {

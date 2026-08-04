@@ -1,7 +1,7 @@
 import Foundation
 
 enum CalendarEndpoint: Endpoint {
-    case listBlocks
+    case listBlocks(since: Date? = nil)
     case createBlock(CalendarBlockCreateRequest)
     case updateBlock(id: UUID, request: CalendarBlockUpdateRequest)
     case deleteBlock(UUID)
@@ -36,6 +36,18 @@ enum CalendarEndpoint: Endpoint {
             return request
         case .updateBlock(_, let request):
             return request
+        default:
+            return nil
+        }
+    }
+
+    var queryItems: [URLQueryItem]? {
+        switch self {
+        case .listBlocks(let since):
+            guard let since else { return nil }
+            return [
+                URLQueryItem(name: "since", value: JSONCoding.sinceFormatter.string(from: since))
+            ]
         default:
             return nil
         }

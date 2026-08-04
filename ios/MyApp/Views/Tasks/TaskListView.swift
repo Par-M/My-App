@@ -65,6 +65,7 @@ struct TaskListView: View {
     @State private var sortAscending = false
     @State private var showAddTask = false
     @State private var showNotificationSettings = false
+    @State private var showSettings = false
     @State private var errorDismissed = false
 
     private struct LoadKey: Hashable {
@@ -127,6 +128,11 @@ struct TaskListView: View {
                             Text(email)
                         }
                         Divider()
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Label("Settings", systemImage: "gearshape")
+                        }
                         Button {
                             showNotificationSettings = true
                         } label: {
@@ -212,6 +218,9 @@ struct TaskListView: View {
                 NavigationStack {
                     NotificationSettingsView()
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .task(id: loadKey) {
                 await taskService.loadTasks(

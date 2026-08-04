@@ -7,6 +7,7 @@ struct TaskFormView: View {
     }
 
     @Environment(TaskService.self) private var taskService
+    @Environment(ScheduleService.self) private var scheduleService
     @Environment(\.dismiss) private var dismiss
 
     let mode: Mode
@@ -121,6 +122,12 @@ struct TaskFormView: View {
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                if case .add = mode, scheduleService.preference == nil {
+                    await scheduleService.loadPreferences()
+                }
+                applyDefaults()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -151,6 +158,17 @@ struct TaskFormView: View {
         switch mode {
         case .add: "Add"
         case .edit: "Save"
+        }
+    }
+
+    private func applyDefaults() {
+        guard case .add = mode else { return }
+        guard let preference = scheduleService.preference else { return }
+        if !hasDuration {
+            durationMinutes = preference.defaultDurationMinutes
+        }
+        if trimmedTitle.isEmpty {
+            priority = TaskPriority(rawValue: preference.defaultPriority) ?? .medium
         }
     }
 

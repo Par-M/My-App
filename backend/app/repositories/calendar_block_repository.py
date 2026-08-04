@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -13,8 +14,12 @@ def base_query(user_id: uuid.UUID) -> Select:
     return select(CalendarBlock).where(CalendarBlock.user_id == user_id)
 
 
-def list_blocks(db: Session, *, user_id: uuid.UUID) -> list[CalendarBlock]:
+def list_blocks(
+    db: Session, *, user_id: uuid.UUID, since: datetime | None = None
+) -> list[CalendarBlock]:
     statement = base_query(user_id).order_by(CalendarBlock.start_at)
+    if since is not None:
+        statement = statement.where(CalendarBlock.updated_at >= since)
     return list(db.scalars(statement).all())
 
 

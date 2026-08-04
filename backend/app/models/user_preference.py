@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
+from sqlalchemy import String
 from sqlalchemy import UniqueConstraint
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import UUID
@@ -55,6 +56,24 @@ class UserPreference(Base):
         Integer,
         nullable=False,
         default=3,
+    )
+
+    max_daily_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=8,
+    )
+
+    default_duration_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=30,
+    )
+
+    default_priority: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="medium",
     )
 
     created_at: Mapped[datetime] = mapped_column(

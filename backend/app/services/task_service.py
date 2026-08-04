@@ -47,6 +47,7 @@ class TaskService:
         archived: bool = False,
         sort: str | None = None,
         order: str = "asc",
+        since: datetime | None = None,
     ) -> list[Task]:
         if order not in {"asc", "desc"}:
             raise InvalidSortError("order must be 'asc' or 'desc'")
@@ -64,6 +65,7 @@ class TaskService:
             archived=archived,
             sort=sort,
             order=order,
+            since=since,
         )
 
     def get_task(self, task_id: uuid.UUID) -> Task:

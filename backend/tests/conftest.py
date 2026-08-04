@@ -29,6 +29,9 @@ def setup_database():
 def clean_database():
     yield
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM calendar_blocks"))
+        conn.execute(text("DELETE FROM ai_recommendations"))
+        conn.execute(text("DELETE FROM user_preferences"))
         conn.execute(text("DELETE FROM tasks"))
         conn.execute(text("DELETE FROM users"))
 

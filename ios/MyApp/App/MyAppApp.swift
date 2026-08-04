@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct MyAppApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     @State private var authService = AuthenticationService()
     @State private var taskService = TaskService()
     @State private var plannerService = PlannerService()
@@ -20,6 +22,7 @@ struct MyAppApp: App {
                 .environment(authService)
                 .environment(taskService)
                 .environment(plannerService)
+                .environment(NotificationService.shared)
                 .environment(calendarService)
                 .environment(scheduleService)
                 .task {

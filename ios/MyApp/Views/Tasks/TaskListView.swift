@@ -56,6 +56,7 @@ struct PriorityBadge: View {
 struct TaskListView: View {
     @Environment(TaskService.self) private var taskService
     @Environment(AuthenticationService.self) private var authService
+    @Environment(NotificationService.self) private var notificationService
 
     @State private var searchText = ""
     @State private var priorityFilter: TaskPriority?
@@ -63,6 +64,7 @@ struct TaskListView: View {
     @State private var sortOption: TaskService.SortOption = .created
     @State private var sortAscending = false
     @State private var showAddTask = false
+    @State private var showNotificationSettings = false
     @State private var errorDismissed = false
 
     private struct LoadKey: Hashable {
@@ -125,6 +127,11 @@ struct TaskListView: View {
                             Text(email)
                         }
                         Divider()
+                        Button {
+                            showNotificationSettings = true
+                        } label: {
+                            Label("Notifications", systemImage: "bell")
+                        }
                         Button("Log Out", role: .destructive) {
                             authService.signOut()
                         }
@@ -201,6 +208,11 @@ struct TaskListView: View {
             .sheet(isPresented: $showAddTask) {
                 TaskFormView(mode: .add)
             }
+            .sheet(isPresented: $showNotificationSettings) {
+                NavigationStack {
+                    NotificationSettingsView()
+                }
+            }
             .task(id: loadKey) {
                 await taskService.loadTasks(
                     search: searchText,
@@ -209,6 +221,9 @@ struct TaskListView: View {
                     sort: sortOption,
                     order: sortAscending ? "asc" : "desc"
                 )
+            }
+            .onChange(of: taskService.tasks) { _, tasks in
+                notificationService.scheduleLocalNotifications(tasks: tasks)
             }
             .overlay(alignment: .bottom) {
                 if let errorMessage = taskService.errorMessage, !errorDismissed {
@@ -245,4 +260,6 @@ struct TaskListView: View {
 #Preview {
     TaskListView()
         .environment(TaskService())
+        .environment(AuthenticationService())
+        .environment(NotificationService.shared)
 }

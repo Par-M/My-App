@@ -4,6 +4,7 @@ struct TodayView: View {
     @Environment(PlannerService.self) private var planner
     @Environment(TaskService.self) private var taskService
     @Environment(ScheduleService.self) private var scheduleService
+    @Environment(NotificationService.self) private var notificationService
 
     @State private var activeFocusTask: ScheduledTask?
     @State private var showSummary = false
@@ -63,6 +64,9 @@ struct TodayView: View {
             }
             .task { await planner.loadToday() }
             .refreshable { await planner.loadToday() }
+            .onChange(of: notificationService.lastDeepLink) { _, _ in
+                Task { await planner.loadToday() }
+            }
             .sheet(item: $activeFocusTask) { task in
                 FocusView(task: task)
             }
@@ -271,4 +275,5 @@ private extension TodayResponse {
         .environment(TaskService())
         .environment(ScheduleService())
         .environment(CalendarService())
+        .environment(NotificationService.shared)
 }

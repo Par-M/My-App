@@ -16,6 +16,7 @@ enum JSONCoding {
             "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ",
             "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
             "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd",
         ]
         let formatter = makeDateFormatter()
         for format in formats {

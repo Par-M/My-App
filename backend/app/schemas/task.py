@@ -8,6 +8,7 @@ from pydantic import field_validator
 
 from app.models.task import TaskPriority
 from app.models.task import TaskStatus
+from app.schemas.calendar import CalendarBlockResponse
 
 
 class TaskCreate(BaseModel):
@@ -17,6 +18,7 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = TaskPriority.medium
     status: TaskStatus = TaskStatus.pending
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
+    actual_duration: int | None = Field(default=None, ge=0, le=525600)
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
@@ -35,6 +37,7 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority | None = None
     status: TaskStatus | None = None
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
+    actual_duration: int | None = Field(default=None, ge=0, le=525600)
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
@@ -57,6 +60,9 @@ class TaskResponse(BaseModel):
     priority: TaskPriority
     status: TaskStatus
     estimated_duration: int | None
+    actual_duration: int | None
+    started_at: datetime | None
+    completed_at: datetime | None
     category: str | None
     notes: str | None
     is_archived: bool
@@ -67,3 +73,17 @@ class TaskResponse(BaseModel):
 class TaskListResponse(BaseModel):
     items: list[TaskResponse]
     total: int
+
+
+class CompleteTaskRequest(BaseModel):
+    actual_minutes: int | None = Field(default=None, ge=1, le=525600)
+
+
+class SnoozeRequest(BaseModel):
+    minutes: int = Field(ge=1, le=1440)
+    timezone: str = "UTC"
+
+
+class SnoozeResponse(BaseModel):
+    task: TaskResponse
+    blocks: list[CalendarBlockResponse]

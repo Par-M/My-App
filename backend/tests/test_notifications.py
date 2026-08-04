@@ -107,7 +107,8 @@ class TestDeviceRegistration:
         response = client.delete(
             "/api/v1/devices/iphone-1", headers=headers
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
+        assert response.json()["message"] == "Device unregistered"
 
     def test_unregister_missing_device_404(self, client):
         data = _login(client)

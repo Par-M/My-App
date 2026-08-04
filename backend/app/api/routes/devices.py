@@ -29,15 +29,16 @@ def register_device(
     return service.register_device(current_user.id, payload)
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{device_id}")
 def unregister_device(
     device_id: str,
     current_user: User = Depends(get_current_user),
     service: NotificationService = Depends(_service),
-) -> None:
+) -> dict:
     removed = service.unregister_device(current_user.id, device_id)
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found",
         )
+    return {"message": "Device unregistered"}

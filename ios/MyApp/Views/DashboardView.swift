@@ -3,14 +3,19 @@ import SwiftUI
 struct DashboardView: View {
     var body: some View {
         TabView {
-            TaskListView()
+            TodayView()
                 .tabItem {
-                    Label("Tasks", systemImage: "checklist")
+                    Label("Today", systemImage: "sun.max")
                 }
 
             WeeklyScheduleView()
                 .tabItem {
                     Label("Schedule", systemImage: "calendar")
+                }
+
+            TaskListView()
+                .tabItem {
+                    Label("Tasks", systemImage: "checklist")
                 }
         }
     }
@@ -20,6 +25,7 @@ struct DashboardView: View {
     DashboardView()
         .environment(AuthenticationService())
         .environment(TaskService())
+        .environment(PlannerService())
         .environment(CalendarService())
         .environment(ScheduleService())
 }

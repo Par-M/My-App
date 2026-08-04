@@ -16,6 +16,10 @@ enum TaskEndpoint: Endpoint {
     case delete(UUID)
     case archive(UUID)
     case restore(UUID)
+    case start(UUID)
+    case complete(id: UUID, minutes: Int?)
+    case recordTime(id: UUID, minutes: Int)
+    case snooze(id: UUID, minutes: Int, timezone: String)
 
     var path: String {
         switch self {
@@ -33,6 +37,14 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/\(id.uuidString.lowercased())/archive"
         case .restore(let id):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/restore"
+        case .start(let id):
+            return "/api/v1/tasks/\(id.uuidString.lowercased())/start"
+        case .complete(let id, _):
+            return "/api/v1/tasks/\(id.uuidString.lowercased())/complete"
+        case .recordTime(let id, _):
+            return "/api/v1/tasks/\(id.uuidString.lowercased())"
+        case .snooze(let id, _, _):
+            return "/api/v1/tasks/\(id.uuidString.lowercased())/snooze"
         }
     }
 
@@ -42,11 +54,11 @@ enum TaskEndpoint: Endpoint {
             return .get
         case .create:
             return .post
-        case .update:
+        case .update, .recordTime:
             return .patch
         case .delete:
             return .delete
-        case .archive, .restore:
+        case .archive, .restore, .start, .complete, .snooze:
             return .post
         }
     }
@@ -57,6 +69,12 @@ enum TaskEndpoint: Endpoint {
             return request
         case .update(_, let request):
             return request
+        case .complete(_, let minutes):
+            return CompleteTaskRequest(actualMinutes: minutes)
+        case .recordTime(_, let minutes):
+            return RecordTimeRequest(minutes: minutes)
+        case .snooze(_, let minutes, let timezone):
+            return SnoozeRequest(minutes: minutes, timezone: timezone)
         default:
             return nil
         }

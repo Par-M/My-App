@@ -118,4 +118,47 @@ final class TaskService {
         dataVersion += 1
         return updated
     }
+
+    func startTask(id: UUID) async throws -> TaskItem {
+        let updated: TaskItem = try await client.request(TaskEndpoint.start(id))
+        replace(updated)
+        dataVersion += 1
+        return updated
+    }
+
+    func completeTask(id: UUID, minutes: Int?) async throws -> TaskItem {
+        let updated: TaskItem = try await client.request(
+            TaskEndpoint.complete(id: id, minutes: minutes)
+        )
+        replace(updated)
+        dataVersion += 1
+        return updated
+    }
+
+    func recordTime(id: UUID, minutes: Int) async throws -> TaskItem {
+        let updated: TaskItem = try await client.request(
+            TaskEndpoint.recordTime(id: id, minutes: minutes)
+        )
+        replace(updated)
+        dataVersion += 1
+        return updated
+    }
+
+    func snoozeTask(_ task: TaskItem, minutes: Int) async throws -> SnoozeResponse {
+        let response: SnoozeResponse = try await client.request(
+            TaskEndpoint.snooze(
+                id: task.id,
+                minutes: minutes,
+                timezone: TimeZone.current.identifier
+            )
+        )
+        replace(response.task)
+        dataVersion += 1
+        return response
+    }
+
+    private func replace(_ task: TaskItem) {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
+        tasks[index] = task
+    }
 }

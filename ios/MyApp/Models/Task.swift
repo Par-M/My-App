@@ -41,6 +41,9 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var priority: TaskPriority
     var status: TaskStatus
     var estimatedDuration: Int?
+    var actualDuration: Int?
+    var startedAt: Date?
+    var completedAt: Date?
     var category: String?
     var notes: String?
     var isArchived: Bool
@@ -56,6 +59,9 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case priority
         case status
         case estimatedDuration = "estimated_duration"
+        case actualDuration = "actual_duration"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
         case category
         case notes
         case isArchived = "is_archived"
@@ -123,4 +129,26 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case category
         case notes
     }
+}
+
+struct CompleteTaskRequest: Encodable, Sendable {
+    let actualMinutes: Int?
+}
+
+struct RecordTimeRequest: Encodable, Sendable {
+    let minutes: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case minutes = "actual_duration"
+    }
+}
+
+struct SnoozeRequest: Encodable, Sendable {
+    let minutes: Int
+    let timezone: String
+}
+
+struct SnoozeResponse: Codable, Sendable {
+    let task: TaskItem
+    let blocks: [CalendarBlock]
 }

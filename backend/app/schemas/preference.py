@@ -11,6 +11,9 @@ class UserPreferenceResponse(BaseModel):
     work_hours_end: int
     buffer_minutes: int
     energy_level: int
+    max_daily_hours: int
+    default_duration_minutes: int
+    default_priority: str
 
 
 class UserPreferenceUpdate(BaseModel):
@@ -18,6 +21,11 @@ class UserPreferenceUpdate(BaseModel):
     work_hours_end: int | None = Field(default=None, ge=0, le=24)
     buffer_minutes: int | None = Field(default=None, ge=0, le=120)
     energy_level: int | None = Field(default=None, ge=1, le=5)
+    max_daily_hours: int | None = Field(default=None, ge=1, le=16)
+    default_duration_minutes: int | None = Field(default=None, ge=5, le=480)
+    default_priority: str | None = Field(
+        default=None, pattern="^(low|medium|high)$"
+    )
 
     @model_validator(mode="after")
     def validate_work_hours(self):

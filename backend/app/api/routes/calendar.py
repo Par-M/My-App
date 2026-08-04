@@ -1,8 +1,10 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import status
 from sqlalchemy.orm import Session
 
@@ -49,9 +51,10 @@ def _handle_service_errors(exc: Exception) -> None:
 
 @router.get("/blocks", response_model=CalendarBlockListResponse)
 def list_blocks(
+    since: datetime | None = Query(default=None),
     service: CalendarBlockService = Depends(_service),
 ) -> CalendarBlockListResponse:
-    blocks = service.list_blocks()
+    blocks = service.list_blocks(since=since)
     return CalendarBlockListResponse(items=blocks, total=len(blocks))
 
 

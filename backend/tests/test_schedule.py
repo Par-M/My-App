@@ -249,6 +249,9 @@ class TestPreferences:
         assert body["work_hours_end"] == 17
         assert body["buffer_minutes"] == 15
         assert body["energy_level"] == 3
+        assert body["max_daily_hours"] == 8
+        assert body["default_duration_minutes"] == 30
+        assert body["default_priority"] == "medium"
 
     def test_updates_preferences(self, client):
         data = _login(client)
@@ -268,6 +271,32 @@ class TestPreferences:
         assert body["work_hours_end"] == 18
         assert body["buffer_minutes"] == 30
         assert body["energy_level"] == 5
+
+    def test_updates_onboarding_preferences(self, client):
+        data = _login(client)
+        response = client.put(
+            "/api/v1/preferences",
+            json={
+                "max_daily_hours": 6,
+                "default_duration_minutes": 45,
+                "default_priority": "high",
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["max_daily_hours"] == 6
+        assert body["default_duration_minutes"] == 45
+        assert body["default_priority"] == "high"
+
+    def test_rejects_invalid_default_priority(self, client):
+        data = _login(client)
+        response = client.put(
+            "/api/v1/preferences",
+            json={"default_priority": "urgent"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 422
 
     def test_partial_update(self, client):
         data = _login(client)

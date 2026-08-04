@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -74,6 +75,7 @@ def list_tasks(
     archived: bool = Query(default=False),
     sort: str | None = Query(default=None),
     order: str = Query(default="asc", pattern="^(asc|desc)$"),
+    since: datetime | None = Query(default=None),
     service: TaskService = Depends(_service),
 ) -> TaskListResponse:
     try:
@@ -85,6 +87,7 @@ def list_tasks(
             archived=archived,
             sort=sort,
             order=order,
+            since=since,
         )
     except (InvalidSortError, ValueError) as exc:
         _handle_service_errors(exc)

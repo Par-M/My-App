@@ -179,3 +179,32 @@ class TestCalendarBlockLifecycle:
             headers=_auth(data["access_token"]),
         )
         assert response.status_code == 404
+
+
+class TestCalendarBlockSync:
+    def test_filters_by_since(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        created = client.post(
+            "/api/v1/calendar/blocks",
+            json=_block_payload(task["id"]),
+            headers=_auth(data["access_token"]),
+        ).json()
+        created_at = created["updated_at"]
+
+        response = client.get(
+            f"/api/v1/calendar/blocks?since={created_at}",
+            headers=_auth(data["access_token"]),
+        )
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["id"] == created["id"]
+
+        later = datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        ) + timedelta(days=1)
+        response = client.get(
+            f"/api/v1/calendar/blocks?since={later.isoformat().replace('+00:00', 'Z')}",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.json()["total"] == 0

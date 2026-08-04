@@ -16,15 +16,18 @@ final class AuthenticationService {
     private let apiClient: APIClient
     private let keychain: KeychainManaging
     private let googleProvider: GoogleAuthProvider
+    private let localStore: LocalStore?
 
     init(
         apiClient: APIClient? = nil,
         keychain: KeychainManaging? = nil,
-        googleProvider: GoogleAuthProvider? = nil
+        googleProvider: GoogleAuthProvider? = nil,
+        localStore: LocalStore? = nil
     ) {
         self.apiClient = apiClient ?? APIClient()
         self.keychain = keychain ?? KeychainManager()
         self.googleProvider = googleProvider ?? GoogleAuthProvider()
+        self.localStore = localStore
     }
 
     func restoreSession() async {
@@ -68,6 +71,7 @@ final class AuthenticationService {
         keychain.clear()
         user = nil
         state = .signedOut
+        localStore?.clearAll()
     }
 
     private func apply(_ session: AuthSession) {

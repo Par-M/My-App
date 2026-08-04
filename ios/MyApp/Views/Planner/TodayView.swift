@@ -5,10 +5,12 @@ struct TodayView: View {
     @Environment(TaskService.self) private var taskService
     @Environment(ScheduleService.self) private var scheduleService
     @Environment(NotificationService.self) private var notificationService
+    @Environment(SyncManager.self) private var syncManager
 
     @State private var activeFocusTask: ScheduledTask?
     @State private var showSummary = false
     @State private var errorDismissed = false
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -42,6 +44,10 @@ struct TodayView: View {
                         Section {
                             summaryButton(today)
                         }
+
+                        Section {
+                            syncStatusRow()
+                        }
                     }
                 } else {
                     ContentUnavailableView(
@@ -53,6 +59,14 @@ struct TodayView: View {
             }
             .navigationTitle("Today")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .accessibilityLabel("Settings")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await planner.loadToday() }
@@ -69,6 +83,9 @@ struct TodayView: View {
             }
             .sheet(item: $activeFocusTask) { task in
                 FocusView(task: task)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .navigationDestination(isPresented: $showSummary) {
                 DailySummaryView()
@@ -231,6 +248,51 @@ struct TodayView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func syncStatusRow() -> some View {
+        HStack(spacing: 12) {
+            if syncManager.isSyncing {
+                ProgressView()
+            } else if syncManager.pendingCount > 0 {
+                Image(systemName: "icloud.and.arrow.up")
+                    .foregroundStyle(.orange)
+            } else {
+                Image(systemName: "checkmark.icloud")
+                    .foregroundStyle(.green)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                if let lastSync = syncManager.lastSyncDate {
+                    Text("Last synced \(lastSync, format: .relative(presentation: .named))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Not synced yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if syncManager.pendingCount > 0 {
+                    Text("\(syncManager.pendingCount) change(s) waiting to sync")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                if let error = syncManager.lastSyncError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer()
+
+            Button("Sync Now") {
+                Task { await syncManager.syncNow() }
+            }
+            .font(.caption.weight(.semibold))
+            .disabled(syncManager.isSyncing)
         }
     }
 

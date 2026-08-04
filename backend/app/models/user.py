@@ -67,3 +67,18 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    calendar_blocks: Mapped[list["CalendarBlock"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    recommendations: Mapped[list["AIRecommendation"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    preferences: Mapped[list["UserPreference"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

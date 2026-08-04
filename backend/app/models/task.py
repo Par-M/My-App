@@ -110,3 +110,7 @@ class Task(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="tasks")
+    calendar_blocks: Mapped[list["CalendarBlock"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )

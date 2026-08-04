@@ -62,6 +62,8 @@ final class AuthenticationService {
     func signOut() {
         Task {
             try? await apiClient.logout()
+            await NotificationService.shared.unregisterDevice()
+            NotificationService.shared.clearLocalState()
         }
         keychain.clear()
         user = nil

@@ -82,3 +82,13 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    device_tokens: Mapped[list["DeviceToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    notification_preferences: Mapped[list["NotificationPreference"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

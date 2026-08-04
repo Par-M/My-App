@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AuthenticationService.self) private var authService
+    @Environment(NotificationService.self) private var notificationService
 
     var body: some View {
         Group {
@@ -15,6 +16,11 @@ struct ContentView: View {
             }
         }
         .animation(.default, value: authService.state == .signedIn)
+        .task(id: authService.state) {
+            if authService.state == .signedIn {
+                await notificationService.load()
+            }
+        }
     }
 }
 

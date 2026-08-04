@@ -20,6 +20,7 @@ from app.schemas.schedule import build_recommendation_response
 from app.services.scheduling_service import RecommendationNotAcceptableError
 from app.services.scheduling_service import RecommendationNotFoundError
 from app.services.scheduling_service import SchedulingService
+from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
@@ -29,6 +30,13 @@ def _service(
     current_user: User = Depends(get_current_user),
 ) -> SchedulingService:
     return SchedulingService(db, current_user.id)
+
+
+def _notification_service(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NotificationService:
+    return NotificationService(db, current_user.id)
 
 
 def _handle_service_errors(exc: Exception) -> None:
@@ -54,6 +62,7 @@ def _proposal_response(recommendation, message: str) -> ScheduleProposal:
 def generate_schedule(
     payload: ScheduleGenerateRequest,
     service: SchedulingService = Depends(_service),
+    notification_service: NotificationService = Depends(_notification_service),
 ) -> ScheduleProposal:
     recommendation = service.generate(payload)
     stored = recommendation.recommendation or {}
@@ -73,6 +82,16 @@ def generate_schedule(
         message = "No active tasks to schedule."
     else:
         message = "Your proposed schedule is ready for review."
+    if meta.get("overcommitted"):
+        try:
+            notification_service.notify_overcommitted(
+                service.user_id,
+                deferred_titles=meta.get("deferred_tasks") or [],
+                required_hours=float(meta.get("required_hours") or 0.0),
+                scheduleable_hours=float(meta.get("scheduleable_hours") or 0.0),
+            )
+        except Exception:  # pragma: no cover - defensive
+            pass
     return _proposal_response(recommendation, message)
 
 

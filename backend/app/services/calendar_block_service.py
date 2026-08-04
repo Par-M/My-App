@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,9 +27,9 @@ class CalendarBlockService:
         self.db = db
         self.user_id = user_id
 
-    def list_blocks(self):
+    def list_blocks(self, since: datetime | None = None):
         return calendar_block_repository.list_blocks(
-            self.db, user_id=self.user_id
+            self.db, user_id=self.user_id, since=since
         )
 
     def get_block(self, block_id: uuid.UUID):

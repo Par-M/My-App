@@ -185,6 +185,29 @@ class TestListTasks:
         )
         assert response.json()["total"] == 1
 
+    def test_filters_by_since(self, client):
+        data = _login(client)
+        created = _create(client, data["access_token"], title="Sync me").json()
+        created_at = created["updated_at"]
+        _create(client, data["access_token"], title="Stale")
+
+        response = client.get(
+            f"/api/v1/tasks?since={created_at}",
+            headers=_auth(data["access_token"]),
+        )
+        body = response.json()
+        assert body["total"] == 2
+        assert created["id"] in {item["id"] for item in body["items"]}
+
+        later = datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        ) + timedelta(days=1)
+        response = client.get(
+            f"/api/v1/tasks?since={later.isoformat().replace('+00:00', 'Z')}",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.json()["total"] == 0
+
 
 class TestSearchTasks:
     def test_search_matches_title(self, client):

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Select
 from sqlalchemy import case
@@ -102,6 +103,7 @@ def list_tasks(
     archived: bool = False,
     sort: str | None = None,
     order: str = "asc",
+    since: datetime | None = None,
 ) -> list[Task]:
     statement = filter_tasks(
         db,
@@ -111,6 +113,8 @@ def list_tasks(
         category=category,
         archived=archived,
     )
+    if since is not None:
+        statement = statement.where(Task.updated_at >= since)
     if search:
         statement = statement.where(
             or_(

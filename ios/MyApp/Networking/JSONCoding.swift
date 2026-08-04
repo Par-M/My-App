@@ -49,4 +49,10 @@ enum JSONCoding {
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
+
+    static let sinceFormatter: DateFormatter = {
+        let formatter = makeDateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
+        return formatter
+    }()
 }

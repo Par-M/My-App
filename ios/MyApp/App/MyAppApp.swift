@@ -4,12 +4,22 @@ import SwiftUI
 struct MyAppApp: App {
     @State private var authService = AuthenticationService()
     @State private var taskService = TaskService()
+    @State private var calendarService: CalendarService
+    @State private var scheduleService: ScheduleService
+
+    init() {
+        let calendarService = CalendarService()
+        _calendarService = State(initialValue: calendarService)
+        _scheduleService = State(initialValue: ScheduleService(calendarService: calendarService))
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(authService)
                 .environment(taskService)
+                .environment(calendarService)
+                .environment(scheduleService)
                 .task {
                     await authService.restoreSession()
                 }

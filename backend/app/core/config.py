@@ -16,5 +16,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
+    apns_key_id: str = ""
+    apns_team_id: str = ""
+    apns_bundle_id: str = ""
+    apns_key_path: str = ""
+    apns_environment: str = "sandbox"
+
 
 settings = Settings()

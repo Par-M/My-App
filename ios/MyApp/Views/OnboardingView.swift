@@ -61,7 +61,7 @@ struct OnboardingView: View {
             Image(systemName: "calendar.badge.clock")
                 .font(.system(size: 72))
                 .foregroundStyle(.tint)
-            Text("AI Scheduler")
+            Text("Lock In Bud")
                 .font(.largeTitle.bold())
             Text("Your day, planned for you.\nTell us what you want to get done — the AI finds the best times.")
                 .font(.subheadline)

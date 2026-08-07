@@ -38,18 +38,29 @@ def merge_intervals(intervals: list[TimeSlot]) -> list[TimeSlot]:
     return merged
 
 
+def _hour_minute(value: float) -> tuple[int, int]:
+    hour = int(value)
+    minute = int(round((value - hour) * 60))
+    if minute == 60:
+        hour += 1
+        minute = 0
+    return hour, minute
+
+
 def working_windows(
     dates: list[date],
     *,
-    start_hour: int,
-    end_hour: int,
+    start_hour: float,
+    end_hour: float,
     timezone: str,
 ) -> list[TimeSlot]:
     tz = ZoneInfo(timezone)
+    start_h, start_m = _hour_minute(start_hour)
+    end_h, end_m = _hour_minute(end_hour)
     windows: list[TimeSlot] = []
     for day in dates:
-        start = datetime.combine(day, time(start_hour), tzinfo=tz)
-        end = datetime.combine(day, time(end_hour), tzinfo=tz)
+        start = datetime.combine(day, time(start_h, start_m), tzinfo=tz)
+        end = datetime.combine(day, time(end_h, end_m), tzinfo=tz)
         if end <= start:
             continue
         windows.append(TimeSlot(start, end))
@@ -60,8 +71,8 @@ def find_free_slots(
     *,
     dates: list[date],
     busy: list[TimeSlot],
-    start_hour: int,
-    end_hour: int,
+    start_hour: float,
+    end_hour: float,
     timezone: str,
     min_duration: timedelta = MIN_FREE_SLOT,
 ) -> list[TimeSlot]:

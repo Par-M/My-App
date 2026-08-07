@@ -7,6 +7,7 @@ from pydantic import Field
 from pydantic import field_validator
 
 from app.models.task import TaskPriority
+from app.models.task import TaskProductivity
 from app.models.task import TaskStatus
 from app.schemas.calendar import CalendarBlockResponse
 
@@ -19,6 +20,7 @@ class TaskCreate(BaseModel):
     status: TaskStatus = TaskStatus.pending
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
     actual_duration: int | None = Field(default=None, ge=0, le=525600)
+    productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
@@ -38,6 +40,7 @@ class TaskUpdate(BaseModel):
     status: TaskStatus | None = None
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
     actual_duration: int | None = Field(default=None, ge=0, le=525600)
+    productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
@@ -61,6 +64,7 @@ class TaskResponse(BaseModel):
     status: TaskStatus
     estimated_duration: int | None
     actual_duration: int | None
+    productivity: TaskProductivity | None
     started_at: datetime | None
     completed_at: datetime | None
     category: str | None
@@ -77,6 +81,7 @@ class TaskListResponse(BaseModel):
 
 class CompleteTaskRequest(BaseModel):
     actual_minutes: int | None = Field(default=None, ge=1, le=525600)
+    productivity: TaskProductivity | None = None
 
 
 class SnoozeRequest(BaseModel):

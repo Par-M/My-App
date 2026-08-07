@@ -23,12 +23,21 @@ def _deadline(task: TaskContext) -> str:
     return task.deadline.date().isoformat()
 
 
+def _hour_text(value: float) -> str:
+    hour = int(value)
+    minute = int(round((value - hour) * 60))
+    if minute == 60:
+        hour += 1
+        minute = 0
+    return f"{hour}:{minute:02d}"
+
+
 def build_prompt(context: SchedulingContext) -> str:
     lines = [
         "You are an expert scheduling assistant. Build a realistic schedule for the user's tasks.",
         "",
         f"Scheduling window: {context.dates[0].isoformat()} to {context.dates[-1].isoformat()} (local timezone {context.timezone}).",
-        f"Working hours: {context.work_start_hour}:00-{context.work_end_hour}:00 local time.",
+        f"Working hours: {_hour_text(context.work_start_hour)}-{_hour_text(context.work_end_hour)} local time.",
         f"Buffer between blocks: {context.buffer_minutes} minutes. Do not overlap blocks or busy times.",
         f"User energy level (1-5): {context.energy_level}. Schedule demanding work during the user's most energetic window.",
         "",

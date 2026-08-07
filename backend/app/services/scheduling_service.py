@@ -10,6 +10,7 @@ from app.models.ai_recommendation import AIRecommendation
 from app.models.ai_recommendation import RecommendationStatus
 from app.models.calendar_block import CalendarBlock
 from app.models.task import Task
+from app.models.task import TaskProductivity
 from app.models.task import TaskStatus
 from app.models.user_preference import UserPreference
 from app.schemas.schedule import ScheduleGenerateRequest
@@ -95,6 +96,39 @@ class SchedulingService:
             self.db.flush()
         return preference
 
+    PRODUCTIVITY_FACTORS = {
+        TaskProductivity.fast: 0.8,
+        TaskProductivity.moderate: 1.0,
+        TaskProductivity.slow: 1.35,
+    }
+
+    def _productivity_factors(self, tasks: list[Task]) -> dict[uuid.UUID, float]:
+        """Duration multipliers derived from the user's productivity history.
+
+        A rated task uses its own rating; unrated tasks inherit the user's
+        average pace so the schedule gives more (or less) time accordingly.
+        """
+        rated = list(
+            self.db.scalars(
+                select(Task).where(
+                    Task.user_id == self.user_id,
+                    Task.status == TaskStatus.completed,
+                    Task.productivity.isnot(None),
+                )
+            ).all()
+        )
+        if rated:
+            aggregate = sum(
+                self.PRODUCTIVITY_FACTORS.get(task.productivity, 1.0)
+                for task in rated
+            ) / len(rated)
+        else:
+            aggregate = 1.0
+        return {
+            task.id: self.PRODUCTIVITY_FACTORS.get(task.productivity, aggregate)
+            for task in tasks
+        }
+
     def _build_context(
         self,
         tasks: list[Task],
@@ -105,13 +139,17 @@ class SchedulingService:
             request.start_date + timedelta(days=offset)
             for offset in range((request.end_date - request.start_date).days + 1)
         ]
+        factors = self._productivity_factors(tasks)
         context = SchedulingContext(
             tasks=[
                 TaskContext(
                     id=task.id,
                     title=task.title,
                     deadline=task.deadline,
-                    duration_minutes=task.estimated_duration or 30,
+                    duration_minutes=max(
+                        5,
+                        round((task.estimated_duration or 30) * factors.get(task.id, 1.0)),
+                    ),
                     priority=task.priority,
                     energy_level=preference.energy_level,
                 )

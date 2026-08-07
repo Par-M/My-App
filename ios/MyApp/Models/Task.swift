@@ -32,6 +32,22 @@ enum TaskStatus: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum TaskProductivity: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fast
+    case moderate
+    case slow
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .fast: "Fast"
+        case .moderate: "Moderate"
+        case .slow: "Slow"
+        }
+    }
+}
+
 struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userId: UUID
@@ -42,6 +58,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var status: TaskStatus
     var estimatedDuration: Int?
     var actualDuration: Int?
+    var productivity: TaskProductivity?
     var startedAt: Date?
     var completedAt: Date?
     var category: String?
@@ -60,6 +77,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case status
         case estimatedDuration = "estimated_duration"
         case actualDuration = "actual_duration"
+        case productivity
         case startedAt = "started_at"
         case completedAt = "completed_at"
         case category
@@ -175,6 +193,18 @@ struct TaskUpdateRequest: Encodable, Sendable {
 
 struct CompleteTaskRequest: Encodable, Sendable {
     let actualMinutes: Int?
+    let productivity: TaskProductivity?
+
+    private enum CodingKeys: String, CodingKey {
+        case actualMinutes = "actual_minutes"
+        case productivity
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(actualMinutes, forKey: .actualMinutes)
+        try container.encodeIfPresent(productivity, forKey: .productivity)
+    }
 }
 
 struct RecordTimeRequest: Encodable, Sendable {

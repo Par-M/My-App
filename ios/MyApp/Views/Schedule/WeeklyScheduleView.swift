@@ -4,6 +4,25 @@ struct WeeklyScheduleView: View {
     @Environment(ScheduleService.self) private var scheduleService
     @Environment(CalendarService.self) private var calendarService
 
+    private enum ScheduleViewMode: String, CaseIterable, Identifiable {
+        case day
+        case week
+        case month
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .day: "Day"
+            case .week: "Week"
+            case .month: "Month"
+            }
+        }
+    }
+
+    private var calendar: Calendar { Calendar.current }
+
+    @State private var viewMode: ScheduleViewMode = .day
     @State private var selectedDate = Date()
     @State private var showProposal = false
     @State private var editingBlock: CalendarBlock?
@@ -11,8 +30,15 @@ struct WeeklyScheduleView: View {
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
 
+    private var dayStart: Date {
+        calendar.startOfDay(for: selectedDate)
+    }
+
+    private var dayEnd: Date {
+        calendar.date(byAdding: .day, value: 1, to: dayStart) ?? selectedDate
+    }
+
     private var weekDays: [Date] {
-        let calendar = Calendar.current
         let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? selectedDate
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
     }
@@ -22,14 +48,60 @@ struct WeeklyScheduleView: View {
     }
 
     private var weekEnd: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: weekDays.last ?? weekStart) ?? weekStart
+        calendar.date(byAdding: .day, value: 1, to: weekDays.last ?? weekStart) ?? weekStart
+    }
+
+    private var monthStart: Date {
+        calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)) ?? selectedDate
+    }
+
+    private var monthEnd: Date {
+        calendar.date(byAdding: .month, value: 1, to: monthStart) ?? selectedDate
+    }
+
+    private var visibleStart: Date {
+        switch viewMode {
+        case .day: return dayStart
+        case .week: return weekStart
+        case .month: return monthStart
+        }
+    }
+
+    private var visibleEnd: Date {
+        switch viewMode {
+        case .day: return dayEnd
+        case .week: return weekEnd
+        case .month: return monthEnd
+        }
+    }
+
+    private var monthCells: [Date?] {
+        let firstWeekday = calendar.firstWeekday
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leadingBlanks = (weekday - firstWeekday + 7) % 7
+        let days = calendar.range(of: .day, in: .month, for: monthStart) ?? 1..<2
+        var cells: [Date?] = Array(repeating: nil, count: leadingBlanks)
+        cells.append(contentsOf: days.compactMap {
+            calendar.date(byAdding: .day, value: $0 - 1, to: monthStart)
+        })
+        while cells.count % 7 != 0 {
+            cells.append(nil)
+        }
+        return cells
+    }
+
+    private var orderedWeekdaySymbols: [String] {
+        let symbols = calendar.veryShortWeekdaySymbols
+        let first = calendar.firstWeekday - 1
+        return Array(symbols[first...]) + Array(symbols[..<first])
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    weekNavigator
+                    viewModePicker
+                    navigator
 
                     if scheduleService.isGenerating {
                         HStack {
@@ -48,8 +120,15 @@ struct WeeklyScheduleView: View {
                         permissionDeniedBanner
                     }
 
-                    ForEach(weekDays, id: \.self) { day in
-                        daySection(day)
+                    switch viewMode {
+                    case .day:
+                        dayContent
+                    case .week:
+                        ForEach(weekDays, id: \.self) { day in
+                            daySection(day)
+                        }
+                    case .month:
+                        monthGrid
                     }
                 }
                 .padding()
@@ -77,7 +156,18 @@ struct WeeklyScheduleView: View {
                     }
                 }
             }
-            .task(id: weekStart) {
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button {
+                        selectedDate = Date()
+                        viewMode = .day
+                    } label: {
+                        Label("Today", systemImage: "sun.max")
+                    }
+                    Spacer()
+                }
+            }
+            .task(id: visibleStart) {
                 await loadData()
             }
             .sheet(isPresented: $showProposal) {
@@ -92,29 +182,142 @@ struct WeeklyScheduleView: View {
         }
     }
 
-    private var weekNavigator: some View {
+    private var viewModePicker: some View {
+        Picker("View", selection: $viewMode) {
+            ForEach(ScheduleViewMode.allCases) { mode in
+                Text(mode.label).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var navigator: some View {
         HStack {
             Button {
-                selectedDate = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: selectedDate) ?? selectedDate
+                step(-1)
             } label: {
                 Image(systemName: "chevron.left")
             }
-            .accessibilityLabel("Previous week")
+            .accessibilityLabel("Previous")
 
             Spacer()
 
-            Text("Week of \(weekStart.formatted(date: .abbreviated, time: .omitted))")
+            Text(navigatorTitle)
                 .font(.subheadline.weight(.semibold))
 
             Spacer()
 
             Button {
-                selectedDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: selectedDate) ?? selectedDate
+                step(1)
             } label: {
                 Image(systemName: "chevron.right")
             }
-            .accessibilityLabel("Next week")
+            .accessibilityLabel("Next")
         }
+    }
+
+    private var navigatorTitle: String {
+        switch viewMode {
+        case .day:
+            if calendar.isDateInToday(selectedDate) {
+                return "Today"
+            }
+            return selectedDate.formatted(
+                .dateTime.weekday(.wide).month(.abbreviated).day()
+            )
+        case .week:
+            return "Week of \(weekStart.formatted(date: .abbreviated, time: .omitted))"
+        case .month:
+            return selectedDate.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
+    private func step(_ delta: Int) {
+        switch viewMode {
+        case .day:
+            selectedDate = calendar.date(byAdding: .day, value: delta, to: selectedDate) ?? selectedDate
+        case .week:
+            selectedDate = calendar.date(byAdding: .weekOfYear, value: delta, to: selectedDate) ?? selectedDate
+        case .month:
+            selectedDate = calendar.date(byAdding: .month, value: delta, to: selectedDate) ?? selectedDate
+        }
+    }
+
+    private var dayContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if calendar.isDateInToday(selectedDate) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text("Now · \(context.date.formatted(date: .omitted, time: .shortened))")
+                    }
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            }
+            daySection(selectedDate)
+        }
+    }
+
+    private var monthGrid: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                ForEach(orderedWeekdaySymbols, id: \.self) { symbol in
+                    Text(symbol)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+                ForEach(Array(monthCells.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        monthCell(day)
+                    } else {
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func monthCell(_ day: Date) -> some View {
+        let hasContent = scheduleService.blocks.contains {
+            calendar.isDate($0.startAt, inSameDayAs: day)
+        } || busyEvents.contains { calendar.isDate($0.start, inSameDayAs: day) }
+        let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
+        let isToday = calendar.isDateInToday(day)
+
+        return Button {
+            selectedDate = day
+            viewMode = .day
+        } label: {
+            VStack(spacing: 4) {
+                Text("\(calendar.component(.day, from: day))")
+                    .font(.subheadline)
+                    .fontWeight(isToday ? .bold : .regular)
+                Circle()
+                    .fill(hasContent ? Color.accentColor : Color.clear)
+                    .frame(width: 5, height: 5)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(
+                isSelected ? Color.accentColor.opacity(0.2) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isToday ? Color.accentColor : Color.clear, lineWidth: isToday ? 1 : 0)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -196,23 +399,42 @@ struct WeeklyScheduleView: View {
     }
 
     private func eventRow(_ event: CalendarEventItem) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(.gray)
-                .frame(width: 4)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Text("\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        let ignored = calendarService.isIgnored(event)
+        return Button {
+            calendarService.toggleIgnored(event)
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(.gray)
+                    .frame(width: 4)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.title)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .strikethrough(ignored)
+                    Text("\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if ignored {
+                    Image(systemName: "nosign")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Ignore")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Spacer()
+            .padding(.vertical, 8)
+            .padding(.horizontal, 8)
+            .background(
+                (ignored ? Color.secondary.opacity(0.12) : Color(UIColor.quaternarySystemFill)),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+        .buttonStyle(.plain)
     }
 
     private func blockRow(_ block: CalendarBlock) -> some View {
@@ -250,7 +472,7 @@ struct WeeklyScheduleView: View {
             busyEvents = []
             return
         }
-        busyEvents = calendarService.fetchEvents(from: weekStart, to: weekEnd)
+        busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
     }
 
     private func generate() async {
@@ -259,16 +481,20 @@ struct WeeklyScheduleView: View {
 
         var busy: [BusyTimeRequest] = []
         if calendarService.permission == .granted {
-            busyEvents = calendarService.fetchEvents(from: weekStart, to: weekEnd)
+            busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
             busy.append(contentsOf: busyEvents
-                .filter { !ourEventIds.contains($0.id) && !$0.isAllDay }
+                .filter {
+                    !ourEventIds.contains($0.id)
+                        && !$0.isAllDay
+                        && !calendarService.isIgnored($0)
+                }
                 .map { BusyTimeRequest(start: $0.start, end: $0.end) })
         }
         busy.append(contentsOf: scheduleService.blocks
-            .filter { $0.startAt < weekEnd && $0.endAt > weekStart }
+            .filter { $0.startAt < visibleEnd && $0.endAt > visibleStart }
             .map { BusyTimeRequest(start: $0.startAt, end: $0.endAt) })
 
-        await scheduleService.generate(startDate: weekStart, endDate: weekEnd, busyTimes: busy)
+        await scheduleService.generate(startDate: visibleStart, endDate: visibleEnd, busyTimes: busy)
         if scheduleService.proposal != nil {
             showProposal = true
         }

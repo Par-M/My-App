@@ -124,7 +124,10 @@ class TaskService:
         return task
 
     def complete_task(
-        self, task_id: uuid.UUID, actual_minutes: int | None = None
+        self,
+        task_id: uuid.UUID,
+        actual_minutes: int | None = None,
+        productivity=None,
     ) -> Task:
         task = self.get_task(task_id)
         if task.status == TaskStatus.completed:
@@ -132,6 +135,8 @@ class TaskService:
             return task
         task.status = TaskStatus.completed
         task.completed_at = datetime.now(_utc())
+        if productivity is not None:
+            task.productivity = productivity
         if actual_minutes is not None:
             task.actual_duration = (task.actual_duration or 0) + actual_minutes
         elif task.actual_duration is None:

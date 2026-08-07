@@ -119,6 +119,7 @@ final class TaskService {
                 status: request.status,
                 estimatedDuration: request.estimatedDuration,
                 actualDuration: nil,
+                productivity: nil,
                 startedAt: nil,
                 completedAt: nil,
                 category: request.category,
@@ -154,6 +155,7 @@ final class TaskService {
                     status: request.status,
                     estimatedDuration: request.estimatedDuration,
                     actualDuration: nil,
+                    productivity: nil,
                     startedAt: nil,
                     completedAt: nil,
                     category: request.category,
@@ -305,11 +307,16 @@ final class TaskService {
         }
     }
 
-    func completeTask(id: UUID, minutes: Int?) async throws -> TaskItem {
+    func completeTask(
+        id: UUID,
+        minutes: Int?,
+        productivity: TaskProductivity? = nil
+    ) async throws -> TaskItem {
         if !connectivity.isConnected, let store, let current = tasks.first(where: { $0.id == id }) {
             var updated = current
             updated.status = .completed
             updated.completedAt = Date()
+            updated.productivity = productivity
             if let minutes {
                 updated.actualDuration = minutes
             }
@@ -323,7 +330,7 @@ final class TaskService {
 
         do {
             let updated: TaskItem = try await client.request(
-                TaskEndpoint.complete(id: id, minutes: minutes)
+                TaskEndpoint.complete(id: id, minutes: minutes, productivity: productivity)
             )
             store?.upsert(updated)
             replace(updated)
@@ -335,6 +342,7 @@ final class TaskService {
                 var updated = current
                 updated.status = .completed
                 updated.completedAt = Date()
+                updated.productivity = productivity
                 if let minutes {
                     updated.actualDuration = minutes
                 }

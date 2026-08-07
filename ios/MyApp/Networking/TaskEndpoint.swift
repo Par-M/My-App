@@ -18,7 +18,7 @@ enum TaskEndpoint: Endpoint {
     case archive(UUID)
     case restore(UUID)
     case start(UUID)
-    case complete(id: UUID, minutes: Int?)
+    case complete(id: UUID, minutes: Int?, productivity: TaskProductivity?)
     case recordTime(id: UUID, minutes: Int)
     case snooze(id: UUID, minutes: Int, timezone: String)
 
@@ -40,7 +40,7 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/\(id.uuidString.lowercased())/restore"
         case .start(let id):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/start"
-        case .complete(let id, _):
+        case .complete(let id, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/complete"
         case .recordTime(let id, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())"
@@ -70,8 +70,8 @@ enum TaskEndpoint: Endpoint {
             return request
         case .update(_, let request):
             return request
-        case .complete(_, let minutes):
-            return CompleteTaskRequest(actualMinutes: minutes)
+        case .complete(_, let minutes, let productivity):
+            return CompleteTaskRequest(actualMinutes: minutes, productivity: productivity)
         case .recordTime(_, let minutes):
             return RecordTimeRequest(minutes: minutes)
         case .snooze(_, let minutes, let timezone):

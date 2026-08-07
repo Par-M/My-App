@@ -30,6 +30,12 @@ class TaskStatus(str, enum.Enum):
     completed = "completed"
 
 
+class TaskProductivity(str, enum.Enum):
+    fast = "fast"
+    moderate = "moderate"
+    slow = "slow"
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -81,6 +87,11 @@ class Task(Base):
 
     actual_duration: Mapped[int | None] = mapped_column(
         Integer,
+        nullable=True,
+    )
+
+    productivity: Mapped[TaskProductivity | None] = mapped_column(
+        Enum(TaskProductivity, name="taskproductivity"),
         nullable=True,
     )
 

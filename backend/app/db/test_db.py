@@ -1,10 +1,16 @@
-from sqlalchemy import select
+def main() -> None:
+    from sqlalchemy import select
 
-from app.db.database import SessionLocal
-from app.models.user import User
+    from app.db.database import SessionLocal
+    from app.models.user import User
 
-db = SessionLocal()
+    db = SessionLocal()
+    try:
+        users = db.scalars(select(User)).all()
+        print(users)
+    finally:
+        db.close()
 
-users = db.scalars(select(User)).all()
 
-print(users)
+if __name__ == "__main__":
+    main()

@@ -26,12 +26,23 @@ def _normalize(value: datetime) -> datetime:
     return value
 
 
+def _hour_minute(value: float) -> tuple[int, int]:
+    hour = int(value)
+    minute = int(round((value - hour) * 60))
+    if minute == 60:
+        hour += 1
+        minute = 0
+    return hour, minute
+
+
 def _window_for(block_start: datetime, context: SchedulingContext):
     tz = ZoneInfo(context.timezone)
     local = block_start.astimezone(tz)
     day = local.date()
-    start = datetime.combine(day, time(context.work_start_hour), tzinfo=tz)
-    end = datetime.combine(day, time(context.work_end_hour), tzinfo=tz)
+    start_h, start_m = _hour_minute(context.work_start_hour)
+    end_h, end_m = _hour_minute(context.work_end_hour)
+    start = datetime.combine(day, time(start_h, start_m), tzinfo=tz)
+    end = datetime.combine(day, time(end_h, end_m), tzinfo=tz)
     return start, end
 
 

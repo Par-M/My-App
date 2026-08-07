@@ -1,4 +1,9 @@
 import uuid
+from datetime import datetime
+
+
+def _parse(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _login(client, email="parthiv@example.com", name="Parthiv"):
@@ -144,6 +149,32 @@ class TestAcceptRecommendation:
             "/api/v1/calendar/blocks", headers=_auth(data["access_token"])
         ).json()
         assert listed["total"] == 1
+
+    def test_long_task_is_chunked_into_multiple_blocks(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"], estimated_duration=300)
+        proposal = self._proposal(client, data["access_token"])
+
+        items = proposal["items"]
+        assert len(items) == 4
+        assert {item["task_id"] for item in items} == {task["id"]}
+        total = sum(
+            (_parse(item["end"]) - _parse(item["start"])).total_seconds() / 60
+            for item in items
+        )
+        assert total == 300
+        assert all(
+            (_parse(item["end"]) - _parse(item["start"])).total_seconds() / 60
+            <= 90
+            for item in items
+        )
+
+        response = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        assert len(response.json()["blocks"]) == 4
 
     def test_cannot_accept_twice(self, client):
         data = _login(client)

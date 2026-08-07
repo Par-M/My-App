@@ -94,7 +94,8 @@ final class TaskService {
         status: TaskStatus,
         estimatedDuration: Int?,
         category: String?,
-        notes: String?
+        notes: String?,
+        repeatWeekdays: [Int]?
     ) async throws -> TaskItem {
         let request = TaskCreateRequest(
             title: title,
@@ -104,7 +105,8 @@ final class TaskService {
             status: status,
             estimatedDuration: estimatedDuration,
             category: category,
-            notes: notes
+            notes: notes,
+            repeatWeekdays: repeatWeekdays
         )
 
         if !connectivity.isConnected, let store {
@@ -124,6 +126,7 @@ final class TaskService {
                 completedAt: nil,
                 category: request.category,
                 notes: request.notes,
+                repeatWeekdays: request.repeatWeekdays,
                 isArchived: false,
                 createdAt: now,
                 updatedAt: now
@@ -160,6 +163,7 @@ final class TaskService {
                     completedAt: nil,
                     category: request.category,
                     notes: request.notes,
+                    repeatWeekdays: request.repeatWeekdays,
                     isArchived: false,
                     createdAt: now,
                     updatedAt: now

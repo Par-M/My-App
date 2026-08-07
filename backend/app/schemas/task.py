@@ -12,6 +12,17 @@ from app.models.task import TaskStatus
 from app.schemas.calendar import CalendarBlockResponse
 
 
+def _normalize_weekdays(value: list[int] | None) -> list[int] | None:
+    """Validate weekday numbers (0=Sunday..6=Saturday) and dedupe them."""
+    if not value:
+        return None
+    if any(day < 0 or day > 6 for day in value):
+        raise ValueError(
+            "weekdays must be integers between 0 (Sunday) and 6 (Saturday)"
+        )
+    return sorted(set(value))
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
@@ -23,6 +34,7 @@ class TaskCreate(BaseModel):
     productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+    repeat_weekdays: list[int] | None = None
 
     @field_validator("title")
     @classmethod
@@ -30,6 +42,11 @@ class TaskCreate(BaseModel):
         if not value.strip():
             raise ValueError("title must not be blank")
         return value.strip()
+
+    @field_validator("repeat_weekdays")
+    @classmethod
+    def repeat_weekdays_valid(cls, value: list[int] | None) -> list[int] | None:
+        return _normalize_weekdays(value)
 
 
 class TaskUpdate(BaseModel):
@@ -43,6 +60,7 @@ class TaskUpdate(BaseModel):
     productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+    repeat_weekdays: list[int] | None = None
 
     @field_validator("title")
     @classmethod
@@ -50,6 +68,11 @@ class TaskUpdate(BaseModel):
         if value is not None and not value.strip():
             raise ValueError("title must not be blank")
         return value.strip() if value is not None else None
+
+    @field_validator("repeat_weekdays")
+    @classmethod
+    def repeat_weekdays_valid(cls, value: list[int] | None) -> list[int] | None:
+        return _normalize_weekdays(value)
 
 
 class TaskResponse(BaseModel):
@@ -69,6 +92,7 @@ class TaskResponse(BaseModel):
     completed_at: datetime | None
     category: str | None
     notes: str | None
+    repeat_weekdays: list[int] | None
     is_archived: bool
     created_at: datetime
     updated_at: datetime

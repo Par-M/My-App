@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime
 from datetime import timedelta
 from typing import Protocol
@@ -143,18 +144,20 @@ class HeuristicProvider:
         blocks: list[ProposedBlock] = []
         deferred: list[str] = []
         self._buffer = context.buffer_minutes
+        self._max_chunk = context.max_chunk_minutes
 
         for task in tasks:
             placement = self._place_task(task, available)
             if placement is None:
                 deferred.append(task.title)
                 continue
-            block, remaining = placement
-            blocks.append(block)
+            placed, remaining = placement
+            blocks.extend(placed)
             available = remaining
 
+        scheduled_ids = {block.task_id for block in blocks}
         total_count = len(tasks)
-        scheduled_count = len(blocks)
+        scheduled_count = len(scheduled_ids)
         if scheduled_count == total_count:
             summary = (
                 f"Scheduled all {total_count} task(s) into the available time, "
@@ -172,36 +175,60 @@ class HeuristicProvider:
         self,
         task,
         available: list[TimeSlot],
-    ) -> tuple[ProposedBlock, list[TimeSlot]] | None:
+    ) -> tuple[list[ProposedBlock], list[TimeSlot]] | None:
         duration = task.duration_minutes
         deadline = task.deadline
+        max_chunk = self._max_chunk_minutes()
+        remaining_slots = list(available)
+        blocks: list[ProposedBlock] = []
+        remaining_duration = duration
+        total_parts = max(1, math.ceil(duration / max_chunk))
 
-        for index, slot in enumerate(available):
-            if slot.duration_minutes < duration:
-                continue
-            if deadline is not None and slot.start > deadline:
-                continue
-            block = ProposedBlock(
-                task_id=task.id,
-                task_title=task.title,
-                start=slot.start,
-                end=slot.start + timedelta(minutes=duration),
-                reason=self._reason_for(task, slot.start),
-            )
-            remaining = available[:index] + available[index + 1 :]
-            after = slot.start + timedelta(
-                minutes=duration + self._buffer_minutes()
-            )
-            if after < slot.end:
-                remaining.append(TimeSlot(after, slot.end))
-                remaining.sort(key=lambda slot: (slot.start, slot.end))
-            return block, remaining
-        return None
+        while remaining_duration > 0:
+            placed_in_this_pass = False
+            for index, slot in enumerate(remaining_slots):
+                if deadline is not None and slot.start > deadline:
+                    continue
+                chunk = min(remaining_duration, max_chunk)
+                if slot.duration_minutes < chunk:
+                    continue
+                part = len(blocks) + 1
+                blocks.append(
+                    ProposedBlock(
+                        task_id=task.id,
+                        task_title=task.title,
+                        start=slot.start,
+                        end=slot.start + timedelta(minutes=chunk),
+                        reason=self._reason_for(task, slot.start, part, total_parts),
+                    )
+                )
+                remaining_duration -= chunk
+                after = slot.start + timedelta(
+                    minutes=chunk + self._buffer_minutes()
+                )
+                if after < slot.end:
+                    remaining_slots[index] = TimeSlot(after, slot.end)
+                else:
+                    del remaining_slots[index]
+                remaining_slots.sort(key=lambda slot: (slot.start, slot.end))
+                placed_in_this_pass = True
+                break
+            if not placed_in_this_pass:
+                break
+
+        if remaining_duration > 0:
+            return None
+        return blocks, remaining_slots
 
     def _buffer_minutes(self) -> int:
         return getattr(self, "_buffer", 0)
 
-    def _reason_for(self, task, start: datetime) -> str:
+    def _max_chunk_minutes(self) -> int:
+        return getattr(self, "_max_chunk", 90)
+
+    def _reason_for(
+        self, task, start: datetime, part: int = 1, total_parts: int = 1
+    ) -> str:
         reasons = []
         if task.priority == TaskPriority.high:
             reasons.append("high priority")
@@ -211,4 +238,10 @@ class HeuristicProvider:
             )
         if not reasons:
             reasons.append("first available slot")
-        return f"Scheduled at {start.strftime('%a %H:%M')} due to {' and '.join(reasons)}"
+        reason = (
+            f"Scheduled at {start.strftime('%a %H:%M')} due to "
+            f"{' and '.join(reasons)}"
+        )
+        if total_parts > 1:
+            reason = f"{reason} (part {part} of {total_parts})"
+        return reason

@@ -93,6 +93,34 @@ class TestCreateTask:
         )
         assert response.status_code == 422
 
+    def test_creates_task_with_repeat_weekdays(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            repeat_weekdays=[1, 3, 1, 5],
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["repeat_weekdays"] == [1, 3, 5]
+
+    def test_defaults_repeat_weekdays_to_none(self, client):
+        data = _login(client)
+        response = _create(client, data["access_token"])
+        assert response.status_code == 201
+        assert response.json()["repeat_weekdays"] is None
+
+    def test_empty_repeat_weekdays_becomes_none(self, client):
+        data = _login(client)
+        response = _create(client, data["access_token"], repeat_weekdays=[])
+        assert response.status_code == 201
+        assert response.json()["repeat_weekdays"] is None
+
+    def test_rejects_out_of_range_weekday(self, client):
+        data = _login(client)
+        response = _create(client, data["access_token"], repeat_weekdays=[7])
+        assert response.status_code == 422
+
 
 class TestGetTask:
     def test_requires_authentication(self, client):
@@ -415,6 +443,33 @@ class TestUpdateTask:
             headers=_auth(other["access_token"]),
         )
         assert response.status_code == 404
+
+    def test_update_repeat_weekdays(self, client):
+        data = _login(client)
+        created = _create(client, data["access_token"]).json()
+        assert created["repeat_weekdays"] is None
+
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"repeat_weekdays": [0, 6]},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        assert response.json()["repeat_weekdays"] == [0, 6]
+
+    def test_clear_repeat_weekdays(self, client):
+        data = _login(client)
+        created = _create(
+            client, data["access_token"], repeat_weekdays=[1, 2]
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"repeat_weekdays": None},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        assert response.json()["repeat_weekdays"] is None
 
 
 class TestDeleteTask:

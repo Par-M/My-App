@@ -10,6 +10,7 @@ from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -113,6 +114,11 @@ class Task(Base):
 
     notes: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    repeat_weekdays: Mapped[list[int] | None] = mapped_column(
+        ARRAY(Integer),
         nullable=True,
     )
 

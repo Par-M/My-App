@@ -63,6 +63,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var completedAt: Date?
     var category: String?
     var notes: String?
+    var repeatWeekdays: [Int]?
     var isArchived: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -82,6 +83,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case completedAt = "completed_at"
         case category
         case notes
+        case repeatWeekdays = "repeat_weekdays"
         case isArchived = "is_archived"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -102,6 +104,7 @@ struct TaskCreateRequest: Codable, Sendable {
     let estimatedDuration: Int?
     let category: String?
     let notes: String?
+    let repeatWeekdays: [Int]?
 
     init(
         title: String,
@@ -111,7 +114,8 @@ struct TaskCreateRequest: Codable, Sendable {
         status: TaskStatus,
         estimatedDuration: Int?,
         category: String?,
-        notes: String?
+        notes: String?,
+        repeatWeekdays: [Int]?
     ) {
         self.title = title
         self.description = description
@@ -121,6 +125,7 @@ struct TaskCreateRequest: Codable, Sendable {
         self.estimatedDuration = estimatedDuration
         self.category = category
         self.notes = notes
+        self.repeatWeekdays = repeatWeekdays
     }
 
     init(from local: LocalTask) {
@@ -132,6 +137,19 @@ struct TaskCreateRequest: Codable, Sendable {
         estimatedDuration = local.estimatedDuration
         category = local.category
         notes = local.notes
+        repeatWeekdays = local.repeatWeekdays
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case description
+        case deadline
+        case priority
+        case status
+        case estimatedDuration = "estimated_duration"
+        case category
+        case notes
+        case repeatWeekdays = "repeat_weekdays"
     }
 }
 
@@ -144,6 +162,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
     let estimatedDuration: Int?
     let category: String?
     let notes: String?
+    let repeatWeekdays: [Int]?
 
     init(task: TaskItem) {
         title = task.title
@@ -154,6 +173,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         estimatedDuration = task.estimatedDuration
         category = task.category
         notes = task.notes
+        repeatWeekdays = task.repeatWeekdays
     }
 
     init(from local: LocalTask) {
@@ -165,6 +185,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         estimatedDuration = local.estimatedDuration
         category = local.category
         notes = local.notes
+        repeatWeekdays = local.repeatWeekdays
     }
 
     func encode(to encoder: Encoder) throws {
@@ -177,6 +198,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         try container.encode(estimatedDuration, forKey: .estimatedDuration)
         try container.encode(category, forKey: .category)
         try container.encode(notes, forKey: .notes)
+        try container.encode(repeatWeekdays, forKey: .repeatWeekdays)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -188,6 +210,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case estimatedDuration = "estimated_duration"
         case category
         case notes
+        case repeatWeekdays = "repeat_weekdays"
     }
 }
 

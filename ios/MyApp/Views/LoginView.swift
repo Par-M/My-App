@@ -14,7 +14,7 @@ struct LoginView: View {
                 .foregroundStyle(.tint)
 
             VStack(spacing: 8) {
-                Text("AI Scheduler")
+                Text("Lock In Bud")
                     .font(.largeTitle.bold())
                 Text("Sign in to continue")
                     .font(.subheadline)

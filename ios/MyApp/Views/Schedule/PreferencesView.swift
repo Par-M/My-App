@@ -4,8 +4,8 @@ struct PreferencesView: View {
     @Environment(ScheduleService.self) private var scheduleService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var workStart = 9
-    @State private var workEnd = 17
+    @State private var workStart: Double = 9
+    @State private var workEnd: Double = 17
     @State private var buffer = 15
     @State private var energy = 3
     @State private var maxDailyHours = 8
@@ -17,11 +17,11 @@ struct PreferencesView: View {
         NavigationStack {
             Form {
                 Section("Work Hours") {
-                    Stepper(value: $workStart, in: 0...23) {
-                        Text("Start: \(workStart):00")
+                    Stepper(value: $workStart, in: 0...24, step: 0.5) {
+                        Text("Start: \(hourText(workStart))")
                     }
-                    Stepper(value: $workEnd, in: 1...24) {
-                        Text("End: \(workEnd == 24 ? "24:00" : "\(workEnd):00")")
+                    Stepper(value: $workEnd, in: 0...24, step: 0.5) {
+                        Text("End: \(hourText(workEnd))")
                     }
                 }
                 Section("Scheduling") {
@@ -75,6 +75,15 @@ struct PreferencesView: View {
                 isLoaded = true
             }
         }
+    }
+
+    private func hourText(_ value: Double) -> String {
+        let hour = Int(value)
+        let minutes = Int((value - Double(hour)) * 60)
+        if hour >= 24 {
+            return "24:00"
+        }
+        return String(format: "%d:%02d", hour, minutes)
     }
 
     private func save() async {

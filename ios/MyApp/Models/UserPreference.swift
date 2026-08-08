@@ -1,8 +1,8 @@
 import Foundation
 
 struct UserPreference: Codable, Hashable, Sendable {
-    var workHoursStart: Int
-    var workHoursEnd: Int
+    var workHoursStart: Double
+    var workHoursEnd: Double
     var bufferMinutes: Int
     var energyLevel: Int
     var maxDailyHours: Int
@@ -21,8 +21,8 @@ struct UserPreference: Codable, Hashable, Sendable {
 }
 
 struct UserPreferenceUpdate: Encodable, Sendable {
-    var workHoursStart: Int?
-    var workHoursEnd: Int?
+    var workHoursStart: Double?
+    var workHoursEnd: Double?
     var bufferMinutes: Int?
     var energyLevel: Int?
     var maxDailyHours: Int?
@@ -30,8 +30,8 @@ struct UserPreferenceUpdate: Encodable, Sendable {
     var defaultPriority: String?
 
     init(
-        workHoursStart: Int? = nil,
-        workHoursEnd: Int? = nil,
+        workHoursStart: Double? = nil,
+        workHoursEnd: Double? = nil,
         bufferMinutes: Int? = nil,
         energyLevel: Int? = nil,
         maxDailyHours: Int? = nil,

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime
+from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
@@ -34,14 +35,14 @@ class UserPreference(Base):
         index=True,
     )
 
-    work_hours_start: Mapped[int] = mapped_column(
-        Integer,
+    work_hours_start: Mapped[float] = mapped_column(
+        Float,
         nullable=False,
         default=9,
     )
 
-    work_hours_end: Mapped[int] = mapped_column(
-        Integer,
+    work_hours_end: Mapped[float] = mapped_column(
+        Float,
         nullable=False,
         default=17,
     )

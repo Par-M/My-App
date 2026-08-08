@@ -25,7 +25,9 @@ struct ScheduleItem: Codable, Identifiable, Hashable, Sendable {
     let end: Date
     let reason: String
 
-    var id: UUID { taskId }
+    var id: String {
+        "\(taskId)-\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))"
+    }
 
     enum CodingKeys: String, CodingKey {
         case taskId = "task_id"

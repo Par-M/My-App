@@ -33,6 +33,8 @@ def clean_database():
         conn.execute(text("DELETE FROM notification_preferences"))
         conn.execute(text("DELETE FROM calendar_blocks"))
         conn.execute(text("DELETE FROM ai_recommendations"))
+        conn.execute(text("DELETE FROM habit_logs"))
+        conn.execute(text("DELETE FROM habits"))
         conn.execute(text("DELETE FROM user_preferences"))
         conn.execute(text("DELETE FROM tasks"))
         conn.execute(text("DELETE FROM users"))

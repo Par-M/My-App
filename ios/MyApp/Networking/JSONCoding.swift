@@ -55,4 +55,10 @@ enum JSONCoding {
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
         return formatter
     }()
+
+    static let dayFormatter: DateFormatter = {
+        let formatter = makeDateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }

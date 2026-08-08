@@ -15,6 +15,7 @@ struct MyAppApp: App {
     @State private var scheduleService: ScheduleService
     @State private var categoryStore = CategoryStore()
     @State private var appearance = AppearanceSettings()
+    @State private var habitService = HabitService()
 
     init() {
         let store = LocalStore()
@@ -54,6 +55,7 @@ struct MyAppApp: App {
                 .environment(connectivity)
                 .environment(categoryStore)
                 .environment(appearance)
+                .environment(habitService)
                 .preferredColorScheme(appearance.theme.colorScheme)
                 .task {
                     await authService.restoreSession()

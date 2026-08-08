@@ -5,7 +5,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Lock In Bud</string>
 	<key>API_BASE_URL</key>
-	<string>http://localhost:8000</string>
+	<string>https://myapp-api.vercel.app</string>
 	<key>GIDClientID</key>
 	<string>695624050703-7mh0hq8629aur857u01v0lg4iudi1i23.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>

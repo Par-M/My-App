@@ -279,15 +279,17 @@ struct TaskFormView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button(saveButtonTitle) {
-                            Task { await save() }
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                        } else {
+                            Text(saveButtonTitle)
                         }
-                        .disabled(trimmedTitle.isEmpty)
-                        .accessibilityIdentifier("saveTaskButton")
                     }
+                    .disabled(isSaving || trimmedTitle.isEmpty)
+                    .accessibilityIdentifier("saveTaskButton")
                 }
             }
         }

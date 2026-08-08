@@ -91,6 +91,39 @@ struct HabitLogCreateRequest: Encodable, Sendable {
     }
 }
 
+struct HabitDaySetRequest: Encodable, Sendable {
+    let count: Int
+    let date: Date?
+
+    init(count: Int, date: Date? = nil) {
+        self.count = count
+        self.date = date
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(count, forKey: .count)
+        if let date {
+            try container.encode(JSONCoding.dayFormatter.string(from: date), forKey: .date)
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case count
+        case date
+    }
+}
+
+struct HabitDaySetResponse: Codable, Sendable {
+    let habitId: UUID
+    let count: Int
+
+    enum CodingKeys: String, CodingKey {
+        case habitId = "habit_id"
+        case count
+    }
+}
+
 struct HabitLog: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let habitId: UUID

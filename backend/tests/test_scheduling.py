@@ -26,7 +26,7 @@ def slot(start: str, end: str) -> TimeSlot:
     return TimeSlot(utc(start), utc(end))
 
 
-def task(title="Task", priority=TaskPriority.medium, duration=60, deadline=None):
+def task(title="Task", priority=TaskPriority.medium, duration=60, deadline=None, start_at=None, end_at=None):
     return TaskContext(
         id=uuid.uuid4(),
         title=title,
@@ -34,6 +34,8 @@ def task(title="Task", priority=TaskPriority.medium, duration=60, deadline=None)
         duration_minutes=duration,
         priority=priority,
         energy_level=3,
+        start_at=start_at,
+        end_at=end_at,
     )
 
 
@@ -359,6 +361,120 @@ class TestValidator:
         assert result.is_valid
         assert any("Buffer" in w for w in result.warnings)
 
+    def test_fixed_task_at_exact_window_passes(self):
+        t = task(
+            title="Standup",
+            duration=30,
+            start_at=utc("2026-08-03T09:30:00+00:00"),
+            end_at=utc("2026-08-03T10:00:00+00:00"),
+        )
+        context = build_context([t])
+        result = validate_schedule(
+            ProposedBlock(
+                task_id=t.id,
+                task_title=t.title,
+                start=utc("2026-08-03T09:30:00+00:00"),
+                end=utc("2026-08-03T10:00:00+00:00"),
+                reason="x",
+            ),
+            context,
+        )
+        assert result.is_valid
+
+    def test_rejects_fixed_task_moved(self):
+        t = task(
+            title="Standup",
+            start_at=utc("2026-08-03T09:30:00+00:00"),
+            end_at=utc("2026-08-03T10:00:00+00:00"),
+        )
+        context = build_context([t])
+        result = validate_schedule(
+            ProposedBlock(
+                task_id=t.id,
+                task_title=t.title,
+                start=utc("2026-08-03T11:00:00+00:00"),
+                end=utc("2026-08-03T11:30:00+00:00"),
+                reason="x",
+            ),
+            context,
+        )
+        assert not result.is_valid
+        assert any("exactly" in e for e in result.errors)
+
+    def test_rejects_fixed_task_split(self):
+        t = task(
+            title="Standup",
+            duration=30,
+            start_at=utc("2026-08-03T09:30:00+00:00"),
+            end_at=utc("2026-08-03T10:00:00+00:00"),
+        )
+        context = build_context([t])
+        result = validate_schedule(
+            [
+                ProposedBlock(
+                    task_id=t.id,
+                    task_title=t.title,
+                    start=utc("2026-08-03T09:30:00+00:00"),
+                    end=utc("2026-08-03T09:45:00+00:00"),
+                    reason="x",
+                ),
+                ProposedBlock(
+                    task_id=t.id,
+                    task_title=t.title,
+                    start=utc("2026-08-03T09:45:00+00:00"),
+                    end=utc("2026-08-03T10:00:00+00:00"),
+                    reason="x",
+                ),
+            ],
+            context,
+        )
+        assert not result.is_valid
+        assert any("single block" in e for e in result.errors)
+
+    def test_rejects_flexible_task_overlapping_fixed_window(self):
+        fixed = task(
+            title="Fixed",
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T11:00:00+00:00"),
+        )
+        flexible = task(title="Flex", duration=60)
+        context = build_context([fixed, flexible])
+        result = validate_schedule(
+            [
+                ProposedBlock(
+                    task_id=fixed.id,
+                    task_title=fixed.title,
+                    start=utc("2026-08-03T10:00:00+00:00"),
+                    end=utc("2026-08-03T11:00:00+00:00"),
+                    reason="x",
+                ),
+                ProposedBlock(
+                    task_id=flexible.id,
+                    task_title=flexible.title,
+                    start=utc("2026-08-03T10:30:00+00:00"),
+                    end=utc("2026-08-03T11:30:00+00:00"),
+                    reason="x",
+                ),
+            ],
+            context,
+        )
+        assert not result.is_valid
+        assert any("overlaps the fixed window" in e for e in result.errors)
+
+    def test_deferred_fixed_task_has_no_fixed_specific_error(self):
+        t = task(
+            title="Fixed",
+            duration=60,
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T11:00:00+00:00"),
+        )
+        context = build_context([t])
+        result = validate_schedule([], context)
+        assert not result.is_valid
+        assert not any("exactly" in e for e in result.errors)
+        assert not any("single block" in e for e in result.errors)
+        assert any("partially scheduled" in e for e in result.errors)
+
 
 class TestHeuristicProvider:
     def test_schedules_by_priority(self):
@@ -444,3 +560,107 @@ class TestHeuristicProvider:
         result = provider.generate_schedule(context, build_prompt(context))
         assert len(result.items) == 1
         assert result.items[0].end <= t.deadline
+
+    def test_places_fixed_task_at_exact_window(self):
+        t = task(
+            title="Standup",
+            duration=30,
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T10:30:00+00:00"),
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=15,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert len(result.items) == 1
+        assert result.items[0].start == utc("2026-08-03T10:00:00+00:00")
+        assert result.items[0].end == utc("2026-08-03T10:30:00+00:00")
+
+    def test_flexible_schedules_around_fixed_task(self):
+        fixed = task(
+            title="Standup",
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T10:30:00+00:00"),
+        )
+        flex = task(title="Work", duration=60, priority=TaskPriority.high)
+        context = SchedulingContext(
+            tasks=[flex, fixed],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        by_title = {b.task_title: b for b in result.items}
+        assert len(result.items) == 2
+        fixed_block = by_title["Standup"]
+        flex_block = by_title["Work"]
+        assert fixed_block.start == utc("2026-08-03T10:00:00+00:00")
+        assert not (
+            flex_block.start < fixed_block.end
+            and flex_block.end > fixed_block.start
+        )
+
+    def test_defers_fixed_task_overlapping_busy(self):
+        t = task(
+            title="Standup",
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T10:30:00+00:00"),
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[
+                slot("2026-08-03T09:00:00+00:00", "2026-08-03T10:00:00+00:00"),
+                slot("2026-08-03T11:00:00+00:00", "2026-08-03T17:00:00+00:00"),
+            ],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert result.items == []
+        assert "Standup" in result.reasoning
+
+    def test_defers_fixed_task_outside_working_hours(self):
+        t = task(
+            title="Standup",
+            start_at=utc("2026-08-03T18:00:00+00:00"),
+            end_at=utc("2026-08-03T18:30:00+00:00"),
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert result.items == []
+        assert "Standup" in result.reasoning
+
+    def test_defers_fixed_task_past_deadline(self):
+        t = task(
+            title="Standup",
+            deadline=datetime(2026, 8, 3, 10, 0, tzinfo=UTC),
+            start_at=utc("2026-08-03T10:00:00+00:00"),
+            end_at=utc("2026-08-03T11:00:00+00:00"),
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert result.items == []
+        assert "Standup" in result.reasoning

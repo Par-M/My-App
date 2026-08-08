@@ -92,44 +92,89 @@ private struct HabitRow: View {
     let stats: HabitStats
     let onLog: () async -> Void
 
+    @State private var dragValue: Double?
+
+    private var goal: Int { stats.habit.dailyGoal }
+    private var completedCount: Int { stats.today?.completedCount ?? 0 }
+
+    private var sliderValue: Binding<Double> {
+        Binding(
+            get: { dragValue ?? Double(completedCount) },
+            set: { dragValue = $0 }
+        )
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: {
-                Task { await onLog() }
-            }) {
-                Image(systemName: stats.isDoneToday ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(
-                        stats.isDoneToday ? Color.green : Color.accentColor
-                    )
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                if goal > 1 {
+                    Text("\(completedCount)/\(goal)")
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(
+                            completedCount >= goal ? Color.green : Color.secondary
+                        )
+                        .frame(width: 40, alignment: .leading)
+                } else {
+                    Button(action: {
+                        Task { await onLog() }
+                    }) {
+                        Image(systemName: stats.isDoneToday ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundStyle(
+                                stats.isDoneToday ? Color.green : Color.accentColor
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(stats.isDoneToday)
+                    .accessibilityIdentifier("logHabitButton")
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stats.habit.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("\(stats.habit.scheduleLabel) · goal \(goal)x")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if goal == 1 && stats.isDoneToday {
+                    Text("\(completedCount)/\(goal)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                }
+
+                if stats.currentStreak > 0 {
+                    Label("\(stats.currentStreak)", systemImage: "flame.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(stats.isDoneToday)
-            .accessibilityIdentifier("logHabitButton")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(stats.habit.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text("\(stats.habit.scheduleLabel) · goal \(stats.habit.dailyGoal)x")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            if stats.isDoneToday {
-                Text("\(stats.today?.completedCount ?? 0)/\(stats.habit.dailyGoal)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.green)
-            }
-
-            if stats.currentStreak > 0 {
-                Label("\(stats.currentStreak)", systemImage: "flame.fill")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.orange)
+            if goal > 1 {
+                HStack(spacing: 10) {
+                    Slider(value: sliderValue, in: 0...Double(goal), step: 1) { editing in
+                        if !editing {
+                            let value = Int(sliderValue.wrappedValue.rounded())
+                            dragValue = nil
+                            Task { await commit(value) }
+                        }
+                    }
+                    .accessibilityIdentifier("habitCountSlider")
+                    Text("\(Int(sliderValue.wrappedValue.rounded()))/\(goal)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .trailing)
+                }
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private func commit(_ value: Int) async {
+        await habitService.setHabitDayCount(id: stats.habit.id, count: value)
     }
 }

@@ -47,6 +47,8 @@ class TestCreateTask:
         assert body["is_archived"] is False
         assert body["description"] is None
         assert body["deadline"] is None
+        assert body["start_at"] is None
+        assert body["end_at"] is None
         assert body["category"] is None
         assert body["user_id"] == data["user"]["id"]
         assert body["created_at"]
@@ -119,6 +121,129 @@ class TestCreateTask:
     def test_rejects_out_of_range_weekday(self, client):
         data = _login(client)
         response = _create(client, data["access_token"], repeat_weekdays=[7])
+        assert response.status_code == 422
+
+
+class TestFixedEventTimes:
+    def test_creates_task_with_fixed_event(self, client):
+        data = _login(client)
+        start = NOW + timedelta(hours=2)
+        end = start + timedelta(minutes=45)
+        response = _create(
+            client,
+            data["access_token"],
+            start_at=start.isoformat(),
+            end_at=end.isoformat(),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["start_at"] is not None
+        assert body["end_at"] is not None
+
+    def test_rejects_start_without_end(self, client):
+        data = _login(client)
+        response = _create(
+            client, data["access_token"], start_at=NOW.isoformat()
+        )
+        assert response.status_code == 422
+
+    def test_rejects_end_without_start(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            end_at=(NOW + timedelta(hours=1)).isoformat(),
+        )
+        assert response.status_code == 422
+
+    def test_rejects_end_before_start(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            start_at=FUTURE.isoformat(),
+            end_at=NOW.isoformat(),
+        )
+        assert response.status_code == 422
+
+    def test_rejects_equal_start_and_end(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            start_at=FUTURE.isoformat(),
+            end_at=FUTURE.isoformat(),
+        )
+        assert response.status_code == 422
+
+    def test_update_fixed_event_times(self, client):
+        data = _login(client)
+        created = _create(client, data["access_token"]).json()
+        assert created["start_at"] is None
+        assert created["end_at"] is None
+
+        start = NOW + timedelta(hours=3)
+        end = start + timedelta(minutes=30)
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"start_at": start.isoformat(), "end_at": end.isoformat()},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["start_at"] is not None
+        assert body["end_at"] is not None
+
+    def test_update_clear_fixed_event(self, client):
+        data = _login(client)
+        start = NOW + timedelta(hours=3)
+        created = _create(
+            client,
+            data["access_token"],
+            start_at=start.isoformat(),
+            end_at=(start + timedelta(minutes=30)).isoformat(),
+        ).json()
+        assert created["start_at"] is not None
+
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"start_at": None, "end_at": None},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        assert response.json()["start_at"] is None
+        assert response.json()["end_at"] is None
+
+    def test_update_rejects_end_before_existing_start(self, client):
+        data = _login(client)
+        start = NOW + timedelta(hours=3)
+        created = _create(
+            client,
+            data["access_token"],
+            start_at=start.isoformat(),
+            end_at=(start + timedelta(minutes=30)).isoformat(),
+        ).json()
+
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"end_at": (start - timedelta(minutes=5)).isoformat()},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 409
+
+    def test_update_rejects_end_before_start_in_payload(self, client):
+        data = _login(client)
+        created = _create(client, data["access_token"]).json()
+        start = NOW + timedelta(hours=3)
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={
+                "start_at": start.isoformat(),
+                "end_at": (start - timedelta(minutes=5)).isoformat(),
+            },
+            headers=_auth(data["access_token"]),
+        )
         assert response.status_code == 422
 
 

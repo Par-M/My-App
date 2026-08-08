@@ -131,8 +131,9 @@ class HeuristicProvider:
     def generate_schedule(
         self, context: SchedulingContext, prompt: str
     ) -> ProviderResult:
-        tasks = sorted(
-            context.tasks,
+        fixed_tasks = [task for task in context.tasks if task.is_fixed]
+        flexible = sorted(
+            (task for task in context.tasks if not task.is_fixed),
             key=lambda task: (
                 -PRIORITY_RANK.get(task.priority, 1),
                 task.deadline is None,
@@ -146,7 +147,16 @@ class HeuristicProvider:
         self._buffer = context.buffer_minutes
         self._max_chunk = context.max_chunk_minutes
 
-        for task in tasks:
+        for task in fixed_tasks:
+            placement = self._place_fixed_task(task, available)
+            if placement is None:
+                deferred.append(task.title)
+                continue
+            placed, remaining = placement
+            blocks.extend(placed)
+            available = remaining
+
+        for task in flexible:
             placement = self._place_task(task, available)
             if placement is None:
                 deferred.append(task.title)
@@ -156,7 +166,7 @@ class HeuristicProvider:
             available = remaining
 
         scheduled_ids = {block.task_id for block in blocks}
-        total_count = len(tasks)
+        total_count = len(context.tasks)
         scheduled_count = len(scheduled_ids)
         if scheduled_count == total_count:
             summary = (
@@ -170,6 +180,38 @@ class HeuristicProvider:
                 f"{', '.join(deferred)}."
             )
         return ProviderResult(items=blocks, reasoning=summary)
+
+    def _place_fixed_task(
+        self,
+        task,
+        available: list[TimeSlot],
+    ) -> tuple[list[ProposedBlock], list[TimeSlot]] | None:
+        window = TimeSlot(task.start_at, task.end_at)
+        if window.end <= window.start:
+            return None
+        if task.deadline is not None and window.end > task.deadline:
+            return None
+        for index, slot in enumerate(available):
+            if slot.start <= window.start and window.end <= slot.end:
+                blocks = [
+                    ProposedBlock(
+                        task_id=task.id,
+                        task_title=task.title,
+                        start=window.start,
+                        end=window.end,
+                        reason="fixed event, scheduled at its exact window",
+                    )
+                ]
+                remaining = list(available)
+                carved: list[TimeSlot] = []
+                if slot.start < window.start:
+                    carved.append(TimeSlot(slot.start, window.start))
+                if window.end < slot.end:
+                    carved.append(TimeSlot(window.end, slot.end))
+                remaining[index:index + 1] = carved
+                remaining.sort(key=lambda slot: (slot.start, slot.end))
+                return blocks, remaining
+        return None
 
     def _place_task(
         self,

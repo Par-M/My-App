@@ -86,6 +86,16 @@ class TaskService:
 
     def update_task(self, task_id: uuid.UUID, data: TaskUpdate) -> Task:
         task = self.get_task(task_id)
+        start_at = (
+            data.start_at
+            if data.start_at is not None
+            else task.start_at
+        )
+        end_at = data.end_at if data.end_at is not None else task.end_at
+        if start_at is not None and end_at is not None and end_at <= start_at:
+            raise InvalidTaskTransitionError(
+                "end_at must be after start_at"
+            )
         task = task_repository.update_task(self.db, task, data)
         self.db.commit()
         self.db.refresh(task)

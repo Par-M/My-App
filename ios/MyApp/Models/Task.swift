@@ -54,6 +54,8 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var title: String
     var description: String?
     var deadline: Date?
+    var startAt: Date?
+    var endAt: Date?
     var priority: TaskPriority
     var status: TaskStatus
     var estimatedDuration: Int?
@@ -74,6 +76,8 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case title
         case description
         case deadline
+        case startAt = "start_at"
+        case endAt = "end_at"
         case priority
         case status
         case estimatedDuration = "estimated_duration"
@@ -99,6 +103,8 @@ struct TaskCreateRequest: Codable, Sendable {
     let title: String
     let description: String?
     let deadline: Date?
+    let startAt: Date?
+    let endAt: Date?
     let priority: TaskPriority
     let status: TaskStatus
     let estimatedDuration: Int?
@@ -110,6 +116,8 @@ struct TaskCreateRequest: Codable, Sendable {
         title: String,
         description: String?,
         deadline: Date?,
+        startAt: Date?,
+        endAt: Date?,
         priority: TaskPriority,
         status: TaskStatus,
         estimatedDuration: Int?,
@@ -120,6 +128,8 @@ struct TaskCreateRequest: Codable, Sendable {
         self.title = title
         self.description = description
         self.deadline = deadline
+        self.startAt = startAt
+        self.endAt = endAt
         self.priority = priority
         self.status = status
         self.estimatedDuration = estimatedDuration
@@ -132,6 +142,8 @@ struct TaskCreateRequest: Codable, Sendable {
         title = local.title
         description = local.taskDescription
         deadline = local.deadline
+        startAt = local.startAt
+        endAt = local.endAt
         priority = TaskPriority(rawValue: local.priorityRaw) ?? .medium
         status = TaskStatus(rawValue: local.statusRaw) ?? .pending
         estimatedDuration = local.estimatedDuration
@@ -144,6 +156,8 @@ struct TaskCreateRequest: Codable, Sendable {
         case title
         case description
         case deadline
+        case startAt = "start_at"
+        case endAt = "end_at"
         case priority
         case status
         case estimatedDuration = "estimated_duration"
@@ -157,6 +171,8 @@ struct TaskUpdateRequest: Encodable, Sendable {
     let title: String
     let description: String?
     let deadline: Date?
+    let startAt: Date?
+    let endAt: Date?
     let priority: TaskPriority
     let status: TaskStatus
     let estimatedDuration: Int?
@@ -168,6 +184,8 @@ struct TaskUpdateRequest: Encodable, Sendable {
         title = task.title
         description = task.description
         deadline = task.deadline
+        startAt = task.startAt
+        endAt = task.endAt
         priority = task.priority
         status = task.status
         estimatedDuration = task.estimatedDuration
@@ -180,6 +198,8 @@ struct TaskUpdateRequest: Encodable, Sendable {
         title = local.title
         description = local.taskDescription
         deadline = local.deadline
+        startAt = local.startAt
+        endAt = local.endAt
         priority = TaskPriority(rawValue: local.priorityRaw) ?? .medium
         status = TaskStatus(rawValue: local.statusRaw) ?? .pending
         estimatedDuration = local.estimatedDuration
@@ -193,6 +213,8 @@ struct TaskUpdateRequest: Encodable, Sendable {
         try container.encode(title, forKey: .title)
         try container.encode(description, forKey: .description)
         try container.encode(deadline, forKey: .deadline)
+        try container.encode(startAt, forKey: .startAt)
+        try container.encode(endAt, forKey: .endAt)
         try container.encode(priority, forKey: .priority)
         try container.encode(status, forKey: .status)
         try container.encode(estimatedDuration, forKey: .estimatedDuration)
@@ -205,6 +227,8 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case title
         case description
         case deadline
+        case startAt = "start_at"
+        case endAt = "end_at"
         case priority
         case status
         case estimatedDuration = "estimated_duration"

@@ -25,6 +25,12 @@ class TaskContext:
     duration_minutes: int
     priority: TaskPriority
     energy_level: int
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+    @property
+    def is_fixed(self) -> bool:
+        return self.start_at is not None and self.end_at is not None
 
 
 @dataclass

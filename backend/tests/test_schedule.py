@@ -121,6 +121,50 @@ class TestGenerateSchedule:
         assert "Algorithms Assignment" in body["meta"]["deferred_tasks"]
         assert body["message"] and "deferred" in body["message"]
 
+    def test_fixed_event_scheduled_at_exact_window(self, client):
+        data = _login(client)
+        _create_task(
+            client,
+            data["access_token"],
+            start_at="2026-08-04T10:00:00+00:00",
+            end_at="2026-08-04T11:00:00+00:00",
+        )
+
+        response = _generate(client, data["access_token"])
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"]
+        item = body["items"][0]
+        assert _parse(item["start"]) == _parse("2026-08-04T10:00:00+00:00")
+        assert _parse(item["end"]) == _parse("2026-08-04T11:00:00+00:00")
+
+    def test_flexible_task_avoids_fixed_event_window(self, client):
+        data = _login(client)
+        _create_task(
+            client,
+            data["access_token"],
+            title="Standup",
+            start_at="2026-08-04T10:00:00+00:00",
+            end_at="2026-08-04T11:00:00+00:00",
+        )
+        _create_task(client, data["access_token"], title="Deep work")
+
+        response = _generate(client, data["access_token"])
+        assert response.status_code == 200
+        body = response.json()
+        fixed = next(item for item in body["items"] if item["task_title"] == "Standup")
+        assert _parse(fixed["start"]) == _parse("2026-08-04T10:00:00+00:00")
+        assert _parse(fixed["end"]) == _parse("2026-08-04T11:00:00+00:00")
+
+        f_start = _parse(fixed["start"])
+        f_end = _parse(fixed["end"])
+        for item in body["items"]:
+            if item["task_title"] == "Standup":
+                continue
+            other_start = _parse(item["start"])
+            other_end = _parse(item["end"])
+            assert not (other_start < f_end and other_end > f_start)
+
 
 class TestAcceptRecommendation:
     def _proposal(self, client, token):

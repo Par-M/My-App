@@ -14,6 +14,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.habit import HabitCreate
 from app.schemas.habit import HabitDashboardResponse
+from app.schemas.habit import HabitDaySet
+from app.schemas.habit import HabitDaySetResponse
 from app.schemas.habit import HabitListResponse
 from app.schemas.habit import HabitLogCreate
 from app.schemas.habit import HabitLogResponse
@@ -112,3 +114,29 @@ def log_completion(
         return service.log_completion(habit_id, payload.count, payload.date)
     except HabitNotFoundError as exc:
         _handle_not_found(exc)
+
+
+@router.put("/{habit_id}/logs/day", response_model=HabitDaySetResponse)
+def set_day_count(
+    habit_id: uuid.UUID,
+    payload: HabitDaySet,
+    timezone: str = Query(default="UTC"),
+    service: HabitService = Depends(_service),
+) -> HabitDaySetResponse:
+    try:
+        ZoneInfo(timezone)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Invalid IANA timezone: {timezone}",
+        ) from exc
+    try:
+        day, count = service.set_day_count(
+            habit_id,
+            payload.count,
+            payload.date,
+            timezone,
+        )
+    except HabitNotFoundError as exc:
+        _handle_not_found(exc)
+    return HabitDaySetResponse(habit_id=habit_id, date=day, count=count)

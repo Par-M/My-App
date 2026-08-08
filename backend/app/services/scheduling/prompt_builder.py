@@ -23,6 +23,18 @@ def _deadline(task: TaskContext) -> str:
     return task.deadline.date().isoformat()
 
 
+def _fixed_window(task: TaskContext, timezone: str) -> str:
+    if not task.is_fixed:
+        return "none"
+    tz = _tz(timezone)
+    start = task.start_at.astimezone(tz)
+    end = task.end_at.astimezone(tz)
+    return (
+        f"{start.strftime('%a %H:%M')}-{end.strftime('%H:%M')} "
+        f"({start.date().isoformat()}, {timezone})"
+    )
+
+
 def _hour_text(value: float) -> str:
     hour = int(value)
     minute = int(round((value - hour) * 60))
@@ -50,6 +62,7 @@ def build_prompt(context: SchedulingContext) -> str:
         lines.append(
             f"- id={task.id} | {task.title} | {task.duration_minutes} min "
             f"| priority={task.priority.value} | deadline={_deadline(task)} "
+            f"| fixed={_fixed_window(task, context.timezone)} "
             f"| energy={task.energy_level}"
         )
     lines.append("")
@@ -89,5 +102,12 @@ def build_prompt(context: SchedulingContext) -> str:
         "all of a task's blocks must fit before the deadline and together cover the full "
         "task duration. If a task cannot be fully scheduled, omit it entirely and say so "
         "in reasoning."
+    )
+    lines.append(
+        "Fixed tasks (fixed value other than \"none\") are HARD time constraints: "
+        "schedule each one as exactly ONE block spanning its fixed start and end times, "
+        "in that exact window. Never move, shorten, split, or extend a fixed task, and "
+        "never place any other task's block inside a fixed task's window. If a fixed "
+        "window cannot be honoured, omit that task and explain why in reasoning."
     )
     return "\n".join(lines)

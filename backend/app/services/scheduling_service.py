@@ -152,6 +152,8 @@ class SchedulingService:
                     ),
                     priority=task.priority,
                     energy_level=preference.energy_level,
+                    start_at=task.start_at,
+                    end_at=task.end_at,
                 )
                 for task in tasks
             ],

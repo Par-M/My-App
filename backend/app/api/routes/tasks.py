@@ -113,7 +113,7 @@ def update_task(
 ) -> TaskResponse:
     try:
         return service.update_task(task_id, payload)
-    except TaskNotFoundError as exc:
+    except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
         _handle_service_errors(exc)
 
 

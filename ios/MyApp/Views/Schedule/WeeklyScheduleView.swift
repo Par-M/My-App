@@ -348,12 +348,7 @@ struct WeeklyScheduleView: View {
 
     private func daySection(_ day: Date) -> some View {
         let calendar = Calendar.current
-        let dayBlocks = scheduleService.blocks
-            .filter { calendar.isDate($0.startAt, inSameDayAs: day) }
-            .sorted { $0.startAt < $1.startAt }
-        let dayEvents = busyEvents
-            .filter { calendar.isDate($0.start, inSameDayAs: day) }
-            .sorted { $0.start < $1.start }
+        let columns = overlapColumns(dayItems(for: day))
         let isToday = calendar.isDateInToday(day)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -373,19 +368,21 @@ struct WeeklyScheduleView: View {
                 }
             }
 
-            if dayEvents.isEmpty && dayBlocks.isEmpty {
+            if columns.isEmpty {
                 Text("No events")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             } else {
-                VStack(spacing: 6) {
-                    ForEach(dayEvents) { event in
-                        eventRow(event)
-                    }
-                    ForEach(dayBlocks) { block in
-                        blockRow(block)
+                HStack(alignment: .top, spacing: 4) {
+                    ForEach(Array(columns.enumerated()), id: \.offset) { _, column in
+                        VStack(spacing: 6) {
+                            ForEach(column) { item in
+                                dayItemRow(item)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -396,6 +393,46 @@ struct WeeklyScheduleView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isToday ? Color.accentColor : Color(.separator), lineWidth: isToday ? 1.5 : 0.5)
         )
+    }
+
+    private func dayItems(for day: Date) -> [DayItem] {
+        let calendar = Calendar.current
+        let blocks = scheduleService.blocks
+            .filter { calendar.isDate($0.startAt, inSameDayAs: day) }
+            .map(DayItem.init(block:))
+        let events = busyEvents
+            .filter { calendar.isDate($0.start, inSameDayAs: day) }
+            .map(DayItem.init(event:))
+        return (blocks + events).sorted { $0.start < $1.start }
+    }
+
+    private func overlapColumns(_ items: [DayItem]) -> [[DayItem]] {
+        let sorted = items.sorted { $0.start < $1.start }
+        var columns: [[DayItem]] = []
+        var columnEnds: [Date] = []
+        for item in sorted {
+            var placed = false
+            for index in columnEnds.indices where item.start >= columnEnds[index] {
+                columns[index].append(item)
+                columnEnds[index] = item.end
+                placed = true
+                break
+            }
+            if !placed {
+                columns.append([item])
+                columnEnds.append(item.end)
+            }
+        }
+        return columns
+    }
+
+    @ViewBuilder
+    private func dayItemRow(_ item: DayItem) -> some View {
+        if let event = item.event {
+            eventRow(event)
+        } else if let block = item.block {
+            blockRow(block)
+        }
     }
 
     private func eventRow(_ event: CalendarEventItem) -> some View {
@@ -498,6 +535,30 @@ struct WeeklyScheduleView: View {
         if scheduleService.proposal != nil {
             showProposal = true
         }
+    }
+}
+
+private struct DayItem: Identifiable {
+    let id: String
+    let start: Date
+    let end: Date
+    let event: CalendarEventItem?
+    let block: CalendarBlock?
+
+    init(event: CalendarEventItem) {
+        id = "event-\(event.id)"
+        start = event.start
+        end = event.end
+        self.event = event
+        block = nil
+    }
+
+    init(block: CalendarBlock) {
+        id = "block-\(block.id.uuidString)"
+        start = block.startAt
+        end = block.endAt
+        self.block = block
+        event = nil
     }
 }
 

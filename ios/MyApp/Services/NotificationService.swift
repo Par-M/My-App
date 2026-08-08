@@ -230,11 +230,20 @@ final class NotificationService {
 
     private static func map(_ status: UNAuthorizationStatus) -> AuthorizationStatus {
         switch status {
-        case .notDetermined: .notDetermined
-        case .denied: .denied
-        case .authorized: .authorized
-        case .provisional: .provisional
-        @unknown default: .unknown
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        case .authorized:
+            return .authorized
+        case .provisional:
+            return .provisional
+        #if compiler(>=5.3)
+        case .ephemeral:
+            return .authorized
+        @unknown default:
+            return .unknown
+        #endif
         }
     }
 }

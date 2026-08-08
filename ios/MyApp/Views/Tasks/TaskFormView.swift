@@ -15,6 +15,9 @@ struct TaskFormView: View {
 
     @State private var title: String
     @State private var detail: String
+    @State private var hasFixedEvent: Bool
+    @State private var fixedStart: Date
+    @State private var fixedEnd: Date
     @State private var hasDeadline: Bool
     @State private var deadline: Date
     @State private var priority: TaskPriority
@@ -36,6 +39,10 @@ struct TaskFormView: View {
         case .add:
             _title = State(initialValue: "")
             _detail = State(initialValue: "")
+            _hasFixedEvent = State(initialValue: false)
+            let defaultStart = Self.roundedToQuarterHour(Date())
+            _fixedStart = State(initialValue: defaultStart)
+            _fixedEnd = State(initialValue: defaultStart.addingTimeInterval(30 * 60))
             _hasDeadline = State(initialValue: false)
             _deadline = State(initialValue: Self.roundedToQuarterHour(Date()))
             _priority = State(initialValue: .medium)
@@ -50,6 +57,12 @@ struct TaskFormView: View {
         case .edit(let task):
             _title = State(initialValue: task.title)
             _detail = State(initialValue: task.description ?? "")
+            _hasFixedEvent = State(initialValue: task.startAt != nil)
+            let start = task.startAt ?? Self.roundedToQuarterHour(Date())
+            _fixedStart = State(initialValue: start)
+            _fixedEnd = State(
+                initialValue: task.endAt ?? start.addingTimeInterval(30 * 60)
+            )
             _hasDeadline = State(initialValue: task.deadline != nil)
             _deadline = State(initialValue: task.deadline ?? Date())
             _priority = State(initialValue: task.priority)
@@ -80,38 +93,26 @@ struct TaskFormView: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var deadlineHour: Int {
-        Calendar.current.component(.hour, from: deadline)
-    }
-
-    private var deadlineMinute: Int {
-        Calendar.current.component(.minute, from: deadline)
-    }
-
-    private var hourBinding: Binding<Double> {
+    private var fixedStartBinding: Binding<Date> {
         Binding(
-            get: { Double(deadlineHour) },
+            get: { fixedStart },
             set: { newValue in
-                deadline = Calendar.current.date(
-                    bySettingHour: Int(newValue),
-                    minute: deadlineMinute,
-                    second: 0,
-                    of: deadline
-                ) ?? deadline
-            }
-        )
-    }
-
-    private var minuteBinding: Binding<Double> {
-        Binding(
-            get: { Double(deadlineMinute) },
-            set: { newValue in
-                deadline = Calendar.current.date(
-                    bySettingHour: deadlineHour,
-                    minute: Int(newValue),
-                    second: 0,
-                    of: deadline
-                ) ?? deadline
+                let calendar = Calendar.current
+                var endDate = fixedEnd
+                if !calendar.isDate(fixedEnd, inSameDayAs: newValue) {
+                    let time = calendar.dateComponents([.hour, .minute], from: fixedEnd)
+                    endDate = calendar.date(
+                        bySettingHour: time.hour ?? 0,
+                        minute: time.minute ?? 0,
+                        second: 0,
+                        of: newValue
+                    ) ?? newValue
+                }
+                fixedStart = newValue
+                if endDate <= newValue {
+                    endDate = newValue.addingTimeInterval(30 * 60)
+                }
+                fixedEnd = endDate
             }
         )
     }
@@ -166,6 +167,28 @@ struct TaskFormView: View {
                 }
 
                 Section {
+                    Toggle("Fixed Event", isOn: $hasFixedEvent)
+                    if hasFixedEvent {
+                        DatePicker(
+                            "Date",
+                            selection: fixedStartBinding,
+                            displayedComponents: .date
+                        )
+                        DatePicker(
+                            "Start",
+                            selection: fixedStartBinding,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                        DatePicker(
+                            "End",
+                            selection: $fixedEnd,
+                            in: fixedStart.addingTimeInterval(60)...,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
+                    }
+
                     Toggle("Deadline", isOn: $hasDeadline)
                     if hasDeadline {
                         DatePicker(
@@ -173,25 +196,12 @@ struct TaskFormView: View {
                             selection: $deadline,
                             displayedComponents: .date
                         )
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Time")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            HStack(spacing: 20) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Slider(value: hourBinding, in: 0...23, step: 1)
-                                    Text("Hour: \(deadlineHour)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Slider(value: minuteBinding, in: 0...45, step: 15)
-                                    Text("Minute: \(String(format: "%02d", deadlineMinute))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
+                        DatePicker(
+                            "Time",
+                            selection: $deadline,
+                            displayedComponents: .hourAndMinute
+                        )
+                        .datePickerStyle(.wheel)
                     }
 
                     Toggle("Estimated Duration", isOn: $hasDuration)
@@ -327,10 +337,16 @@ struct TaskFormView: View {
             errorMessage = "Estimated duration must be at least 1 minute."
             return
         }
+        guard !hasFixedEvent || fixedEnd > fixedStart else {
+            errorMessage = "Fixed event end must be after its start."
+            return
+        }
         isSaving = true
         defer { isSaving = false }
 
         let deadlineValue = hasDeadline ? deadline : nil
+        let startAtValue = hasFixedEvent ? fixedStart : nil
+        let endAtValue = hasFixedEvent ? fixedEnd : nil
         let durationValue = hasDuration ? totalDurationMinutes : nil
         let categoryValue = category.isEmpty ? nil : category
         let descriptionValue = detail.isEmpty ? nil : detail
@@ -344,6 +360,8 @@ struct TaskFormView: View {
                     title: trimmedTitle,
                     description: descriptionValue,
                     deadline: deadlineValue,
+                    startAt: startAtValue,
+                    endAt: endAtValue,
                     priority: priority,
                     status: status,
                     estimatedDuration: durationValue,
@@ -357,6 +375,8 @@ struct TaskFormView: View {
                 updated.title = trimmedTitle
                 updated.description = descriptionValue
                 updated.deadline = deadlineValue
+                updated.startAt = startAtValue
+                updated.endAt = endAtValue
                 updated.priority = priority
                 updated.status = status
                 updated.estimatedDuration = durationValue

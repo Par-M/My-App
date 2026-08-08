@@ -69,6 +69,18 @@ class Task(Base):
         index=True,
     )
 
+    start_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
     priority: Mapped[TaskPriority] = mapped_column(
         Enum(TaskPriority, name="taskpriority"),
         nullable=False,

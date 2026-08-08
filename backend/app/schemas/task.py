@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
 from app.models.task import TaskPriority
 from app.models.task import TaskProductivity
@@ -27,6 +28,8 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     deadline: datetime | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
     priority: TaskPriority = TaskPriority.medium
     status: TaskStatus = TaskStatus.pending
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
@@ -48,11 +51,23 @@ class TaskCreate(BaseModel):
     def repeat_weekdays_valid(cls, value: list[int] | None) -> list[int] | None:
         return _normalize_weekdays(value)
 
+    @model_validator(mode="after")
+    def fixed_event_times_valid(self):
+        if self.start_at is None and self.end_at is None:
+            return self
+        if self.start_at is None or self.end_at is None:
+            raise ValueError("start_at and end_at must be set together")
+        if self.end_at <= self.start_at:
+            raise ValueError("end_at must be after start_at")
+        return self
+
 
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     deadline: datetime | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
     priority: TaskPriority | None = None
     status: TaskStatus | None = None
     estimated_duration: int | None = Field(default=None, ge=1, le=525600)
@@ -74,6 +89,13 @@ class TaskUpdate(BaseModel):
     def repeat_weekdays_valid(cls, value: list[int] | None) -> list[int] | None:
         return _normalize_weekdays(value)
 
+    @model_validator(mode="after")
+    def fixed_event_times_valid(self):
+        if self.start_at is not None and self.end_at is not None:
+            if self.end_at <= self.start_at:
+                raise ValueError("end_at must be after start_at")
+        return self
+
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -83,6 +105,8 @@ class TaskResponse(BaseModel):
     title: str
     description: str | None
     deadline: datetime | None
+    start_at: datetime | None
+    end_at: datetime | None
     priority: TaskPriority
     status: TaskStatus
     estimated_duration: int | None

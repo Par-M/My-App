@@ -59,6 +59,15 @@ def validate_schedule(
         for slot in context.busy_times
         if _normalize(slot.start) < _normalize(slot.end)
     ]
+    fixed_windows = [
+        (
+            task,
+            _normalize(task.start_at),
+            _normalize(task.end_at),
+        )
+        for task in context.tasks
+        if task.is_fixed
+    ]
 
     normalized: list[tuple[ProposedBlock, datetime, datetime]] = []
     scheduled_minutes: dict[object, int] = {}
@@ -83,6 +92,15 @@ def validate_schedule(
             validation.errors.append(
                 f"Deadline violation for '{block.task_title}': "
                 f"block ends after its deadline"
+            )
+
+        if task.is_fixed and (
+            start != _normalize(task.start_at) or end != _normalize(task.end_at)
+        ):
+            validation.errors.append(
+                f"Fixed task '{block.task_title}' must be scheduled exactly "
+                f"at its fixed window {_normalize(task.start_at).isoformat()}-"
+                f"{_normalize(task.end_at).isoformat()}"
             )
 
         window_start, window_end = _window_for(start, context)
@@ -122,6 +140,15 @@ def validate_schedule(
                 f"Task '{task.title}' is only partially scheduled "
                 f"({scheduled} of {task.duration_minutes} minutes)"
             )
+        if task.is_fixed:
+            count = sum(
+                1 for block, _, _ in normalized if block.task_id == task.id
+            )
+            if count > 1:
+                validation.errors.append(
+                    f"Fixed task '{task.title}' must be scheduled as a single "
+                    f"block at its fixed window"
+                )
 
     for index, (block, start, end) in enumerate(normalized):
         for _other_block, other_start, other_end in normalized[(index + 1) :]:
@@ -129,6 +156,18 @@ def validate_schedule(
                 validation.errors.append(
                     f"'{block.task_title}' overlaps another scheduled block"
                 )
+
+    for block, start, end in normalized:
+        task = tasks_by_id[block.task_id]
+        if task.is_fixed:
+            continue
+        for fixed_task, fixed_start, fixed_end in fixed_windows:
+            if start < fixed_end and end > fixed_start:
+                validation.errors.append(
+                    f"'{block.task_title}' overlaps the fixed window of "
+                    f"'{fixed_task.title}'"
+                )
+                break
 
     if context.buffer_minutes > 0:
         ordered = sorted(normalized, key=lambda entry: entry[1])

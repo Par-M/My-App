@@ -8,6 +8,8 @@ final class LocalTask {
     var title: String
     var taskDescription: String?
     var deadline: Date?
+    var startAt: Date?
+    var endAt: Date?
     var priorityRaw: String
     var statusRaw: String
     var estimatedDuration: Int?
@@ -31,6 +33,8 @@ final class LocalTask {
         title: String,
         taskDescription: String? = nil,
         deadline: Date? = nil,
+        startAt: Date? = nil,
+        endAt: Date? = nil,
         priority: TaskPriority,
         status: TaskStatus,
         estimatedDuration: Int? = nil,
@@ -53,6 +57,8 @@ final class LocalTask {
         self.title = title
         self.taskDescription = taskDescription
         self.deadline = deadline
+        self.startAt = startAt
+        self.endAt = endAt
         self.priorityRaw = priority.rawValue
         self.statusRaw = status.rawValue
         self.estimatedDuration = estimatedDuration
@@ -78,6 +84,8 @@ final class LocalTask {
             title: task.title,
             taskDescription: task.description,
             deadline: task.deadline,
+            startAt: task.startAt,
+            endAt: task.endAt,
             priority: task.priority,
             status: task.status,
             estimatedDuration: task.estimatedDuration,
@@ -104,6 +112,8 @@ final class LocalTask {
             title: title,
             description: taskDescription,
             deadline: deadline,
+            startAt: startAt,
+            endAt: endAt,
             priority: TaskPriority(rawValue: priorityRaw) ?? .medium,
             status: TaskStatus(rawValue: statusRaw) ?? .pending,
             estimatedDuration: estimatedDuration,

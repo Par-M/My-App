@@ -17,6 +17,11 @@ struct DashboardView: View {
                 .tabItem {
                     Label("Tasks", systemImage: "checklist")
                 }
+
+            HabitsView()
+                .tabItem {
+                    Label("Habits", systemImage: "checkmark.circle")
+                }
         }
     }
 }
@@ -29,4 +34,5 @@ struct DashboardView: View {
         .environment(NotificationService.shared)
         .environment(CalendarService())
         .environment(ScheduleService())
+        .environment(HabitService())
 }

@@ -87,6 +87,17 @@ class HabitLogResponse(BaseModel):
     created_at: datetime
 
 
+class HabitDaySet(BaseModel):
+    count: int = Field(ge=0, le=1000)
+    date: dt_date | None = None
+
+
+class HabitDaySetResponse(BaseModel):
+    habit_id: uuid.UUID
+    date: dt_date
+    count: int
+
+
 class HabitDayStats(BaseModel):
     date: dt_date
     scheduled: bool

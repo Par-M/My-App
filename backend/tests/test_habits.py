@@ -372,3 +372,126 @@ class TestDashboard:
             headers=_auth(data["access_token"]),
         )
         assert response.status_code == 422
+
+
+def _set_day(client, token, habit_id, **overrides):
+    payload = {}
+    payload.update(overrides)
+    return client.put(
+        f"/api/v1/habits/{habit_id}/logs/day",
+        json=payload,
+        headers=_auth(token),
+    )
+
+
+class TestSetDayCount:
+    def test_set_requires_authentication(self, client):
+        response = client.put(
+            f"/api/v1/habits/{uuid.uuid4()}/logs/day", json={"count": 1}
+        )
+        assert response.status_code == 401
+
+    def test_sets_count_for_today(self, client):
+        data = _login(client)
+        habit = _create_habit(client, data["access_token"], daily_goal=3)
+        today = _utc_today()
+
+        response = _set_day(
+            client,
+            data["access_token"],
+            habit["id"],
+            count=3,
+            date=today.isoformat(),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["habit_id"] == habit["id"]
+        assert body["date"] == today.isoformat()
+        assert body["count"] == 3
+
+        stats = client.get(
+            "/api/v1/habits/dashboard",
+            headers=_auth(data["access_token"]),
+        ).json()["habits"][0]
+        assert stats["last_7_days"][-1]["completed_count"] == 3
+        assert stats["completed_7d"] == 1
+
+    def test_zero_clears_day(self, client):
+        data = _login(client)
+        habit = _create_habit(client, data["access_token"], daily_goal=3)
+        today = _utc_today()
+        _log(
+            client,
+            data["access_token"],
+            habit["id"],
+            count=3,
+            date=today.isoformat(),
+        )
+
+        response = _set_day(
+            client,
+            data["access_token"],
+            habit["id"],
+            count=0,
+            date=today.isoformat(),
+        )
+        assert response.status_code == 200
+
+        stats = client.get(
+            "/api/v1/habits/dashboard",
+            headers=_auth(data["access_token"]),
+        ).json()["habits"][0]
+        assert stats["last_7_days"][-1]["completed_count"] == 0
+        assert stats["completed_7d"] == 0
+
+    def test_replace_replaces_existing_logs(self, client):
+        data = _login(client)
+        habit = _create_habit(client, data["access_token"], daily_goal=2)
+        today = _utc_today()
+        _log(
+            client,
+            data["access_token"],
+            habit["id"],
+            count=1,
+            date=today.isoformat(),
+        )
+
+        _set_day(
+            client,
+            data["access_token"],
+            habit["id"],
+            count=2,
+            date=today.isoformat(),
+        )
+
+        stats = client.get(
+            "/api/v1/habits/dashboard",
+            headers=_auth(data["access_token"]),
+        ).json()["habits"][0]
+        assert stats["last_7_days"][-1]["completed_count"] == 2
+        assert stats["total_completions"] == 2
+
+    def test_unknown_habit_returns_404(self, client):
+        data = _login(client)
+        response = _set_day(
+            client, data["access_token"], str(uuid.uuid4()), count=1
+        )
+        assert response.status_code == 404
+
+    def test_rejects_negative_count(self, client):
+        data = _login(client)
+        habit = _create_habit(client, data["access_token"])
+        response = _set_day(
+            client, data["access_token"], habit["id"], count=-1
+        )
+        assert response.status_code == 422
+
+    def test_rejects_invalid_timezone(self, client):
+        data = _login(client)
+        habit = _create_habit(client, data["access_token"])
+        response = client.put(
+            f"/api/v1/habits/{habit['id']}/logs/day?timezone=Not/AZone",
+            json={"count": 1},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 422

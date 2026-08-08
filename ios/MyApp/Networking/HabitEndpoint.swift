@@ -6,6 +6,7 @@ enum HabitEndpoint: Endpoint {
     case update(id: UUID, request: HabitUpdateRequest)
     case delete(UUID)
     case log(id: UUID, count: Int, date: Date?)
+    case setDay(id: UUID, count: Int, date: Date?)
     case dashboard
 
     var path: String {
@@ -18,6 +19,8 @@ enum HabitEndpoint: Endpoint {
             return "/api/v1/habits/\(id.uuidString.lowercased())"
         case .log(let id, _, _):
             return "/api/v1/habits/\(id.uuidString.lowercased())/logs"
+        case .setDay(let id, _, _):
+            return "/api/v1/habits/\(id.uuidString.lowercased())/logs/day"
         case .dashboard:
             return "/api/v1/habits/dashboard"
         }
@@ -29,6 +32,8 @@ enum HabitEndpoint: Endpoint {
             return .get
         case .create, .log:
             return .post
+        case .setDay:
+            return .put
         case .update:
             return .patch
         case .delete:
@@ -44,6 +49,8 @@ enum HabitEndpoint: Endpoint {
             return request
         case .log(_, let count, let date):
             return HabitLogCreateRequest(count: count, date: date)
+        case .setDay(_, let count, let date):
+            return HabitDaySetRequest(count: count, date: date)
         default:
             return nil
         }
@@ -51,7 +58,7 @@ enum HabitEndpoint: Endpoint {
 
     var queryItems: [URLQueryItem]? {
         switch self {
-        case .dashboard:
+        case .dashboard, .setDay:
             return [URLQueryItem(name: "timezone", value: TimeZone.current.identifier)]
         default:
             return nil

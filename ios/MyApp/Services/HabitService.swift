@@ -95,4 +95,15 @@ final class HabitService {
             errorMessage = error.localizedDescription
         }
     }
+
+    func setHabitDayCount(id: UUID, count: Int, date: Date? = nil) async {
+        do {
+            let _: HabitDaySetResponse = try await client.request(
+                HabitEndpoint.setDay(id: id, count: count, date: date)
+            )
+            await loadDashboard()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }

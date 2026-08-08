@@ -133,6 +133,40 @@ class HabitService:
         self.db.refresh(log)
         return log
 
+    def set_day_count(
+        self,
+        habit_id: uuid.UUID,
+        count: int,
+        on_date: date | None = None,
+        timezone_name: str = "UTC",
+    ) -> tuple[date, int]:
+        habit = self._get(habit_id)
+        tz = ZoneInfo(timezone_name)
+        day = on_date if on_date is not None else datetime.now(tz).date()
+        day_start = datetime.combine(day, dt_time.min, tzinfo=tz).astimezone(timezone.utc)
+        day_end = day_start + timedelta(days=1)
+
+        existing = self.db.scalars(
+            select(HabitLog).where(
+                HabitLog.habit_id == habit.id,
+                HabitLog.completed_at >= day_start,
+                HabitLog.completed_at < day_end,
+            )
+        ).all()
+        for log in existing:
+            self.db.delete(log)
+
+        if count > 0:
+            habit_repository.add_log(
+                self.db,
+                user_id=self.user_id,
+                habit_id=habit.id,
+                count=count,
+                completed_at=day_start,
+            )
+        self.db.commit()
+        return day, count
+
     def dashboard(self, timezone_name: str = "UTC") -> list[HabitStats]:
         tz = ZoneInfo(timezone_name)
         today = datetime.now(tz).date()

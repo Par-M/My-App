@@ -11,6 +11,7 @@ struct FocusView: View {
     @State private var isPaused = false
     @State private var isRunning = false
     @State private var showCompletion = false
+    @State private var showProductivity = false
     @State private var isSubmitting = false
     @State private var focusError: String?
 
@@ -115,7 +116,8 @@ struct FocusView: View {
             titleVisibility: .visible
         ) {
             Button("Yes, completed") {
-                complete()
+                isPaused = true
+                showProductivity = true
             }
             Button("Still working on it") {
                 recordElapsed()
@@ -123,6 +125,18 @@ struct FocusView: View {
             Button("Skip for now", role: .cancel) {
                 dismiss()
             }
+        }
+        .confirmationDialog(
+            "How did it go?",
+            isPresented: $showProductivity,
+            titleVisibility: .visible
+        ) {
+            ForEach(TaskProductivity.allCases) { productivity in
+                Button(productivity.label) {
+                    complete(productivity: productivity)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
         }
         .alert("Something went wrong", isPresented: isPresentedError) {
             Button("OK", role: .cancel) {}
@@ -147,12 +161,16 @@ struct FocusView: View {
         }
     }
 
-    private func complete() {
+    private func complete(productivity: TaskProductivity) {
         guard !isSubmitting else { return }
         isSubmitting = true
         Task {
             do {
-                _ = try await taskService.completeTask(id: task.id, minutes: elapsedMinutes)
+                _ = try await taskService.completeTask(
+                    id: task.id,
+                    minutes: elapsedMinutes,
+                    productivity: productivity
+                )
                 dismiss()
             } catch {
                 isSubmitting = false

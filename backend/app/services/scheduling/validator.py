@@ -26,12 +26,23 @@ def _normalize(value: datetime) -> datetime:
     return value
 
 
+def _hour_minute(value: float) -> tuple[int, int]:
+    hour = int(value)
+    minute = int(round((value - hour) * 60))
+    if minute == 60:
+        hour += 1
+        minute = 0
+    return hour, minute
+
+
 def _window_for(block_start: datetime, context: SchedulingContext):
     tz = ZoneInfo(context.timezone)
     local = block_start.astimezone(tz)
     day = local.date()
-    start = datetime.combine(day, time(context.work_start_hour), tzinfo=tz)
-    end = datetime.combine(day, time(context.work_end_hour), tzinfo=tz)
+    start_h, start_m = _hour_minute(context.work_start_hour)
+    end_h, end_m = _hour_minute(context.work_end_hour)
+    start = datetime.combine(day, time(start_h, start_m), tzinfo=tz)
+    end = datetime.combine(day, time(end_h, end_m), tzinfo=tz)
     return start, end
 
 
@@ -49,8 +60,8 @@ def validate_schedule(
         if _normalize(slot.start) < _normalize(slot.end)
     ]
 
-    seen_tasks: set[object] = set()
     normalized: list[tuple[ProposedBlock, datetime, datetime]] = []
+    scheduled_minutes: dict[object, int] = {}
 
     for block in blocks:
         start = _normalize(block.start)
@@ -66,11 +77,6 @@ def validate_schedule(
                 f"Unknown task_id {block.task_id} in schedule output"
             )
             continue
-        if block.task_id in seen_tasks:
-            validation.errors.append(
-                f"Task '{block.task_title}' is scheduled more than once"
-            )
-        seen_tasks.add(block.task_id)
 
         task = tasks_by_id[block.task_id]
         if task.deadline is not None and end > _normalize(task.deadline):
@@ -92,7 +98,30 @@ def validate_schedule(
                 )
                 break
 
+        block_minutes = int((end - start).total_seconds() // 60)
+        if block_minutes > context.max_chunk_minutes:
+            validation.warnings.append(
+                f"Block for '{block.task_title}' is longer than the "
+                f"{context.max_chunk_minutes} minute chunk limit"
+            )
+
+        scheduled_minutes[block.task_id] = (
+            scheduled_minutes.get(block.task_id, 0) + block_minutes
+        )
         normalized.append((block, start, end))
+
+    for task in context.tasks:
+        scheduled = scheduled_minutes.get(task.id, 0)
+        if scheduled > task.duration_minutes:
+            validation.errors.append(
+                f"Task '{task.title}' is scheduled for {scheduled} minutes, "
+                f"which exceeds its {task.duration_minutes} minute duration"
+            )
+        elif scheduled < task.duration_minutes:
+            validation.errors.append(
+                f"Task '{task.title}' is only partially scheduled "
+                f"({scheduled} of {task.duration_minutes} minutes)"
+            )
 
     for index, (block, start, end) in enumerate(normalized):
         for _other_block, other_start, other_end in normalized[(index + 1) :]:
@@ -106,6 +135,8 @@ def validate_schedule(
         for (first, f_start, f_end), (second, s_start, s_end) in zip(
             ordered, ordered[1:]
         ):
+            if first.task_id == second.task_id:
+                continue
             gap = (s_start - f_end).total_seconds() / 60
             if 0 <= gap < context.buffer_minutes:
                 validation.warnings.append(

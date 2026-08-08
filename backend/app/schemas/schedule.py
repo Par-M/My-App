@@ -22,6 +22,23 @@ class ScheduleGenerateRequest(BaseModel):
     busy_times: list[BusyTime] = Field(default_factory=list)
     task_ids: list[uuid.UUID] | None = None
 
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def parse_date(cls, value):
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError:
+                pass
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed.date()
+            except ValueError as exc:
+                raise ValueError(
+                    "Invalid date; expected YYYY-MM-DD or an ISO8601 datetime"
+                ) from exc
+        return value
+
     @model_validator(mode="after")
     def validate_dates(self):
         if self.end_date < self.start_date:

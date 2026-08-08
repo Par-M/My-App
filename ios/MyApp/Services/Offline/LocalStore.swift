@@ -55,6 +55,7 @@ final class LocalStore {
             existing.completedAt = task.completedAt
             existing.category = task.category
             existing.notes = task.notes
+            existing.repeatWeekdays = task.repeatWeekdays
             existing.isArchived = task.isArchived
             existing.createdAt = task.createdAt
             existing.updatedAt = task.updatedAt

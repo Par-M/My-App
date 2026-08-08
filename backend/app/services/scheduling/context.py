@@ -33,10 +33,11 @@ class SchedulingContext:
     dates: list[date]
     timezone: str
     busy_times: list[TimeSlot] = field(default_factory=list)
-    work_start_hour: int = 9
-    work_end_hour: int = 17
+    work_start_hour: float = 9
+    work_end_hour: float = 17
     buffer_minutes: int = 15
     energy_level: int = 3
+    max_chunk_minutes: int = 90
     free_slots: list[TimeSlot] = field(default_factory=list)
 
     @property

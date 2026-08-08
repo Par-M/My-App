@@ -169,7 +169,9 @@ def complete_task(
     service: TaskService = Depends(_service),
 ) -> TaskResponse:
     try:
-        return service.complete_task(task_id, payload.actual_minutes)
+        return service.complete_task(
+            task_id, payload.actual_minutes, payload.productivity
+        )
     except TaskNotFoundError as exc:
         _handle_service_errors(exc)
 

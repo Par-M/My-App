@@ -75,6 +75,11 @@ struct SettingsView: View {
             case .granted:
                 Label("Calendar connected", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                NavigationLink {
+                    CalendarSelectionView()
+                } label: {
+                    Label("Choose Calendars", systemImage: "checklist")
+                }
             case .denied:
                 HStack {
                     Label("Calendar access disabled", systemImage: "calendar.badge.exclamationmark")

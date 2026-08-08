@@ -7,7 +7,16 @@ final class MyAppUITests: XCTestCase {
     }
 
     @MainActor
+    private func openTasksTabIfNeeded(_ app: XCUIApplication) {
+        let tasksTab = app.tabBars.buttons["Tasks"]
+        if tasksTab.waitForExistence(timeout: 3) {
+            tasksTab.tap()
+        }
+    }
+
+    @MainActor
     private func signOutIfSignedIn(_ app: XCUIApplication) {
+        openTasksTabIfNeeded(app)
         let accountButton = app.buttons["Account"]
         guard accountButton.waitForExistence(timeout: 3) else { return }
         accountButton.tap()
@@ -18,11 +27,28 @@ final class MyAppUITests: XCTestCase {
     }
 
     @MainActor
+    private func completeOnboardingIfPresent(_ app: XCUIApplication) {
+        let getStarted = app.buttons["Get Started"]
+        guard getStarted.waitForExistence(timeout: 3) else { return }
+        getStarted.tap()
+        for _ in 0..<3 {
+            if app.buttons["Continue"].waitForExistence(timeout: 3) {
+                app.buttons["Continue"].tap()
+            }
+        }
+        if app.buttons["Done"].waitForExistence(timeout: 3) {
+            app.buttons["Done"].tap()
+        }
+    }
+
+    @MainActor
     private func signIn(_ app: XCUIApplication) {
         signOutIfSignedIn(app)
         let devButton = app.buttons["Development Sign In"]
         XCTAssertTrue(devButton.waitForExistence(timeout: 10), "Login screen should be shown")
         devButton.tap()
+        completeOnboardingIfPresent(app)
+        openTasksTabIfNeeded(app)
         let tasksBar = app.navigationBars["Tasks"]
         XCTAssertTrue(tasksBar.waitForExistence(timeout: 15), "Tasks screen should appear after sign in")
     }
@@ -52,7 +78,7 @@ final class MyAppUITests: XCTestCase {
 
         signOutIfSignedIn(app)
 
-        let loginTitle = app.staticTexts["AI Scheduler"]
+        let loginTitle = app.staticTexts["Lock In Bud"]
         XCTAssertTrue(loginTitle.waitForExistence(timeout: 10), "Login screen should reappear after logout")
     }
 
@@ -93,7 +119,13 @@ final class MyAppUITests: XCTestCase {
         app.navigationBars[editedTitle].buttons["Tasks"].tap()
 
         let searchField = app.searchFields.firstMatch
-        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        if !searchField.waitForExistence(timeout: 3) {
+            let searchButton = app.buttons["Search"]
+            if searchButton.waitForExistence(timeout: 3) {
+                searchButton.tap()
+            }
+        }
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10))
         searchField.tap()
         searchField.typeText(editSuffix)
         XCTAssertTrue(app.staticTexts[editedTitle].waitForExistence(timeout: 5), "Search should find the task")
@@ -142,6 +174,37 @@ final class MyAppUITests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts[editedTitle].waitForNonExistence(timeout: 10),
             "Deleted task should disappear from the list"
+        )
+    }
+
+    @MainActor
+    func testScheduleTabShowsDayWeekMonthViews() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        signIn(app)
+        app.tabBars.buttons["Schedule"].tap()
+
+        let dayButton = app.buttons["Day"]
+        XCTAssertTrue(dayButton.waitForExistence(timeout: 10), "Day segmented control should exist")
+        XCTAssertTrue(app.buttons["Week"].exists, "Week segmented control should exist")
+        XCTAssertTrue(app.buttons["Month"].exists, "Month segmented control should exist")
+
+        XCTAssertTrue(
+            app.staticTexts["Today"].waitForExistence(timeout: 10),
+            "Day view should default to today"
+        )
+
+        app.buttons["Month"].tap()
+        XCTAssertTrue(
+            dayButton.waitForExistence(timeout: 5),
+            "App should stay responsive after switching to month view"
+        )
+
+        app.buttons["Week"].tap()
+        XCTAssertTrue(
+            dayButton.waitForExistence(timeout: 5),
+            "App should stay responsive after switching to week view"
         )
     }
 

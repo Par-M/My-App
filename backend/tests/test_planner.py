@@ -1,11 +1,38 @@
+import importlib
 import uuid
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
+
 from app.models.task import TaskStatus
 
-NOW = datetime.now(timezone.utc)
+
+def _fake_now() -> datetime:
+    real = datetime.now(timezone.utc)
+    return real.replace(hour=9, minute=0, second=0, microsecond=0)
+
+
+def _now() -> datetime:
+    return _fake_now()
+
+
+class _FakeDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _fake_now()
+
+
+@pytest.fixture(autouse=True)
+def _freeze_app_clock(monkeypatch):
+    for module_name in (
+        "app.services.planner_service",
+        "app.services.task_service",
+    ):
+        monkeypatch.setattr(
+            importlib.import_module(module_name), "datetime", _FakeDatetime
+        )
 
 
 def _login(client, email="planner@example.com", name="Planner"):
@@ -125,7 +152,7 @@ class TestSnooze:
     def test_snooze_shifts_block_later_today(self, client):
         data = _login(client)
         task = _create_task(client, data["access_token"])
-        start = NOW + timedelta(hours=2)
+        start = _now() + timedelta(hours=2)
         block = _create_block(
             client, data["access_token"], task["id"], start, start + timedelta(minutes=60)
         ).json()
@@ -203,8 +230,8 @@ class TestToday:
             client,
             data["access_token"],
             task["id"],
-            NOW - timedelta(minutes=30),
-            NOW + timedelta(minutes=30),
+            _now() - timedelta(minutes=30),
+            _now() + timedelta(minutes=30),
         )
 
         response = client.get(
@@ -223,15 +250,15 @@ class TestToday:
             client,
             data["access_token"],
             sooner["id"],
-            NOW + timedelta(hours=1),
-            NOW + timedelta(hours=2),
+            _now() + timedelta(hours=1),
+            _now() + timedelta(hours=2),
         )
         _create_block(
             client,
             data["access_token"],
             later["id"],
-            NOW + timedelta(hours=3),
-            NOW + timedelta(hours=4),
+            _now() + timedelta(hours=3),
+            _now() + timedelta(hours=4),
         )
 
         response = client.get(
@@ -250,15 +277,15 @@ class TestToday:
             client,
             data["access_token"],
             low["id"],
-            NOW + timedelta(hours=1),
-            NOW + timedelta(hours=2),
+            _now() + timedelta(hours=1),
+            _now() + timedelta(hours=2),
         )
         _create_block(
             client,
             data["access_token"],
             high["id"],
-            NOW + timedelta(hours=3),
-            NOW + timedelta(hours=4),
+            _now() + timedelta(hours=3),
+            _now() + timedelta(hours=4),
         )
 
         response = client.get(
@@ -338,15 +365,15 @@ class TestDailySummary:
             client,
             data["access_token"],
             done["id"],
-            NOW + timedelta(hours=1),
-            NOW + timedelta(hours=2),
+            _now() + timedelta(hours=1),
+            _now() + timedelta(hours=2),
         )
         _create_block(
             client,
             data["access_token"],
             open_task["id"],
-            NOW + timedelta(hours=3),
-            NOW + timedelta(hours=4),
+            _now() + timedelta(hours=3),
+            _now() + timedelta(hours=4),
         )
         client.post(
             f"/api/v1/tasks/{done['id']}/complete",
@@ -370,14 +397,14 @@ class TestDailySummary:
             client,
             data["access_token"],
             task["id"],
-            NOW + timedelta(hours=1),
-            NOW + timedelta(hours=2),
+            _now() + timedelta(hours=1),
+            _now() + timedelta(hours=2),
         ).json()
         client.patch(
             f"/api/v1/calendar/blocks/{block['id']}",
             json={
-                "start_at": (NOW + timedelta(hours=5)).isoformat(),
-                "end_at": (NOW + timedelta(hours=6)).isoformat(),
+                "start_at": (_now() + timedelta(hours=5)).isoformat(),
+                "end_at": (_now() + timedelta(hours=6)).isoformat(),
             },
             headers=_auth(data["access_token"]),
         )

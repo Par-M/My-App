@@ -561,6 +561,52 @@ class TestHeuristicProvider:
         assert len(result.items) == 1
         assert result.items[0].end <= t.deadline
 
+    def test_finds_time_before_mid_slot_deadline(self):
+        deadline = datetime(2026, 8, 3, 10, 30, tzinfo=UTC)
+        t = TaskContext(
+            id=uuid.uuid4(),
+            title="Due",
+            deadline=deadline,
+            duration_minutes=60,
+            priority=TaskPriority.medium,
+            energy_level=3,
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert len(result.items) == 1
+        assert result.items[0].start == utc("2026-08-03T09:00:00+00:00")
+        assert result.items[0].end == utc("2026-08-03T10:00:00+00:00")
+        assert result.items[0].end <= deadline
+
+    def test_defers_task_that_would_overflow_deadline(self):
+        deadline = datetime(2026, 8, 3, 10, 30, tzinfo=UTC)
+        t = TaskContext(
+            id=uuid.uuid4(),
+            title="Due",
+            deadline=deadline,
+            duration_minutes=120,
+            priority=TaskPriority.medium,
+            energy_level=3,
+        )
+        context = SchedulingContext(
+            tasks=[t],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert result.items == []
+        assert "Due" in result.reasoning
+
     def test_places_fixed_task_at_exact_window(self):
         t = task(
             title="Standup",
@@ -646,21 +692,16 @@ class TestHeuristicProvider:
         assert result.items == []
         assert "Standup" in result.reasoning
 
-    def test_defers_fixed_task_past_deadline(self):
-        t = task(
-            title="Standup",
-            deadline=datetime(2026, 8, 3, 10, 0, tzinfo=UTC),
-            start_at=utc("2026-08-03T10:00:00+00:00"),
-            end_at=utc("2026-08-03T11:00:00+00:00"),
-        )
-        context = SchedulingContext(
-            tasks=[t],
-            dates=[DATES[0]],
-            timezone="UTC",
-            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
-            buffer_minutes=0,
-        )
         provider = HeuristicProvider()
         result = provider.generate_schedule(context, build_prompt(context))
         assert result.items == []
         assert "Standup" in result.reasoning
+
+
+class TestPrompt:
+    def test_instructs_scheduling_before_deadline(self):
+        t = task(deadline=datetime(2026, 8, 3, 10, 0, tzinfo=UTC))
+        context = build_context([t])
+        prompt = build_prompt(context)
+        assert "BEFORE its due date" in prompt
+        assert "not necessarily the next available day" in prompt

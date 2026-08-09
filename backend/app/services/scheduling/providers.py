@@ -229,10 +229,13 @@ class HeuristicProvider:
         while remaining_duration > 0:
             placed_in_this_pass = False
             for index, slot in enumerate(remaining_slots):
-                if deadline is not None and slot.start > deadline:
-                    continue
                 chunk = min(remaining_duration, max_chunk)
                 if slot.duration_minutes < chunk:
+                    continue
+                if (
+                    deadline is not None
+                    and slot.start + timedelta(minutes=chunk) > deadline
+                ):
                     continue
                 part = len(blocks) + 1
                 blocks.append(

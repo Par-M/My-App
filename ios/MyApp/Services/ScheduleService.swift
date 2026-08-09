@@ -10,6 +10,7 @@ final class ScheduleService {
     private(set) var isGenerating = false
     private(set) var isSyncing = false
     private(set) var errorMessage: String?
+    private var isAccepting = false
 
     private let client: APIClient
     private let calendarService: CalendarService
@@ -108,7 +109,12 @@ final class ScheduleService {
     }
 
     func accept(_ target: ScheduleProposal) async throws {
+        guard !isAccepting else { return }
+        isAccepting = true
+        defer { isAccepting = false }
         errorMessage = nil
+        isSyncing = true
+        defer { isSyncing = false }
         let response: AcceptResponse = try await client.request(
             ScheduleEndpoint.accept(target.id)
         )

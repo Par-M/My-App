@@ -1,5 +1,6 @@
 import json
 import math
+from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from typing import Protocol
@@ -146,6 +147,9 @@ class HeuristicProvider:
         deferred: list[str] = []
         self._buffer = context.buffer_minutes
         self._max_chunk = context.max_chunk_minutes
+        self._max_daily = context.max_daily_hours * 60
+        self._tz = ZoneInfo(context.timezone)
+        day_used: dict[date, int] = {}
 
         for task in fixed_tasks:
             placement = self._place_fixed_task(task, available)
@@ -155,9 +159,13 @@ class HeuristicProvider:
             placed, remaining = placement
             blocks.extend(placed)
             available = remaining
+            for block in placed:
+                day = block.start.astimezone(self._tz).date()
+                minutes = int((block.end - block.start).total_seconds() // 60)
+                day_used[day] = day_used.get(day, 0) + minutes
 
         for task in flexible:
-            placement = self._place_task(task, available)
+            placement = self._place_task(task, available, day_used)
             if placement is None:
                 deferred.append(task.title)
                 continue
@@ -217,10 +225,12 @@ class HeuristicProvider:
         self,
         task,
         available: list[TimeSlot],
+        day_used: dict[date, int],
     ) -> tuple[list[ProposedBlock], list[TimeSlot]] | None:
         duration = task.duration_minutes
         deadline = task.deadline
         max_chunk = self._max_chunk_minutes()
+        max_daily = self._daily_cap_minutes()
         remaining_slots = list(available)
         blocks: list[ProposedBlock] = []
         remaining_duration = duration
@@ -229,7 +239,11 @@ class HeuristicProvider:
         while remaining_duration > 0:
             placed_in_this_pass = False
             for index, slot in enumerate(remaining_slots):
-                chunk = min(remaining_duration, max_chunk)
+                day = slot.start.astimezone(self._tz).date()
+                daily_remaining = max_daily - day_used.get(day, 0)
+                if daily_remaining <= 0:
+                    continue
+                chunk = min(remaining_duration, max_chunk, daily_remaining)
                 if slot.duration_minutes < chunk:
                     continue
                 if (
@@ -248,6 +262,7 @@ class HeuristicProvider:
                     )
                 )
                 remaining_duration -= chunk
+                day_used[day] = day_used.get(day, 0) + chunk
                 after = slot.start + timedelta(
                     minutes=chunk + self._buffer_minutes()
                 )
@@ -270,6 +285,9 @@ class HeuristicProvider:
 
     def _max_chunk_minutes(self) -> int:
         return getattr(self, "_max_chunk", 90)
+
+    def _daily_cap_minutes(self) -> int:
+        return getattr(self, "_max_daily", 480)
 
     def _reason_for(
         self, task, start: datetime, part: int = 1, total_parts: int = 1

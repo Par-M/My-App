@@ -50,6 +50,8 @@ def build_prompt(context: SchedulingContext) -> str:
         "",
         f"Scheduling window: {context.dates[0].isoformat()} to {context.dates[-1].isoformat()} (local timezone {context.timezone}).",
         f"Working hours: {_hour_text(context.work_start_hour)}-{_hour_text(context.work_end_hour)} local time.",
+        f"Daily max hours: schedule at most {context.max_daily_hours} hours of work in any single day "
+        "(fixed events count toward this total).",
         f"Buffer between blocks: {context.buffer_minutes} minutes. Do not overlap blocks or busy times.",
         f"User energy level (1-5): {context.energy_level}. Schedule demanding work during the user's most energetic window.",
         f"Tasks longer than {context.max_chunk_minutes} minutes must be split into multiple blocks, "

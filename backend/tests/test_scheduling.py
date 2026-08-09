@@ -121,13 +121,14 @@ class TestFindFreeSlots:
         assert start.astimezone(UTC) == utc("2026-08-03T13:00:00+00:00")
 
 
-def build_context(tasks, busy=None, buffer=15):
+def build_context(tasks, busy=None, buffer=15, max_daily_hours=8):
     return SchedulingContext(
         tasks=tasks,
         dates=DATES,
         timezone="UTC",
         busy_times=busy or [],
         buffer_minutes=buffer,
+        max_daily_hours=max_daily_hours,
     )
 
 
@@ -475,6 +476,53 @@ class TestValidator:
         assert not any("single block" in e for e in result.errors)
         assert any("partially scheduled" in e for e in result.errors)
 
+    def test_rejects_exceeding_daily_max_hours(self):
+        t1 = task(title="A")
+        t2 = task(title="B")
+        context = build_context([t1, t2], buffer=0, max_daily_hours=1)
+        result = validate_schedule(
+            [
+                ProposedBlock(
+                    task_id=t1.id,
+                    task_title=t1.title,
+                    start=utc("2026-08-03T09:00:00+00:00"),
+                    end=utc("2026-08-03T10:00:00+00:00"),
+                    reason="x",
+                ),
+                ProposedBlock(
+                    task_id=t2.id,
+                    task_title=t2.title,
+                    start=utc("2026-08-03T10:00:00+00:00"),
+                    end=utc("2026-08-03T11:00:00+00:00"),
+                    reason="x",
+                ),
+            ],
+            context,
+        )
+        assert not result.is_valid
+        assert any("hours of work" in e for e in result.errors)
+
+    def test_allows_fixed_task_exceeding_daily_max(self):
+        t = task(
+            title="Fixed",
+            duration=120,
+            start_at=utc("2026-08-03T09:00:00+00:00"),
+            end_at=utc("2026-08-03T11:00:00+00:00"),
+        )
+        context = build_context([t], buffer=0, max_daily_hours=1)
+        result = validate_schedule(
+            ProposedBlock(
+                task_id=t.id,
+                task_title=t.title,
+                start=utc("2026-08-03T09:00:00+00:00"),
+                end=utc("2026-08-03T11:00:00+00:00"),
+                reason="x",
+            ),
+            context,
+        )
+        assert result.is_valid
+        assert not any("hours of work" in e for e in result.errors)
+
 
 class TestHeuristicProvider:
     def test_schedules_by_priority(self):
@@ -607,6 +655,23 @@ class TestHeuristicProvider:
         assert result.items == []
         assert "Due" in result.reasoning
 
+    def test_respects_daily_max_hours(self):
+        high = task("High", priority=TaskPriority.high, duration=60)
+        low = task("Low", priority=TaskPriority.low, duration=60)
+        context = SchedulingContext(
+            tasks=[low, high],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")],
+            buffer_minutes=0,
+            max_daily_hours=1,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert [b.task_title for b in result.items] == ["High"]
+        assert result.items[0].end == utc("2026-08-03T10:00:00+00:00")
+        assert "Low" in result.reasoning
+
     def test_places_fixed_task_at_exact_window(self):
         t = task(
             title="Standup",
@@ -705,3 +770,9 @@ class TestPrompt:
         prompt = build_prompt(context)
         assert "BEFORE its due date" in prompt
         assert "not necessarily the next available day" in prompt
+
+    def test_instructs_daily_max_hours(self):
+        context = build_context([task()], max_daily_hours=4)
+        prompt = build_prompt(context)
+        assert "Daily max hours" in prompt
+        assert "at most 4 hours of work" in prompt

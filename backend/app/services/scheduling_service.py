@@ -164,6 +164,7 @@ class SchedulingService:
             work_end_hour=preference.work_hours_end,
             buffer_minutes=preference.buffer_minutes,
             energy_level=preference.energy_level,
+            max_daily_hours=preference.max_daily_hours,
         )
         context.free_slots = find_free_slots(
             dates=dates,

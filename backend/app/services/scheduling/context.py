@@ -44,6 +44,7 @@ class SchedulingContext:
     buffer_minutes: int = 15
     energy_level: int = 3
     max_chunk_minutes: int = 90
+    max_daily_hours: int = 8
     free_slots: list[TimeSlot] = field(default_factory=list)
 
     @property

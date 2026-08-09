@@ -169,6 +169,24 @@ def validate_schedule(
                 )
                 break
 
+    if context.max_daily_hours > 0:
+        cap_minutes = context.max_daily_hours * 60
+        tz = ZoneInfo(context.timezone)
+        daily_total: dict[date, int] = {}
+        daily_fixed: dict[date, int] = {}
+        for block, start, end in normalized:
+            day = start.astimezone(tz).date()
+            minutes = int((end - start).total_seconds() // 60)
+            daily_total[day] = daily_total.get(day, 0) + minutes
+            if tasks_by_id[block.task_id].is_fixed:
+                daily_fixed[day] = daily_fixed.get(day, 0) + minutes
+        for day, total in daily_total.items():
+            if total > cap_minutes and daily_fixed.get(day, 0) <= cap_minutes:
+                validation.errors.append(
+                    f"Schedules more than {context.max_daily_hours} hours of "
+                    f"work on {day.isoformat()}"
+                )
+
     if context.buffer_minutes > 0:
         ordered = sorted(normalized, key=lambda entry: entry[1])
         for (first, f_start, f_end), (second, s_start, s_end) in zip(

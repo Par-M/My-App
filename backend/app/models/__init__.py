@@ -6,6 +6,7 @@ from app.models.habit import Habit
 from app.models.habit import HabitLog
 from app.models.notification_preference import NotificationPreference
 from app.models.task import Task
+from app.models.task_miss import TaskMiss
 from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.user import User
@@ -20,6 +21,7 @@ __all__ = [
     "NotificationPreference",
     "RecommendationStatus",
     "Task",
+    "TaskMiss",
     "TaskPriority",
     "TaskStatus",
     "User",

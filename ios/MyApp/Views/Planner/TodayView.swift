@@ -11,6 +11,7 @@ struct TodayView: View {
     @State private var showSummary = false
     @State private var errorDismissed = false
     @State private var showSettings = false
+    @State private var reschedulingTask: TaskItem?
 
     var body: some View {
         NavigationStack {
@@ -19,6 +20,14 @@ struct TodayView: View {
                     List {
                         Section {
                             header(today)
+                        }
+
+                        if !taskService.overdueTasks.isEmpty {
+                            Section("Overdue") {
+                                ForEach(taskService.overdueTasks) { task in
+                                    overdueRow(task)
+                                }
+                            }
                         }
 
                         if let current = today.currentTask {
@@ -76,13 +85,27 @@ struct TodayView: View {
                     .disabled(planner.isLoading)
                 }
             }
-            .task { await planner.loadToday() }
-            .refreshable { await planner.loadToday() }
+            .task {
+                await planner.loadToday()
+                await taskService.loadOverdue()
+            }
+            .refreshable {
+                await planner.loadToday()
+                await taskService.loadOverdue()
+            }
             .onChange(of: notificationService.lastDeepLink) { _, _ in
-                Task { await planner.loadToday() }
+                Task {
+                    await planner.loadToday()
+                    await taskService.loadOverdue()
+                }
             }
             .sheet(item: $activeFocusTask) { task in
                 FocusView(task: task)
+            }
+            .sheet(item: $reschedulingTask) { task in
+                RescheduleSheet(task: task) { minutes, reason in
+                    Task { await reschedule(task, minutes: minutes, reason: reason) }
+                }
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
@@ -293,6 +316,39 @@ struct TodayView: View {
             }
             .font(.caption.weight(.semibold))
             .disabled(syncManager.isSyncing)
+        }
+    }
+
+    private func overdueRow(_ task: TaskItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.title)
+                    .font(.body.weight(.medium))
+                if let deadline = task.deadline {
+                    Text("Missed \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Button("Reschedule") {
+                reschedulingTask = task
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func reschedule(_ task: TaskItem, minutes: Int, reason: String?) async {
+        do {
+            _ = try await taskService.rescheduleTask(task, minutesRemaining: minutes, reason: reason)
+            await planner.loadToday()
+            await scheduleService.loadBlocks()
+            await taskService.loadOverdue()
+        } catch {
+            planner.presentError(error.localizedDescription)
         }
     }
 

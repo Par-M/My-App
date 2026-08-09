@@ -26,6 +26,21 @@ struct TaskDetailView: View {
                 }
             }
 
+            if !currentTask.isArchived && currentTask.completedAt == nil {
+                Section("Progress") {
+                    HStack {
+                        Text("\(currentTask.progressPercent)%")
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                        Spacer()
+                        Text("Completed blocks")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: Double(currentTask.progressPercent), total: 100)
+                }
+            }
+
             Section("Details") {
                 LabeledContent("Status", value: currentTask.status.label)
                 LabeledContent("Priority", value: currentTask.priority.label)

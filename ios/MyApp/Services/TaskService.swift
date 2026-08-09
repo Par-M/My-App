@@ -23,6 +23,7 @@ final class TaskService {
     }
 
     private(set) var tasks: [TaskItem] = []
+    private(set) var overdueTasks: [TaskItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var dataVersion = 0
@@ -55,7 +56,6 @@ final class TaskService {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
-
         do {
             let response: TaskListResponse = try await client.request(
                 TaskEndpoint.list(
@@ -134,6 +134,7 @@ final class TaskService {
                 notes: request.notes,
                 repeatWeekdays: request.repeatWeekdays,
                 isArchived: false,
+                progressPercent: 0,
                 createdAt: now,
                 updatedAt: now
             )
@@ -173,6 +174,7 @@ final class TaskService {
                     notes: request.notes,
                     repeatWeekdays: request.repeatWeekdays,
                     isArchived: false,
+                    progressPercent: 0,
                     createdAt: now,
                     updatedAt: now
                 )
@@ -468,6 +470,46 @@ final class TaskService {
             }
             throw error
         }
+    }
+
+    func presentError(_ message: String) {
+        errorMessage = message
+    }
+
+    func loadOverdue() async {
+        do {
+            let response: TaskListResponse = try await client.request(TaskEndpoint.overdue)
+            overdueTasks = response.items
+            isOfflineMode = false
+        } catch {
+            if isNetworkUnavailable(error) {
+                isOfflineMode = true
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func rescheduleTask(
+        _ task: TaskItem,
+        minutesRemaining: Int,
+        reason: String?
+    ) async throws -> RescheduleResponse {
+        let response: RescheduleResponse = try await client.request(
+            TaskEndpoint.reschedule(
+                id: task.id,
+                minutes: minutesRemaining,
+                reason: reason,
+                timezone: TimeZone.current.identifier
+            )
+        )
+        store?.upsert(response.task)
+        replace(response.task)
+        overdueTasks.removeAll { $0.id == task.id }
+        store?.upsertServerBlocks(response.blocks)
+        isOfflineMode = false
+        dataVersion += 1
+        return response
     }
 
     private func bump(_ task: TaskItem) -> TaskItem {

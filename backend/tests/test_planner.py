@@ -418,3 +418,258 @@ class TestDailySummary:
     def test_requires_authentication(self, client):
         response = client.get("/api/v1/daily-summary")
         assert response.status_code == 401
+
+
+class TestOverdue:
+    def test_lists_overdue_tasks_only(self, client):
+        data = _login(client)
+        late = _create_task(
+            client,
+            data["access_token"],
+            title="Late task",
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        on_time = _create_task(
+            client,
+            data["access_token"],
+            title="On time",
+            deadline=(_now() + timedelta(days=1)).isoformat(),
+        )
+        done = _create_task(
+            client,
+            data["access_token"],
+            title="Done late",
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        client.post(
+            f"/api/v1/tasks/{done['id']}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+
+        response = client.get(
+            "/api/v1/tasks/overdue", headers=_auth(data["access_token"])
+        )
+        assert response.status_code == 200
+        titles = [task["title"] for task in response.json()["items"]]
+        assert titles == ["Late task"]
+        assert on_time["id"] not in titles
+
+    def test_excludes_tasks_without_deadline(self, client):
+        data = _login(client)
+        _create_task(client, data["access_token"], title="No deadline")
+
+        response = client.get(
+            "/api/v1/tasks/overdue", headers=_auth(data["access_token"])
+        )
+        assert response.json()["total"] == 0
+
+    def test_requires_authentication(self, client):
+        assert client.get("/api/v1/tasks/overdue").status_code == 401
+
+
+class TestReschedule:
+    def test_reschedule_updates_deadline_and_shifts_blocks(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            title="Missed task",
+            category="Work",
+            deadline=(_now() - timedelta(hours=3)).isoformat(),
+        )
+        start = _now() - timedelta(hours=2)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            start,
+            start + timedelta(minutes=60),
+        )
+
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={
+                "minutes_remaining": 90,
+                "reason": "Got pulled into a meeting",
+                "timezone": "UTC",
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        new_deadline = datetime.fromisoformat(
+            body["task"]["deadline"].replace("Z", "+00:00")
+        )
+        assert new_deadline == _now() + timedelta(minutes=90)
+        assert body["task"]["estimated_duration"] == 90
+
+        assert len(body["blocks"]) == 1
+        block_start = datetime.fromisoformat(
+            body["blocks"][0]["start_at"].replace("Z", "+00:00")
+        )
+        block_end = datetime.fromisoformat(
+            body["blocks"][0]["end_at"].replace("Z", "+00:00")
+        )
+        assert block_start == _now()
+        assert block_end == _now() + timedelta(minutes=60)
+
+    def test_reschedule_keeps_completed_blocks_in_place(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(hours=3)).isoformat(),
+        )
+        done_start = _now() - timedelta(hours=3)
+        remaining_start = _now() - timedelta(hours=2)
+        done_block = _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            done_start,
+            done_start + timedelta(minutes=60),
+        ).json()
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            remaining_start,
+            remaining_start + timedelta(minutes=60),
+        )
+        client.post(
+            f"/api/v1/calendar/blocks/{done_block['id']}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={"minutes_remaining": 60, "timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        body = response.json()
+        moved = [
+            datetime.fromisoformat(block["start_at"].replace("Z", "+00:00"))
+            for block in body["blocks"]
+            if block["id"] != done_block["id"]
+        ]
+        assert moved == [_now() + timedelta(minutes=0)]
+
+    def test_reschedule_without_deadline_conflicts(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={"minutes_remaining": 30, "timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 409
+
+    def test_reschedule_completed_task_conflicts(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        client.post(
+            f"/api/v1/tasks/{task['id']}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={"minutes_remaining": 30, "timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 409
+
+    def test_reschedule_rejects_invalid_minutes(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={"minutes_remaining": 0},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 422
+
+
+class TestMissedReasons:
+    def _reschedule(self, client, token, title, category):
+        task = _create_task(
+            client,
+            token,
+            title=title,
+            category=category,
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={
+                "minutes_remaining": 45,
+                "reason": "Reason for " + title,
+                "timezone": "UTC",
+            },
+            headers=_auth(token),
+        )
+        return task
+
+    def test_daily_summary_includes_missed_today(self, client):
+        data = _login(client)
+        self._reschedule(client, data["access_token"], "Late", "Work")
+
+        response = client.get(
+            "/api/v1/daily-summary?timezone=UTC",
+            headers=_auth(data["access_token"]),
+        )
+        body = response.json()
+        assert len(body["missed_today"]) == 1
+        entry = body["missed_today"][0]
+        assert entry["task_title"] == "Late"
+        assert entry["category"] == "Work"
+        assert entry["reason"] == "Reason for Late"
+        assert entry["minutes_remaining"] == 45
+
+    def test_missed_reasons_groups_by_category(self, client):
+        data = _login(client)
+        work_one = self._reschedule(
+            client, data["access_token"], "Late one", "Work"
+        )
+        self._reschedule(client, data["access_token"], "Late two", "Work")
+        self._reschedule(
+            client, data["access_token"], "Home late", "Home"
+        )
+
+        response = client.get(
+            "/api/v1/missed-reasons",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 3
+        assert [group["category"] for group in body["by_category"]] == [
+            "Work",
+            "Home",
+        ]
+        work_group = body["by_category"][0]
+        assert work_group["count"] == 2
+        assert sorted(
+            entry["task_title"] for entry in work_group["reasons"]
+        ) == ["Late one", "Late two"]
+
+    def test_missed_reasons_empty(self, client):
+        data = _login(client)
+        response = client.get(
+            "/api/v1/missed-reasons",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.json() == {"total": 0, "by_category": []}
+
+    def test_requires_authentication(self, client):
+        assert client.get("/api/v1/missed-reasons").status_code == 401

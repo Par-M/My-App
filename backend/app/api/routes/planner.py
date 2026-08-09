@@ -11,6 +11,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.planner import DailySummaryResponse
+from app.schemas.planner import MissedReasonsResponse
 from app.schemas.planner import TodayResponse
 from app.services.planner_service import PlannerService
 
@@ -49,3 +50,10 @@ def daily_summary(
     service: PlannerService = Depends(_service),
 ) -> DailySummaryResponse:
     return service.daily_summary(_validate_timezone(timezone))
+
+
+@router.get("/missed-reasons", response_model=MissedReasonsResponse)
+def missed_reasons(
+    service: PlannerService = Depends(_service),
+) -> MissedReasonsResponse:
+    return service.missed_reasons()

@@ -191,6 +191,8 @@ final class ScheduleService {
                 title: block.title,
                 startAt: start,
                 endAt: end,
+                completedAt: block.completedAt,
+                completionNote: block.completionNote,
                 createdAt: block.createdAt,
                 updatedAt: Date()
             )
@@ -241,6 +243,32 @@ final class ScheduleService {
             try? calendarService.deleteTaskBlock(eventIdentifier: eventId)
         }
         blocks.removeAll { $0.id == block.id }
+    }
+
+    func completeBlock(_ block: CalendarBlock, note: String?) async throws -> CalendarBlock {
+        let updated: CalendarBlock = try await client.request(
+            CalendarEndpoint.completeBlock(id: block.id, note: note)
+        )
+        store?.upsert(updated)
+        replaceBlock(updated)
+        return updated
+    }
+
+    func reopenBlock(_ block: CalendarBlock) async throws -> CalendarBlock {
+        let updated: CalendarBlock = try await client.request(
+            CalendarEndpoint.reopenBlock(block.id)
+        )
+        store?.upsert(updated)
+        replaceBlock(updated)
+        return updated
+    }
+
+    private func replaceBlock(_ block: CalendarBlock) {
+        if let index = blocks.firstIndex(where: { $0.id == block.id }) {
+            blocks[index] = block
+        } else {
+            blocks.append(block)
+        }
     }
 
     private func syncBlocks(_ newBlocks: [CalendarBlock]) async throws {

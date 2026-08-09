@@ -31,6 +31,7 @@ def clean_database():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM device_tokens"))
         conn.execute(text("DELETE FROM notification_preferences"))
+        conn.execute(text("DELETE FROM task_misses"))
         conn.execute(text("DELETE FROM calendar_blocks"))
         conn.execute(text("DELETE FROM ai_recommendations"))
         conn.execute(text("DELETE FROM habit_logs"))

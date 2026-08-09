@@ -4,12 +4,14 @@ from datetime import timedelta
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.calendar_block import CalendarBlock
 from app.models.task import Task
 from app.models.task import TaskStatus
+from app.models.task_miss import TaskMiss
 from app.repositories import task_repository
 from app.repositories.task_repository import SORT_FIELDS
 from app.schemas.task import TaskCreate
@@ -30,6 +32,33 @@ class InvalidTaskTransitionError(Exception):
 
 def _utc() -> ZoneInfo:
     return ZoneInfo("UTC")
+
+
+def recompute_task_progress(db: Session, task_id: uuid.UUID) -> None:
+    db.flush()
+    total = db.scalar(
+        select(func.count())
+        .select_from(CalendarBlock)
+        .where(CalendarBlock.task_id == task_id)
+    )
+    completed = db.scalar(
+        select(func.count())
+        .select_from(CalendarBlock)
+        .where(
+            CalendarBlock.task_id == task_id,
+            CalendarBlock.completed_at.is_not(None),
+        )
+    )
+    task = db.get(Task, task_id)
+    if task is None:
+        return
+    if task.status == TaskStatus.completed:
+        task.progress_percent = 100
+    elif total:
+        task.progress_percent = round((completed or 0) * 100 / total)
+    else:
+        task.progress_percent = 0
+    db.flush()
 
 
 class TaskService:
@@ -97,6 +126,11 @@ class TaskService:
                 "end_at must be after start_at"
             )
         task = task_repository.update_task(self.db, task, data)
+        if data.status is not None:
+            if task.status == TaskStatus.completed:
+                task.progress_percent = 100
+            else:
+                recompute_task_progress(self.db, task.id)
         self.db.commit()
         self.db.refresh(task)
         return task
@@ -157,9 +191,122 @@ class TaskService:
                 task.actual_duration = int(max(1, round(elapsed)))
             else:
                 task.actual_duration = 0
+        task.progress_percent = 100
         self.db.commit()
         self.db.refresh(task)
         return task
+
+    def list_overdue(self) -> list[Task]:
+        now = datetime.now(_utc())
+        return list(
+            self.db.scalars(
+                select(Task)
+                .where(
+                    Task.user_id == self.user_id,
+                    Task.is_archived.is_(False),
+                    Task.status != TaskStatus.completed,
+                    Task.deadline.is_not(None),
+                    Task.deadline < now,
+                )
+                .order_by(Task.deadline)
+            ).all()
+        )
+
+    def reschedule_task(
+        self,
+        task_id: uuid.UUID,
+        minutes_remaining: int,
+        reason: str | None = None,
+        timezone_name: str = "UTC",
+    ) -> tuple[Task, list[CalendarBlock]]:
+        task = self.get_task(task_id)
+        if task.status == TaskStatus.completed:
+            raise InvalidTaskTransitionError(
+                "A completed task cannot be rescheduled"
+            )
+        if task.deadline is None:
+            raise InvalidTaskTransitionError(
+                "A task without a deadline cannot be rescheduled"
+            )
+
+        tz = ZoneInfo(timezone_name)
+        now = datetime.now(tz)
+        old_deadline = task.deadline
+        new_deadline = now + timedelta(minutes=minutes_remaining)
+
+        task.deadline = new_deadline
+        task.estimated_duration = minutes_remaining
+        self.db.flush()
+
+        blocks = list(
+            self.db.scalars(
+                select(CalendarBlock)
+                .where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.user_id == self.user_id,
+                )
+                .order_by(CalendarBlock.start_at)
+            ).all()
+        )
+
+        pending_blocks = [
+            block for block in blocks if block.completed_at is None
+        ]
+        total_duration = sum(
+            int((block.end_at - block.start_at).total_seconds() / 60)
+            for block in pending_blocks
+        )
+        scale = (
+            min(1.0, minutes_remaining / total_duration)
+            if total_duration
+            else 0.0
+        )
+        cursor = now
+        for block in pending_blocks:
+            if not total_duration:
+                self.db.delete(block)
+                continue
+            duration = max(
+                1,
+                int(
+                    round(
+                        (block.end_at - block.start_at).total_seconds()
+                        / 60
+                        * scale
+                    )
+                ),
+            )
+            block.start_at = cursor
+            block.end_at = cursor + timedelta(minutes=duration)
+            cursor = block.end_at
+
+        miss = TaskMiss(
+            user_id=self.user_id,
+            task_id=task.id,
+            task_title=task.title,
+            category=task.category,
+            missed_deadline=old_deadline,
+            reason=reason.strip() if reason else None,
+            minutes_remaining=minutes_remaining,
+            rescheduled_to=new_deadline,
+            created_at=datetime.now(_utc()),
+        )
+        self.db.add(miss)
+
+        self.db.commit()
+        self.db.refresh(task)
+
+        blocks = list(
+            self.db.scalars(
+                select(CalendarBlock)
+                .where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.user_id == self.user_id,
+                )
+                .order_by(CalendarBlock.start_at)
+            ).all()
+        )
+        return task, blocks
 
     def snooze_task(
         self,

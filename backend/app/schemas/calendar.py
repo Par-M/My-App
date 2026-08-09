@@ -47,6 +47,10 @@ class CalendarBlockUpdate(BaseModel):
     calendar_event_id: str | None = Field(default=None, max_length=255)
 
 
+class CompleteBlockRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
 class CalendarBlockResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,6 +61,8 @@ class CalendarBlockResponse(BaseModel):
     title: str
     start_at: datetime
     end_at: datetime
+    completed_at: datetime | None
+    completion_note: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ from app.models.task import Task
 from app.repositories import calendar_block_repository
 from app.schemas.calendar import CalendarBlockCreate
 from app.schemas.calendar import CalendarBlockUpdate
+from app.services.task_service import recompute_task_progress
 
 
 class CalendarBlockNotFoundError(Exception):
@@ -20,6 +22,10 @@ class TaskNotFoundError(Exception):
 
 class InvalidCalendarBlockError(Exception):
     pass
+
+
+def _utc() -> ZoneInfo:
+    return ZoneInfo("UTC")
 
 
 class CalendarBlockService:
@@ -55,6 +61,7 @@ class CalendarBlockService:
         block = calendar_block_repository.create_block(
             self.db, user_id=self.user_id, data=data
         )
+        recompute_task_progress(self.db, task.id)
         self.db.commit()
         self.db.refresh(block)
         return block
@@ -79,5 +86,29 @@ class CalendarBlockService:
 
     def delete_block(self, block_id: uuid.UUID) -> None:
         block = self.get_block(block_id)
+        task_id = block.task_id
         calendar_block_repository.delete_block(self.db, block)
+        recompute_task_progress(self.db, task_id)
         self.db.commit()
+
+    def complete_block(
+        self, block_id: uuid.UUID, note: str | None = None
+    ):
+        block = self.get_block(block_id)
+        block.completed_at = datetime.now(_utc())
+        block.completion_note = (
+            note.strip() if note and note.strip() else None
+        )
+        recompute_task_progress(self.db, block.task_id)
+        self.db.commit()
+        self.db.refresh(block)
+        return block
+
+    def reopen_block(self, block_id: uuid.UUID):
+        block = self.get_block(block_id)
+        block.completed_at = None
+        block.completion_note = None
+        recompute_task_progress(self.db, block.task_id)
+        self.db.commit()
+        self.db.refresh(block)
+        return block

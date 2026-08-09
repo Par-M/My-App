@@ -8,6 +8,8 @@ struct CalendarBlock: Codable, Identifiable, Hashable, Sendable {
     var title: String
     var startAt: Date
     var endAt: Date
+    var completedAt: Date?
+    var completionNote: String?
     let createdAt: Date
     let updatedAt: Date
 
@@ -19,8 +21,23 @@ struct CalendarBlock: Codable, Identifiable, Hashable, Sendable {
         case title
         case startAt = "start_at"
         case endAt = "end_at"
+        case completedAt = "completed_at"
+        case completionNote = "completion_note"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+struct CompleteBlockRequest: Encodable, Sendable {
+    let note: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case note
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(note, forKey: .note)
     }
 }
 

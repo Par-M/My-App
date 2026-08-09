@@ -67,6 +67,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var notes: String?
     var repeatWeekdays: [Int]?
     var isArchived: Bool
+    var progressPercent: Int
     var createdAt: Date
     var updatedAt: Date
 
@@ -89,6 +90,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case notes
         case repeatWeekdays = "repeat_weekdays"
         case isArchived = "is_archived"
+        case progressPercent = "progress_percent"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -268,6 +270,30 @@ struct SnoozeRequest: Encodable, Sendable {
 }
 
 struct SnoozeResponse: Codable, Sendable {
+    let task: TaskItem
+    let blocks: [CalendarBlock]
+}
+
+struct RescheduleRequest: Encodable, Sendable {
+    let minutesRemaining: Int
+    let reason: String?
+    let timezone: String
+
+    private enum CodingKeys: String, CodingKey {
+        case minutesRemaining = "minutes_remaining"
+        case reason
+        case timezone
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(minutesRemaining, forKey: .minutesRemaining)
+        try container.encodeIfPresent(reason, forKey: .reason)
+        try container.encode(timezone, forKey: .timezone)
+    }
+}
+
+struct RescheduleResponse: Codable, Sendable {
     let task: TaskItem
     let blocks: [CalendarBlock]
 }

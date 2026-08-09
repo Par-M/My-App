@@ -24,6 +24,7 @@ struct ScheduleItem: Codable, Identifiable, Hashable, Sendable {
     let start: Date
     let end: Date
     let reason: String
+    let accepted: Bool
 
     var id: String {
         "\(taskId)-\(Int(start.timeIntervalSince1970))-\(Int(end.timeIntervalSince1970))"
@@ -35,6 +36,7 @@ struct ScheduleItem: Codable, Identifiable, Hashable, Sendable {
         case start
         case end
         case reason
+        case accepted
     }
 }
 

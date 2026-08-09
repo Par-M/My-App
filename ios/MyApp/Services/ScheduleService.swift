@@ -137,6 +137,50 @@ final class ScheduleService {
         }
     }
 
+    func acceptItem(_ target: ScheduleProposal, item: ScheduleItem) async throws {
+        guard let index = target.items.firstIndex(where: { $0.id == item.id }) else {
+            return
+        }
+        errorMessage = nil
+        isSyncing = true
+        defer { isSyncing = false }
+        let response: AcceptResponse = try await client.request(
+            ScheduleEndpoint.acceptItem(recommendationID: target.id, itemIndex: index)
+        )
+        updateProposal(with: response.recommendation)
+        try await syncBlocks(response.blocks)
+        await loadBlocks()
+    }
+
+    func redoItem(_ target: ScheduleProposal, item: ScheduleItem) async throws {
+        guard let index = target.items.firstIndex(where: { $0.id == item.id }) else {
+            return
+        }
+        errorMessage = nil
+        isSyncing = true
+        defer { isSyncing = false }
+        let response: RecommendationResponse = try await client.request(
+            ScheduleEndpoint.redoItem(recommendationID: target.id, itemIndex: index)
+        )
+        updateProposal(with: response)
+    }
+
+    private func updateProposal(with response: RecommendationResponse) {
+        guard proposal?.id == response.id else { return }
+        proposal = ScheduleProposal(
+            id: response.id,
+            status: response.status,
+            accepted: response.accepted,
+            reasoning: response.reasoning,
+            items: response.items,
+            meta: response.meta,
+            failureReason: response.failureReason,
+            retryAt: response.retryAt,
+            createdAt: response.createdAt,
+            message: proposal?.message
+        )
+    }
+
     func updateBlockTime(_ block: CalendarBlock, start: Date, end: Date) async throws {
         if !connectivity.isConnected, let store {
             let local = CalendarBlock(

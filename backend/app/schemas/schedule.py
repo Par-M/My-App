@@ -61,6 +61,7 @@ class ScheduleItem(BaseModel):
     start: datetime
     end: datetime
     reason: str = ""
+    accepted: bool = False
 
 
 class ScheduleMeta(BaseModel):
@@ -121,6 +122,7 @@ def build_recommendation_response(
             start=_parse_datetime(item["start"]),
             end=_parse_datetime(item["end"]),
             reason=item.get("reason", ""),
+            accepted=item.get("accepted", False),
         )
         for item in raw_items
     ]

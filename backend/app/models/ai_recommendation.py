@@ -10,6 +10,7 @@ from sqlalchemy import Text
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
@@ -58,7 +59,7 @@ class AIRecommendation(Base):
     )
 
     recommendation: Mapped[dict | None] = mapped_column(
-        JSONB,
+        MutableDict.as_mutable(JSONB),
         nullable=True,
     )
 

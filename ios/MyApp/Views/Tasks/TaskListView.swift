@@ -2,6 +2,15 @@ import SwiftUI
 
 struct TaskRow: View {
     let task: TaskItem
+    var onChangeStatus: (TaskStatus) -> Void = { _ in }
+
+    private var statusColor: Color {
+        switch task.status {
+        case .pending: .gray
+        case .inProgress: .blue
+        case .completed: .green
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -26,11 +35,40 @@ struct TaskRow: View {
                         .padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
                 }
+                Spacer(minLength: 8)
+                statusMenu
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    private var statusMenu: some View {
+        Menu {
+            ForEach(TaskStatus.allCases) { status in
+                Button {
+                    onChangeStatus(status)
+                } label: {
+                    if status == task.status {
+                        Label(status.label, systemImage: "checkmark")
+                    } else {
+                        Text(status.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(task.status.label)
+                    .font(.caption.weight(.medium))
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(statusColor.opacity(0.15), in: Capsule())
+            .foregroundStyle(statusColor)
+        }
     }
 }
 
@@ -109,7 +147,11 @@ struct TaskListView: View {
                     List {
                         ForEach(taskService.tasks) { task in
                             NavigationLink(value: task) {
-                                TaskRow(task: task)
+                                TaskRow(task: task) { status in
+                                    Task {
+                                        try? await taskService.setStatus(status, for: task)
+                                    }
+                                }
                             }
                         }
                         .onDelete(perform: deleteTasks)

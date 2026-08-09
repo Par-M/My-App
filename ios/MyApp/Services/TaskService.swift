@@ -218,8 +218,28 @@ final class TaskService {
         }
     }
 
-    func deleteTask(_ task: TaskItem) async throws {
-        if !connectivity.isConnected, let store {
+    func setStatus(_ status: TaskStatus, for task: TaskItem) async throws -> TaskItem {
+        if status == task.status {
+            return task
+        }
+        switch status {
+        case .pending:
+            var updated = task
+            updated.status = .pending
+            return try await updateTask(updated)
+        case .inProgress:
+            if task.status == .completed {
+                var updated = task
+                updated.status = .inProgress
+                return try await updateTask(updated)
+            }
+            return try await startTask(id: task.id)
+        case .completed:
+            return try await completeTask(id: task.id, minutes: nil, productivity: task.productivity)
+        }
+    }
+
+    func deleteTask(_ task: TaskItem) async throws {        if !connectivity.isConnected, let store {
             store.markDeleted(taskId: task.id)
             isOfflineMode = true
         } else {

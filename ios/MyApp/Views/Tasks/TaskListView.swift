@@ -58,16 +58,18 @@ struct TaskRow: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 Text(task.status.label)
-                    .font(.caption.weight(.medium))
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 9).weight(.semibold))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(statusColor.opacity(0.15), in: Capsule())
             .foregroundStyle(statusColor)
+            .fixedSize()
         }
     }
 }

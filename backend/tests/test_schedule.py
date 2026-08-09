@@ -1,9 +1,22 @@
 import uuid
 from datetime import datetime
+from datetime import timezone
+
+import pytest
 
 
 def _parse(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+@pytest.fixture(autouse=True)
+def freeze_now(monkeypatch):
+    fixed = datetime(2026, 8, 3, 9, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.services.scheduling_service._utc_now",
+        lambda: fixed,
+    )
+    return fixed
 
 
 def _login(client, email="parthiv@example.com", name="Parthiv"):
@@ -106,20 +119,56 @@ class TestGenerateSchedule:
 
     def test_overcommitment_detected(self, client):
         data = _login(client)
-        _create_task(client, data["access_token"], estimated_duration=600)
-
-        response = _generate(
+        _create_task(
             client,
             data["access_token"],
-            start_date="2026-08-03",
-            end_date="2026-08-03",
+            estimated_duration=600,
+            deadline="2026-08-03T12:00:00+00:00",
         )
+
+        response = _generate(client, data["access_token"])
         assert response.status_code == 200
         body = response.json()
         assert body["meta"]["overcommitted"] is True
         assert body["meta"]["risk"]
         assert "Algorithms Assignment" in body["meta"]["deferred_tasks"]
         assert body["message"] and "deferred" in body["message"]
+
+    def test_ignores_far_future_calendar_view(self, client):
+        data = _login(client)
+        _create_task(client, data["access_token"], estimated_duration=60)
+
+        response = _generate(
+            client,
+            data["access_token"],
+            start_date="2028-08-03",
+            end_date="2028-08-09",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"]
+        item = body["items"][0]
+        assert _parse(item["start"]) == _parse("2026-08-03T09:00:00+00:00")
+
+    def test_window_reaches_deadline_even_when_request_is_short(self, client):
+        data = _login(client)
+        _create_task(
+            client,
+            data["access_token"],
+            estimated_duration=60,
+            deadline="2026-08-07T10:00:00+00:00",
+        )
+
+        response = _generate(
+            client,
+            data["access_token"],
+            start_date="2026-08-03",
+            end_date="2026-08-04",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"]
+        assert _parse(body["items"][0]["start"]) < _parse("2026-08-07T10:00:00+00:00")
 
     def test_fixed_event_scheduled_at_exact_window(self, client):
         data = _login(client)

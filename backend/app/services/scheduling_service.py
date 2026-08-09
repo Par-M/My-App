@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,6 +51,13 @@ def _utc():
     from zoneinfo import ZoneInfo
 
     return ZoneInfo("UTC")
+
+
+DEFAULT_SCHEDULE_HORIZON_DAYS = 7
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _item_to_dict(block: ProposedBlock) -> dict:
@@ -135,9 +144,18 @@ class SchedulingService:
         preference: UserPreference,
         request: ScheduleGenerateRequest,
     ) -> SchedulingContext:
+        tz = ZoneInfo(request.timezone)
+        today = _utc_now().astimezone(tz).date()
+        effective_end = today + timedelta(days=DEFAULT_SCHEDULE_HORIZON_DAYS)
+        for task in tasks:
+            for when in (task.deadline, task.end_at):
+                if when is not None:
+                    day = when.astimezone(tz).date()
+                    if day > effective_end:
+                        effective_end = day
         dates = [
-            request.start_date + timedelta(days=offset)
-            for offset in range((request.end_date - request.start_date).days + 1)
+            today + timedelta(days=offset)
+            for offset in range((effective_end - today).days + 1)
         ]
         factors = self._productivity_factors(tasks)
         context = SchedulingContext(

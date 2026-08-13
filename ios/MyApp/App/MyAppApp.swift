@@ -32,7 +32,6 @@ struct MyAppApp: App {
         _calendarService = State(initialValue: calendarService)
         _scheduleService = State(
             initialValue: ScheduleService(
-                calendarService: calendarService,
                 store: store,
                 connectivity: connectivity
             )

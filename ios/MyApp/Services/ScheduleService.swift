@@ -13,18 +13,15 @@ final class ScheduleService {
     private var isAccepting = false
 
     private let client: APIClient
-    private let calendarService: CalendarService
     private let store: LocalStore?
     private let connectivity: ConnectivityMonitor
 
     init(
         client: APIClient? = nil,
-        calendarService: CalendarService? = nil,
         store: LocalStore? = nil,
         connectivity: ConnectivityMonitor? = nil
     ) {
         self.client = client ?? APIClient()
-        self.calendarService = calendarService ?? CalendarService()
         self.store = store
         self.connectivity = connectivity ?? ConnectivityMonitor()
     }
@@ -208,17 +205,6 @@ final class ScheduleService {
             CalendarEndpoint.updateBlock(id: block.id, request: request)
         )
         store?.upsert(updated)
-        if let eventId = block.calendarEventId {
-            do {
-                try calendarService.updateTaskBlock(
-                    eventIdentifier: eventId,
-                    start: start,
-                    end: end
-                )
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
         if let index = blocks.firstIndex(where: { $0.id == updated.id }) {
             blocks[index] = updated
         }
@@ -238,9 +224,6 @@ final class ScheduleService {
                     throw error
                 }
             }
-        }
-        if let eventId = block.calendarEventId {
-            try? calendarService.deleteTaskBlock(eventIdentifier: eventId)
         }
         blocks.removeAll { $0.id == block.id }
     }
@@ -272,33 +255,6 @@ final class ScheduleService {
     }
 
     private func syncBlocks(_ newBlocks: [CalendarBlock]) async throws {
-        if await calendarService.requestPermission() != .granted {
-            blocks = newBlocks
-            return
-        }
-
-        isSyncing = true
-        defer { isSyncing = false }
-
-        for block in newBlocks {
-            if let eventId = block.calendarEventId {
-                try? calendarService.updateTaskBlock(
-                    eventIdentifier: eventId,
-                    title: block.title,
-                    start: block.startAt,
-                    end: block.endAt
-                )
-            } else {
-                let eventId = try calendarService.createTaskBlock(
-                    title: block.title,
-                    start: block.startAt,
-                    end: block.endAt
-                )
-                let request = CalendarBlockUpdateRequest(calendarEventId: eventId)
-                _ = try await client.request(
-                    CalendarEndpoint.updateBlock(id: block.id, request: request)
-                ) as CalendarBlock
-            }
-        }
+        blocks = newBlocks
     }
 }

@@ -26,7 +26,7 @@ struct ScheduleProposalView: View {
                                 )
                             )
                         } else {
-                            ForEach(proposal.items) { item in
+                            ForEach(proposal.items.filter { !$0.accepted }) { item in
                                 proposalItemRow(item)
                             }
                         }

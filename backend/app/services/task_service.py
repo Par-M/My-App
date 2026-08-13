@@ -198,19 +198,48 @@ class TaskService:
 
     def list_overdue(self) -> list[Task]:
         now = datetime.now(_utc())
-        return list(
-            self.db.scalars(
-                select(Task)
-                .where(
+        deadline_ids = {
+            task.id
+            for task in self.db.scalars(
+                select(Task).where(
                     Task.user_id == self.user_id,
                     Task.is_archived.is_(False),
                     Task.status != TaskStatus.completed,
                     Task.deadline.is_not(None),
                     Task.deadline < now,
                 )
-                .order_by(Task.deadline)
+            ).all()
+        }
+        block_behind_ids = {
+            block.task_id
+            for block in self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.completed_at.is_(None),
+                    CalendarBlock.end_at < now,
+                )
+            ).all()
+        }
+        task_ids = deadline_ids | block_behind_ids
+        if not task_ids:
+            return []
+        tasks = list(
+            self.db.scalars(
+                select(Task).where(
+                    Task.user_id == self.user_id,
+                    Task.is_archived.is_(False),
+                    Task.status != TaskStatus.completed,
+                    Task.id.in_(task_ids),
+                )
             ).all()
         )
+        tasks.sort(
+            key=lambda t: (
+                t.deadline is None,
+                t.deadline or now + timedelta(days=3650),
+            )
+        )
+        return tasks
 
     def reschedule_task(
         self,
@@ -223,10 +252,6 @@ class TaskService:
         if task.status == TaskStatus.completed:
             raise InvalidTaskTransitionError(
                 "A completed task cannot be rescheduled"
-            )
-        if task.deadline is None:
-            raise InvalidTaskTransitionError(
-                "A task without a deadline cannot be rescheduled"
             )
 
         tz = ZoneInfo(timezone_name)

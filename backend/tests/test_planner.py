@@ -455,9 +455,50 @@ class TestOverdue:
         assert titles == ["Late task"]
         assert on_time["id"] not in titles
 
-    def test_excludes_tasks_without_deadline(self, client):
+    def test_includes_block_behind_without_deadline(self, client):
         data = _login(client)
-        _create_task(client, data["access_token"], title="No deadline")
+        task = _create_task(client, data["access_token"], title="Missed block")
+        start = _now() - timedelta(hours=2)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            start,
+            start + timedelta(minutes=60),
+        )
+
+        response = client.get(
+            "/api/v1/tasks/overdue", headers=_auth(data["access_token"])
+        )
+        assert response.status_code == 200
+        titles = [task["title"] for task in response.json()["items"]]
+        assert titles == ["Missed block"]
+
+    def test_excludes_checked_off_blocks(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"], title="Finished block")
+        start = _now() - timedelta(hours=2)
+        block = _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            start,
+            start + timedelta(minutes=60),
+        ).json()
+        client.post(
+            f"/api/v1/calendar/blocks/{block['id']}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+
+        response = client.get(
+            "/api/v1/tasks/overdue", headers=_auth(data["access_token"])
+        )
+        assert response.json()["total"] == 0
+
+    def test_excludes_idle_tasks_without_deadline(self, client):
+        data = _login(client)
+        _create_task(client, data["access_token"], title="No deadline, no blocks")
 
         response = client.get(
             "/api/v1/tasks/overdue", headers=_auth(data["access_token"])
@@ -556,15 +597,34 @@ class TestReschedule:
         ]
         assert moved == [_now() + timedelta(minutes=0)]
 
-    def test_reschedule_without_deadline_conflicts(self, client):
+    def test_reschedule_without_deadline_succeeds(self, client):
         data = _login(client)
-        task = _create_task(client, data["access_token"])
+        task = _create_task(client, data["access_token"], title="No deadline task")
+        start = _now() - timedelta(hours=1)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            start,
+            start + timedelta(minutes=30),
+        )
+
         response = client.post(
             f"/api/v1/tasks/{task['id']}/reschedule",
             json={"minutes_remaining": 30, "timezone": "UTC"},
             headers=_auth(data["access_token"]),
         )
-        assert response.status_code == 409
+        assert response.status_code == 200
+        body = response.json()
+        new_deadline = datetime.fromisoformat(
+            body["task"]["deadline"].replace("Z", "+00:00")
+        )
+        assert new_deadline == _now() + timedelta(minutes=30)
+        assert body["task"]["estimated_duration"] == 30
+        block_start = datetime.fromisoformat(
+            body["blocks"][0]["start_at"].replace("Z", "+00:00")
+        )
+        assert block_start == _now()
 
     def test_reschedule_completed_task_conflicts(self, client):
         data = _login(client)

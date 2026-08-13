@@ -23,7 +23,7 @@ struct TodayView: View {
                         }
 
                         if !taskService.overdueTasks.isEmpty {
-                            Section("Overdue") {
+                            Section("Behind Schedule") {
                                 ForEach(taskService.overdueTasks) { task in
                                     overdueRow(task)
                                 }
@@ -328,6 +328,14 @@ struct TodayView: View {
                     .font(.body.weight(.medium))
                 if let deadline = task.deadline {
                     Text("Missed \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let start = task.startAt {
+                    Text("Was scheduled at \(start.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Behind schedule")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

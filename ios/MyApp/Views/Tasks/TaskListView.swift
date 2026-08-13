@@ -371,6 +371,14 @@ private struct OverdueListSheet: View {
                                     Text("Missed \(deadline.formatted(date: .abbreviated, time: .shortened))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                } else if let start = task.startAt {
+                                    Text("Was scheduled at \(start.formatted(date: .omitted, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Behind schedule")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()

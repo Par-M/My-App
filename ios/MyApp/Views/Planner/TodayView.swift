@@ -135,9 +135,9 @@ struct TodayView: View {
                             tint: .green
                         )
                         statCard(
-                            value: "\(today.focusTimeRemaining)m",
-                            label: "Focus left",
-                            systemImage: "timer",
+                            value: "\(today.tasksRemaining)",
+                            label: "Remaining",
+                            systemImage: "list.bullet",
                             tint: .orange
                         )
                     }
@@ -389,6 +389,10 @@ struct TodayView: View {
 private extension TodayResponse {
     var tasksRemainingForSummary: Int {
         nextTasks.count
+    }
+
+    var tasksRemaining: Int {
+        (currentTask != nil ? 1 : 0) + nextTasks.count
     }
 }
 

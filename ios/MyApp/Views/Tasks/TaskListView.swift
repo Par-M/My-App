@@ -132,6 +132,14 @@ struct TaskListView: View {
         )
     }
 
+    private var activeTasks: [TaskItem] {
+        taskService.tasks.filter { $0.status != .completed }
+    }
+
+    private var completedTasks: [TaskItem] {
+        taskService.tasks.filter { $0.status == .completed }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -149,7 +157,7 @@ struct TaskListView: View {
                     )
                 } else {
                     List {
-                        ForEach(taskService.tasks) { task in
+                        ForEach(activeTasks) { task in
                             NavigationLink(value: task) {
                                 TaskRow(task: task) { status in
                                     Task {
@@ -158,7 +166,23 @@ struct TaskListView: View {
                                 }
                             }
                         }
-                        .onDelete(perform: deleteTasks)
+
+                        if !completedTasks.isEmpty && statusFilter == nil {
+                            Section {
+                                ForEach(completedTasks) { task in
+                                    NavigationLink(value: task) {
+                                        TaskRow(task: task) { status in
+                                            Task {
+                                                try? await taskService.setStatus(status, for: task)
+                                            }
+                                        }
+                                    }
+                                }
+                            } header: {
+                                Text("Completed")
+                                    .font(.caption)
+                            }
+                        }
                     }
                     .searchable(text: $searchText, prompt: "Search tasks")
                 }
@@ -322,15 +346,6 @@ struct TaskListView: View {
                         .padding()
                     }
                 }
-            }
-        }
-    }
-
-    private func deleteTasks(at offsets: IndexSet) {
-        Task {
-            for index in offsets {
-                let task = taskService.tasks[index]
-                try? await taskService.deleteTask(task)
             }
         }
     }

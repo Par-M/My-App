@@ -310,6 +310,59 @@ class TestBlockCompletion:
         ).json()
         assert task_after["progress_percent"] == 100
 
+    def test_complete_all_blocks_auto_completes_task(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, second = self._blocks(client, data["access_token"], task["id"])
+        headers = _auth(data["access_token"])
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        client.post(
+            f"/api/v1/calendar/blocks/{second['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after["status"] == "completed"
+        assert task_after["completed_at"] is not None
+        assert task_after["progress_percent"] == 100
+
+    def test_reopen_block_reverts_task_from_completed(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, second = self._blocks(client, data["access_token"], task["id"])
+        headers = _auth(data["access_token"])
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        client.post(
+            f"/api/v1/calendar/blocks/{second['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        task_after_complete = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after_complete["status"] == "completed"
+
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/reopen",
+            headers=headers,
+        )
+        task_after_reopen = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after_reopen["status"] == "pending"
+        assert task_after_reopen["completed_at"] is None
+        assert task_after_reopen["progress_percent"] == 50
+
     def test_complete_unknown_block_returns_404(self, client):
         data = _login(client)
         response = client.post(

@@ -54,6 +54,10 @@ def recompute_task_progress(db: Session, task_id: uuid.UUID) -> None:
         return
     if task.status == TaskStatus.completed:
         task.progress_percent = 100
+    elif total and total > 0 and completed == total:
+        task.status = TaskStatus.completed
+        task.completed_at = datetime.now(_utc())
+        task.progress_percent = 100
     elif total:
         task.progress_percent = round((completed or 0) * 100 / total)
     else:

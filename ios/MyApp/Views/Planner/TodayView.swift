@@ -7,7 +7,6 @@ struct TodayView: View {
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
 
-    @State private var activeFocusTask: ScheduledTask?
     @State private var showSummary = false
     @State private var errorDismissed = false
     @State private var showSettings = false
@@ -33,12 +32,6 @@ struct TodayView: View {
                         if let current = today.currentTask {
                             Section("Now Working") {
                                 currentTaskRow(current)
-                            }
-                        }
-
-                        if let priority = today.priorityTask {
-                            Section("Today's Priority") {
-                                priorityRow(priority)
                             }
                         }
 
@@ -98,9 +91,6 @@ struct TodayView: View {
                     await planner.loadToday()
                     await taskService.loadOverdue()
                 }
-            }
-            .sheet(item: $activeFocusTask) { task in
-                FocusView(task: task)
             }
             .sheet(item: $reschedulingTask) { task in
                 RescheduleSheet(task: task) { minutes, reason in
@@ -202,33 +192,8 @@ struct TodayView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Button {
-                activeFocusTask = task
-            } label: {
-                Label("Start Focus", systemImage: "play.circle.fill")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
         }
         .padding(.vertical, 4)
-    }
-
-    private func priorityRow(_ task: ScheduledTask) -> some View {
-        HStack(spacing: 12) {
-            PriorityBadge(priority: task.priority)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .font(.body.weight(.medium))
-                if let category = task.category, !category.isEmpty {
-                    Text(category)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.vertical, 2)
     }
 
     private func nextTaskRow(_ task: ScheduledTask) -> some View {
@@ -246,10 +211,6 @@ struct TodayView: View {
                 }
             }
             Spacer()
-            Button("Snooze 30") {
-                snooze(task)
-            }
-            .font(.caption)
         }
         .padding(.vertical, 2)
     }
@@ -357,20 +318,6 @@ struct TodayView: View {
             await taskService.loadOverdue()
         } catch {
             planner.presentError(error.localizedDescription)
-        }
-    }
-
-    private func snooze(_ task: ScheduledTask) {
-        Task {
-            do {
-                if let item = taskService.tasks.first(where: { $0.id == task.id }) {
-                    _ = try await taskService.snoozeTask(item, minutes: 30)
-                }
-                await planner.loadToday()
-                await scheduleService.loadBlocks()
-            } catch {
-                planner.presentError(error.localizedDescription)
-            }
         }
     }
 

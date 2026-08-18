@@ -7,7 +7,6 @@ struct TodayView: View {
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
 
-    @State private var activeFocusTask: ScheduledTask?
     @State private var showSummary = false
     @State private var errorDismissed = false
     @State private var showSettings = false
@@ -33,12 +32,6 @@ struct TodayView: View {
                         if let current = today.currentTask {
                             Section("Now Working") {
                                 currentTaskRow(current)
-                            }
-                        }
-
-                        if let priority = today.priorityTask {
-                            Section("Today's Priority") {
-                                priorityRow(priority)
                             }
                         }
 
@@ -99,9 +92,6 @@ struct TodayView: View {
                     await taskService.loadOverdue()
                 }
             }
-            .sheet(item: $activeFocusTask) { task in
-                FocusView(task: task)
-            }
             .sheet(item: $reschedulingTask) { task in
                 RescheduleSheet(task: task) { minutes, reason in
                     Task { await reschedule(task, minutes: minutes, reason: reason) }
@@ -128,61 +118,130 @@ struct TodayView: View {
     }
 
     private func header(_ today: TodayResponse) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date.now, format: .dateTime.weekday(.wide).day().month())
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(greeting(for: Date.now))
-                    .font(.title2.weight(.semibold))
-            }
+        VStack(spacing: 14) {
+            Text(Date.now, format: .dateTime.weekday(.wide).day().month())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            workEndCountdown(today)
 
             HStack(spacing: 12) {
-                statCard(
+                statPill(
                     value: "\(today.completedToday)",
-                    label: "Completed",
+                    label: "Done",
                     systemImage: "checkmark.circle.fill",
                     tint: .green
                 )
-                statCard(
-                    value: "\(today.focusTimeRemaining) min",
-                    label: "Focus left",
-                    systemImage: "timer",
+                statPill(
+                    value: "\(today.tasksRemaining)",
+                    label: "Left",
+                    systemImage: "clock.arrow.circlepath",
                     tint: .orange
                 )
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Day progress")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(today.dayProgress, format: .percent.precision(.fractionLength(0)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                ProgressView(value: min(max(today.dayProgress, 0), 1))
-                    .tint(.accentColor)
-            }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 
-    private func statCard(value: String, label: String, systemImage: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func workEndCountdown(_ today: TodayResponse) -> some View {
+        let workEnd = workEndDate()
+        let totalWorkMinutes = max(1, workTotalMinutes())
+
+        return TimelineView(.periodic(from: .now, by: 60)) { context in
+            let now = context.date
+            let minsLeft = max(0, Int(workEnd.timeIntervalSince(now) / 60))
+            let hours = minsLeft / 60
+            let mins = minsLeft % 60
+            let color = minutesLeftColor(minsLeft, total: totalWorkMinutes)
+            let progress = min(1.0, Double(totalWorkMinutes - minsLeft) / Double(totalWorkMinutes))
+
+            ZStack {
+                Circle()
+                    .stroke(.quinary, lineWidth: 14)
+
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        color,
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.5), value: progress)
+
+                VStack(spacing: 3) {
+                    if minsLeft <= 0 {
+                        Image(systemName: "checkmark")
+                            .font(.title2.bold())
+                            .foregroundStyle(.green)
+                        Text("Done")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.green)
+                    } else {
+                        Text("\(hours > 0 ? "\(hours)h " : "")\(mins)m")
+                            .font(.title3.bold())
+                            .monospacedDigit()
+                            .foregroundStyle(color)
+                        Text("left")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: 100, height: 100)
+        }
+    }
+
+    private func workEndDate() -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        let hour = scheduleService.preference?.workHoursEnd ?? 17
+        let endHour = min(max(Int(hour), 0), 23)
+        var components = cal.dateComponents([.year, .month, .day], from: now)
+        components.hour = endHour
+        components.minute = 0
+        return cal.date(from: components) ?? now
+    }
+
+    private func workTotalMinutes() -> Int {
+        let cal = Calendar.current
+        let now = Date()
+        let startHour = scheduleService.preference?.workHoursStart ?? 9
+        let endHour = scheduleService.preference?.workHoursEnd ?? 17
+        let startComp = cal.dateComponents([.year, .month, .day], from: now)
+        var s = startComp
+        s.hour = Int(startHour)
+        s.minute = 0
+        var e = startComp
+        e.hour = min(max(Int(endHour), 0), 23)
+        e.minute = 0
+        guard let startDate = cal.date(from: s), let endDate = cal.date(from: e) else { return 480 }
+        return max(1, Int(endDate.timeIntervalSince(startDate) / 60))
+    }
+
+    private func minutesLeftColor(_ remaining: Int, total: Int) -> Color {
+        let ratio = Double(remaining) / Double(max(total, 1))
+        if ratio > 0.5 { return .green }
+        if ratio > 0.2 { return .orange }
+        return .red
+    }
+
+    private func statPill(value: String, label: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
             Image(systemName: systemImage)
-                .font(.title3)
+                .font(.subheadline)
                 .foregroundStyle(tint)
             Text(value)
-                .font(.title3.weight(.bold))
+                .font(.headline.bold())
+                .monospacedDigit()
             Text(label)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(.quinary, in: Capsule())
     }
 
     private func currentTaskRow(_ task: ScheduledTask) -> some View {
@@ -202,33 +261,8 @@ struct TodayView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Button {
-                activeFocusTask = task
-            } label: {
-                Label("Start Focus", systemImage: "play.circle.fill")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
         }
         .padding(.vertical, 4)
-    }
-
-    private func priorityRow(_ task: ScheduledTask) -> some View {
-        HStack(spacing: 12) {
-            PriorityBadge(priority: task.priority)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.title)
-                    .font(.body.weight(.medium))
-                if let category = task.category, !category.isEmpty {
-                    Text(category)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.vertical, 2)
     }
 
     private func nextTaskRow(_ task: ScheduledTask) -> some View {
@@ -246,10 +280,6 @@ struct TodayView: View {
                 }
             }
             Spacer()
-            Button("Snooze 30") {
-                snooze(task)
-            }
-            .font(.caption)
         }
         .padding(.vertical, 2)
     }
@@ -360,38 +390,15 @@ struct TodayView: View {
         }
     }
 
-    private func snooze(_ task: ScheduledTask) {
-        Task {
-            do {
-                if let item = taskService.tasks.first(where: { $0.id == task.id }) {
-                    _ = try await taskService.snoozeTask(item, minutes: 30)
-                }
-                await planner.loadToday()
-                await scheduleService.loadBlocks()
-            } catch {
-                planner.presentError(error.localizedDescription)
-            }
-        }
-    }
-
-    private func greeting(for date: Date) -> String {
-        let hour = Calendar.current.component(.hour, from: date)
-        switch hour {
-        case 5..<12:
-            return "Good morning"
-        case 12..<17:
-            return "Good afternoon"
-        case 17..<22:
-            return "Good evening"
-        default:
-            return "Good night"
-        }
-    }
 }
 
 private extension TodayResponse {
     var tasksRemainingForSummary: Int {
         nextTasks.count
+    }
+
+    var tasksRemaining: Int {
+        (currentTask != nil ? 1 : 0) + nextTasks.count
     }
 }
 

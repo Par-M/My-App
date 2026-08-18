@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -29,6 +30,8 @@ final class HabitService {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        updateWidgetHabits()
     }
 
     @discardableResult
@@ -105,5 +108,29 @@ final class HabitService {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func updateWidgetHabits() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+
+        var remaining = 0
+
+        for stat in habits {
+            guard let dayStat = stat.last7Days.first(where: { cal.isDate($0.date, inSameDayAs: today) }) else { continue }
+            if dayStat.scheduled && dayStat.completedCount < stat.habit.dailyGoal {
+                remaining += 1
+            }
+        }
+
+        let existing = WidgetDataStore.read()
+        WidgetDataStore.write(
+            currentTaskTitle: existing.currentTaskTitle,
+            nextTaskTitle: existing.nextTaskTitle,
+            tasksRemaining: existing.tasksRemaining,
+            habitsRemaining: remaining
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
     }
 }

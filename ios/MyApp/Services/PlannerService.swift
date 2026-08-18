@@ -61,21 +61,16 @@ final class PlannerService {
     }
 
     func updateWidget() {
-        let cal = Calendar.current
-        let now = Date()
-        var workEndComponents = cal.dateComponents([.year, .month, .day], from: now)
-        workEndComponents.hour = 17
-        workEndComponents.minute = 0
-        let workEnd = cal.date(from: workEndComponents) ?? now
-
         let existing = WidgetDataStore.read()
+        let currentTitle = today?.currentTask?.title
+        let nextTitle = today?.nextTasks.first?.title
+        let tasksRemaining = (today?.currentTask != nil ? 1 : 0) + (today?.nextTasks.count ?? 0)
 
         WidgetDataStore.write(
-            taskTitle: today?.currentTask?.title,
-            taskEnd: today?.currentTask?.end,
-            workEndDate: workEnd,
-            habitsDone: existing.habitsDone,
-            habitsTotal: existing.habitsTotal
+            currentTaskTitle: currentTitle,
+            nextTaskTitle: nextTitle,
+            tasksRemaining: tasksRemaining,
+            habitsRemaining: existing.habitsRemaining
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")

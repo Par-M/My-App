@@ -3,42 +3,34 @@ import WidgetKit
 
 struct CurrentTaskWidgetView: View {
     let entry: CurrentTaskEntry
-    @Environment(\.widgetFamily) var family
 
     var body: some View {
-        switch family {
-        case .accessoryRectangular:
-            rectangularView
-                .containerBackground(for: .widget) { Color.clear }
-        default:
-            rectangularView
-                .containerBackground(for: .widget) { Color.clear }
-        }
+        rectangularView
+            .containerBackground(for: .widget) { Color.clear }
     }
 
     private var rectangularView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if let title = entry.title {
+            if let current = entry.currentTaskTitle {
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color.orange)
                         .frame(width: 6, height: 6)
-                    Text(title)
+                    Text(current)
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
-                if let end = entry.taskEnd {
-                    let cal = Calendar.current
-                    let timeStr = end.formatted(date: .omitted, time: .shortened)
+                if let next = entry.nextTaskTitle {
                     HStack(spacing: 4) {
-                        Image(systemName: "clock")
+                        Circle()
+                            .fill(Color.secondary.opacity(0.4))
+                            .frame(width: 5, height: 5)
+                        Text(next)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
-                        Text("Complete by \(timeStr)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                 }
             } else {
@@ -56,62 +48,34 @@ struct CurrentTaskWidgetView: View {
 
 struct TasksRemainingWidgetView: View {
     let entry: CurrentTaskEntry
-    @Environment(\.widgetFamily) var family
 
     var body: some View {
-        switch family {
-        case .accessoryRectangular:
-            rectangularView
-                .containerBackground(for: .widget) { Color.clear }
-        default:
-            rectangularView
-                .containerBackground(for: .widget) { Color.clear }
-        }
+        rectangularView
+            .containerBackground(for: .widget) { Color.clear }
     }
 
     private var rectangularView: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: "checkmark.circle")
-                    .foregroundStyle(.green)
-                    .font(.system(size: 12))
-                Text("\(entry.habitsDone)/\(entry.habitsTotal)")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                Text("done")
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "list.bullet")
+                    .foregroundStyle(.orange)
+                    .font(.system(size: 10))
+                Text("\(entry.tasksRemaining)")
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                Text(entry.tasksRemaining == 1 ? "task" : "tasks")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            if entry.habitsTotal > 0 {
-                GeometryReader { geo in
-                    let progress = CGFloat(entry.habitsDone) / CGFloat(max(entry.habitsTotal, 1))
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(.quinary)
-                            .frame(height: 5)
-                        Capsule()
-                            .fill(.green)
-                            .frame(width: geo.size.width * progress, height: 5)
-                            .animation(.easeInOut(duration: 0.3), value: progress)
-                    }
-                }
-                .frame(height: 5)
-            } else {
-                Text("No habits today")
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle")
+                    .foregroundStyle(.green)
+                    .font(.system(size: 10))
+                Text("\(entry.habitsRemaining)")
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                Text(entry.habitsRemaining == 1 ? "habit" : "habits")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
         }
     }
-}
-
-#Preview(as: .accessoryRectangular) {
-    CurrentTaskWidget()
-} timeline: {
-    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
-}
-
-#Preview(as: .accessoryRectangular) {
-    TasksRemainingWidget()
-} timeline: {
-    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
 }

@@ -119,44 +119,107 @@ struct TodayView: View {
 
     private func header(_ today: TodayResponse) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date.now, format: .dateTime.weekday(.wide).day().month())
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(greeting(for: Date.now))
-                    .font(.title2.weight(.semibold))
-            }
+            HStack(spacing: 16) {
+                workEndCountdown(today)
 
-            HStack(spacing: 12) {
-                statCard(
-                    value: "\(today.completedToday)",
-                    label: "Completed",
-                    systemImage: "checkmark.circle.fill",
-                    tint: .green
-                )
-                statCard(
-                    value: "\(today.focusTimeRemaining) min",
-                    label: "Focus left",
-                    systemImage: "timer",
-                    tint: .orange
-                )
-            }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Date.now, format: .dateTime.weekday(.wide).day().month())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Day progress")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(today.dayProgress, format: .percent.precision(.fractionLength(0)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        statCard(
+                            value: "\(today.completedToday)",
+                            label: "Done",
+                            systemImage: "checkmark.circle.fill",
+                            tint: .green
+                        )
+                        statCard(
+                            value: "\(today.focusTimeRemaining)m",
+                            label: "Focus left",
+                            systemImage: "timer",
+                            tint: .orange
+                        )
+                    }
                 }
-                ProgressView(value: min(max(today.dayProgress, 0), 1))
-                    .tint(.accentColor)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func workEndCountdown(_ today: TodayResponse) -> some View {
+        let workEnd = workEndDate()
+        let totalWorkMinutes = max(1, workTotalMinutes())
+        let remaining = max(0, today.focusTimeRemaining)
+        let progress = min(1.0, Double(totalWorkMinutes - remaining) / Double(totalWorkMinutes))
+
+        return TimelineView(.periodic(from: .now, by: 60)) { context in
+            let now = context.date
+            let minsLeft = max(0, Int(workEnd.timeIntervalSince(now) / 60))
+            let hours = minsLeft / 60
+            let mins = minsLeft % 60
+
+            ZStack {
+                Circle()
+                    .stroke(.quinary, lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        minutesLeftColor(minsLeft, total: totalWorkMinutes),
+                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 2) {
+                    if minsLeft <= 0 {
+                        Text("Done")
+                            .font(.headline.bold())
+                            .foregroundStyle(.green)
+                    } else {
+                        Text("\(hours > 0 ? "\(hours)h " : "")\(mins)m")
+                            .font(.headline.bold())
+                            .monospacedDigit()
+                        Text("left")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: 72, height: 72)
+        }
+    }
+
+    private func workEndDate() -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        let hour = scheduleService.preference?.workHoursEnd ?? 17
+        let endHour = min(max(Int(hour), 0), 23)
+        var components = cal.dateComponents([.year, .month, .day], from: now)
+        components.hour = endHour
+        components.minute = 0
+        return cal.date(from: components) ?? now
+    }
+
+    private func workTotalMinutes() -> Int {
+        let cal = Calendar.current
+        let now = Date()
+        let startHour = scheduleService.preference?.workHoursStart ?? 9
+        let endHour = scheduleService.preference?.workHoursEnd ?? 17
+        let startComp = cal.dateComponents([.year, .month, .day], from: now)
+        var s = startComp
+        s.hour = Int(startHour)
+        s.minute = 0
+        var e = startComp
+        e.hour = min(max(Int(endHour), 0), 23)
+        e.minute = 0
+        guard let startDate = cal.date(from: s), let endDate = cal.date(from: e) else { return 480 }
+        return max(1, Int(endDate.timeIntervalSince(startDate) / 60))
+    }
+
+    private func minutesLeftColor(_ remaining: Int, total: Int) -> Color {
+        let ratio = Double(remaining) / Double(max(total, 1))
+        if ratio > 0.5 { return .green }
+        if ratio > 0.2 { return .orange }
+        return .red
     }
 
     private func statCard(value: String, label: String, systemImage: String, tint: Color) -> some View {
@@ -321,19 +384,6 @@ struct TodayView: View {
         }
     }
 
-    private func greeting(for date: Date) -> String {
-        let hour = Calendar.current.component(.hour, from: date)
-        switch hour {
-        case 5..<12:
-            return "Good morning"
-        case 12..<17:
-            return "Good afternoon"
-        case 17..<22:
-            return "Good evening"
-        default:
-            return "Good night"
-        }
-    }
 }
 
 private extension TodayResponse {

@@ -118,73 +118,77 @@ struct TodayView: View {
     }
 
     private func header(_ today: TodayResponse) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
-                workEndCountdown(today)
+        VStack(spacing: 14) {
+            Text(Date.now, format: .dateTime.weekday(.wide).day().month())
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(Date.now, format: .dateTime.weekday(.wide).day().month())
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+            workEndCountdown(today)
 
-                    HStack(spacing: 12) {
-                        statCard(
-                            value: "\(today.completedToday)",
-                            label: "Done",
-                            systemImage: "checkmark.circle.fill",
-                            tint: .green
-                        )
-                        statCard(
-                            value: "\(today.tasksRemaining)",
-                            label: "Remaining",
-                            systemImage: "list.bullet",
-                            tint: .orange
-                        )
-                    }
-                }
+            HStack(spacing: 12) {
+                statPill(
+                    value: "\(today.completedToday)",
+                    label: "Done",
+                    systemImage: "checkmark.circle.fill",
+                    tint: .green
+                )
+                statPill(
+                    value: "\(today.tasksRemaining)",
+                    label: "Left",
+                    systemImage: "clock.arrow.circlepath",
+                    tint: .orange
+                )
             }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 
     private func workEndCountdown(_ today: TodayResponse) -> some View {
         let workEnd = workEndDate()
         let totalWorkMinutes = max(1, workTotalMinutes())
-        let remaining = max(0, today.focusTimeRemaining)
-        let progress = min(1.0, Double(totalWorkMinutes - remaining) / Double(totalWorkMinutes))
 
         return TimelineView(.periodic(from: .now, by: 60)) { context in
             let now = context.date
             let minsLeft = max(0, Int(workEnd.timeIntervalSince(now) / 60))
             let hours = minsLeft / 60
             let mins = minsLeft % 60
+            let color = minutesLeftColor(minsLeft, total: totalWorkMinutes)
+            let progress = min(1.0, Double(totalWorkMinutes - minsLeft) / Double(totalWorkMinutes))
 
             ZStack {
                 Circle()
-                    .stroke(.quinary, lineWidth: 8)
+                    .stroke(.quinary, lineWidth: 14)
+
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        minutesLeftColor(minsLeft, total: totalWorkMinutes),
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        color,
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                VStack(spacing: 2) {
+                    .animation(.easeInOut(duration: 0.5), value: progress)
+
+                VStack(spacing: 3) {
                     if minsLeft <= 0 {
+                        Image(systemName: "checkmark")
+                            .font(.title2.bold())
+                            .foregroundStyle(.green)
                         Text("Done")
-                            .font(.headline.bold())
+                            .font(.caption2.bold())
                             .foregroundStyle(.green)
                     } else {
                         Text("\(hours > 0 ? "\(hours)h " : "")\(mins)m")
-                            .font(.headline.bold())
+                            .font(.title3.bold())
                             .monospacedDigit()
+                            .foregroundStyle(color)
                         Text("left")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(width: 72, height: 72)
+            .frame(width: 100, height: 100)
         }
     }
 
@@ -222,20 +226,22 @@ struct TodayView: View {
         return .red
     }
 
-    private func statCard(value: String, label: String, systemImage: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func statPill(value: String, label: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 6) {
             Image(systemName: systemImage)
-                .font(.title3)
+                .font(.subheadline)
                 .foregroundStyle(tint)
             Text(value)
-                .font(.title3.weight(.bold))
+                .font(.headline.bold())
+                .monospacedDigit()
             Text(label)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(.quinary, in: Capsule())
     }
 
     private func currentTaskRow(_ task: ScheduledTask) -> some View {

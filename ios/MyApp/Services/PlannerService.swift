@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -28,6 +29,8 @@ final class PlannerService {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        updateWidget()
     }
 
     func loadSummary() async {
@@ -55,5 +58,29 @@ final class PlannerService {
 
     func presentError(_ message: String) {
         errorMessage = message
+    }
+
+    private func updateWidget() {
+        guard let today = today else {
+            WidgetDataStore.clear()
+            WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
+            return
+        }
+        let cal = Calendar.current
+        let now = Date()
+        var workEndComponents = cal.dateComponents([.year, .month, .day], from: now)
+        workEndComponents.hour = 17
+        workEndComponents.minute = 0
+        let workEnd = cal.date(from: workEndComponents) ?? now
+
+        WidgetDataStore.write(
+            taskTitle: today.currentTask?.title,
+            taskEnd: today.currentTask?.end,
+            tasksRemaining: (today.currentTask != nil ? 1 : 0) + today.nextTasks.count,
+            workEndDate: workEnd
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
     }
 }

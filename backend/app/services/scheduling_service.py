@@ -99,7 +99,19 @@ class SchedulingService:
         )
         if task_ids:
             statement = statement.where(Task.id.in_(task_ids))
-        return list(self.db.scalars(statement).all())
+        tasks = list(self.db.scalars(statement).all())
+
+        if tasks:
+            scheduled_ids = set(
+                self.db.scalars(
+                    select(CalendarBlock.task_id).where(
+                        CalendarBlock.user_id == self.user_id,
+                    )
+                ).all()
+            )
+            tasks = [t for t in tasks if t.id not in scheduled_ids]
+
+        return tasks
 
     def _preferences(self) -> UserPreference:
         preference = self.db.scalar(
@@ -192,7 +204,13 @@ class SchedulingService:
         )
         context.free_slots = find_free_slots(
             dates=dates,
-            busy=context.busy_times,
+            busy=[
+                *context.busy_times,
+                TimeSlot(
+                    start=_utc_now(),
+                    end=_utc_now() + timedelta(minutes=5),
+                ),
+            ],
             start_hour=context.work_start_hour,
             end_hour=context.work_end_hour,
             timezone=context.timezone,

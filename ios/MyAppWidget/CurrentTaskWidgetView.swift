@@ -18,7 +18,7 @@ struct CurrentTaskWidgetView: View {
 
     private var rectangularView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if let title = entry.title, !entry.noTask {
+            if let title = entry.title {
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color.orange)
@@ -29,16 +29,16 @@ struct CurrentTaskWidgetView: View {
                         .minimumScaleFactor(0.7)
                 }
                 if let end = entry.taskEnd {
-                    let mins = max(0, Int(end.timeIntervalSince(Date()) / 60))
-                    let hrs = mins / 60
-                    let m = mins % 60
+                    let cal = Calendar.current
+                    let timeStr = end.formatted(date: .omitted, time: .shortened)
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
-                        Text(hrs > 0 ? "\(hrs)h \(m)m left" : "\(m)m left")
+                        Text("Complete by \(timeStr)")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
             } else {
@@ -71,28 +71,34 @@ struct TasksRemainingWidgetView: View {
 
     private var rectangularView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
-                Image(systemName: "list.bullet")
-                    .foregroundStyle(.orange)
-                    .font(.system(size: 11))
-                Text("\(entry.tasksRemaining)")
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
-                Text(entry.tasksRemaining == 1 ? "task left" : "tasks left")
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle")
+                    .foregroundStyle(.green)
+                    .font(.system(size: 12))
+                Text("\(entry.habitsDone)/\(entry.habitsTotal)")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                Text("done")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
-            if let workEnd = entry.workEndDate {
-                let mins = max(0, Int(workEnd.timeIntervalSince(Date()) / 60))
-                let hrs = mins / 60
-                let m = mins % 60
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Text(hrs > 0 ? "\(hrs)h \(m)m in day" : "\(m)m in day")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
+            if entry.habitsTotal > 0 {
+                GeometryReader { geo in
+                    let progress = CGFloat(entry.habitsDone) / CGFloat(max(entry.habitsTotal, 1))
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(.quinary)
+                            .frame(height: 5)
+                        Capsule()
+                            .fill(.green)
+                            .frame(width: geo.size.width * progress, height: 5)
+                            .animation(.easeInOut(duration: 0.3), value: progress)
+                    }
                 }
+                .frame(height: 5)
+            } else {
+                Text("No habits today")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -101,11 +107,11 @@ struct TasksRemainingWidgetView: View {
 #Preview(as: .accessoryRectangular) {
     CurrentTaskWidget()
 } timeline: {
-    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), tasksRemaining: 3, workEndDate: Date().addingTimeInterval(28800), noTask: false)
+    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
 }
 
 #Preview(as: .accessoryRectangular) {
     TasksRemainingWidget()
 } timeline: {
-    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), tasksRemaining: 3, workEndDate: Date().addingTimeInterval(28800), noTask: false)
+    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
 }

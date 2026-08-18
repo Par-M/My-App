@@ -3,18 +3,17 @@ import SwiftUI
 
 struct CurrentTaskProvider: TimelineProvider {
     func placeholder(in context: Context) -> CurrentTaskEntry {
-        CurrentTaskEntry(date: Date(), title: "Write report", taskEnd: Date().addingTimeInterval(3600), tasksRemaining: 3, workEndDate: Date().addingTimeInterval(28800), noTask: false)
+        CurrentTaskEntry(date: Date(), title: "Write report", taskEnd: Date().addingTimeInterval(3600), habitsDone: 3, habitsTotal: 5)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
         let data = WidgetDataStore.read()
         let entry = CurrentTaskEntry(
             date: Date(),
-            title: data.title,
+            title: data.taskTitle,
             taskEnd: data.taskEnd,
-            tasksRemaining: data.tasksRemaining,
-            workEndDate: data.workEndDate,
-            noTask: data.noTask
+            habitsDone: data.habitsDone,
+            habitsTotal: data.habitsTotal
         )
         completion(entry)
     }
@@ -23,11 +22,10 @@ struct CurrentTaskProvider: TimelineProvider {
         let data = WidgetDataStore.read()
         let entry = CurrentTaskEntry(
             date: Date(),
-            title: data.title,
+            title: data.taskTitle,
             taskEnd: data.taskEnd,
-            tasksRemaining: data.tasksRemaining,
-            workEndDate: data.workEndDate,
-            noTask: data.noTask
+            habitsDone: data.habitsDone,
+            habitsTotal: data.habitsTotal
         )
 
         var refreshDate = Date().addingTimeInterval(60)
@@ -46,9 +44,8 @@ struct CurrentTaskEntry: TimelineEntry {
     let date: Date
     let title: String?
     let taskEnd: Date?
-    let tasksRemaining: Int
-    let workEndDate: Date?
-    let noTask: Bool
+    let habitsDone: Int
+    let habitsTotal: Int
 }
 
 struct CurrentTaskWidget: Widget {
@@ -64,8 +61,60 @@ struct CurrentTaskWidget: Widget {
     }
 }
 
+struct TasksRemainingProvider: TimelineProvider {
+    func placeholder(in context: Context) -> CurrentTaskEntry {
+        CurrentTaskEntry(date: Date(), title: "Write report", taskEnd: Date().addingTimeInterval(3600), habitsDone: 3, habitsTotal: 5)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
+        let data = WidgetDataStore.read()
+        let entry = CurrentTaskEntry(
+            date: Date(),
+            title: data.taskTitle,
+            taskEnd: data.taskEnd,
+            habitsDone: data.habitsDone,
+            habitsTotal: data.habitsTotal
+        )
+        completion(entry)
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<CurrentTaskEntry>) -> Void) {
+        let data = WidgetDataStore.read()
+        let entry = CurrentTaskEntry(
+            date: Date(),
+            title: data.taskTitle,
+            taskEnd: data.taskEnd,
+            habitsDone: data.habitsDone,
+            habitsTotal: data.habitsTotal
+        )
+
+        let refreshDate = Date().addingTimeInterval(60)
+        let timeline = Timeline(entries: [entry], policy: .after(refreshDate))
+        completion(timeline)
+    }
+}
+
+struct TasksRemainingWidget: Widget {
+    let kind = "TasksRemainingWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: TasksRemainingProvider()) { entry in
+            TasksRemainingWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Habits")
+        .description("Shows today's habit progress.")
+        .supportedFamilies([.accessoryRectangular])
+    }
+}
+
 #Preview(as: .accessoryRectangular) {
     CurrentTaskWidget()
 } timeline: {
-    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), tasksRemaining: 3, workEndDate: Date().addingTimeInterval(28800), noTask: false)
+    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
+}
+
+#Preview(as: .accessoryRectangular) {
+    TasksRemainingWidget()
+} timeline: {
+    CurrentTaskEntry(date: .now, title: "Write report", taskEnd: Date().addingTimeInterval(5400), habitsDone: 3, habitsTotal: 5)
 }

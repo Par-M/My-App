@@ -31,6 +31,7 @@ struct WeeklyScheduleView: View {
     @State private var showPreferences = false
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
+    @State private var expandedSlots: Set<String> = []
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -357,7 +358,7 @@ struct WeeklyScheduleView: View {
 
     private func daySection(_ day: Date) -> some View {
         let calendar = Calendar.current
-        let columns = overlapColumns(dayItems(for: day))
+        let groups = groupOverlapping(dayItems(for: day))
         let isToday = calendar.isDateInToday(day)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -377,21 +378,20 @@ struct WeeklyScheduleView: View {
                 }
             }
 
-            if columns.isEmpty {
+            if groups.isEmpty {
                 Text("No events")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             } else {
-                HStack(alignment: .top, spacing: 4) {
-                    ForEach(Array(columns.enumerated()), id: \.offset) { _, column in
-                        VStack(spacing: 6) {
-                            ForEach(column) { item in
-                                dayItemRow(item)
-                            }
+                VStack(spacing: 6) {
+                    ForEach(Array(groups.enumerated()), id: \.offset) { slotIndex, group in
+                        if group.count == 1 {
+                            dayItemRow(group[0])
+                        } else {
+                            eventSlot(group, day: day, slotIndex: slotIndex)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -402,6 +402,75 @@ struct WeeklyScheduleView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isToday ? Color.accentColor : Color(.separator), lineWidth: isToday ? 1.5 : 0.5)
         )
+    }
+
+    private func eventSlot(_ items: [DayItem], day: Date, slotIndex: Int) -> some View {
+        let key = slotKey(day, slotIndex: slotIndex)
+        let isExpanded = expandedSlots.contains(key)
+
+        return VStack(spacing: 0) {
+            if isExpanded {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                    if idx > 0 {
+                        Divider().padding(.horizontal, 8)
+                    }
+                    dayItemRow(item)
+                }
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        _ = expandedSlots.remove(key)
+                    }
+                } label: {
+                    Label("Collapse", systemImage: "chevron.up")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+            } else {
+                let first = items[0]
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        _ = expandedSlots.insert(key)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        if first.event != nil {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(.gray)
+                                .frame(width: 4)
+                        } else if let block = first.block {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(block.completedAt != nil ? Color.green : Color.accentColor)
+                                .frame(width: 4)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(first.event?.title ?? first.block?.title ?? "")
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Text("\(first.start.formatted(date: .omitted, time: .shortened)) – \(first.end.formatted(date: .omitted, time: .shortened))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("\(items.count - 1) more")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+                    .background(
+                        Color(UIColor.quaternarySystemFill),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func dayItems(for day: Date) -> [DayItem] {
@@ -415,24 +484,27 @@ struct WeeklyScheduleView: View {
         return (blocks + events).sorted { $0.start < $1.start }
     }
 
-    private func overlapColumns(_ items: [DayItem]) -> [[DayItem]] {
+    private func groupOverlapping(_ items: [DayItem]) -> [[DayItem]] {
         let sorted = items.sorted { $0.start < $1.start }
-        var columns: [[DayItem]] = []
-        var columnEnds: [Date] = []
+        var groups: [[DayItem]] = []
         for item in sorted {
-            var placed = false
-            for index in columnEnds.indices where item.start >= columnEnds[index] {
-                columns[index].append(item)
-                columnEnds[index] = item.end
-                placed = true
-                break
+            var merged = false
+            for i in groups.indices {
+                if groups[i].contains(where: { $0.start < item.end && item.start < $0.end }) {
+                    groups[i].append(item)
+                    merged = true
+                    break
+                }
             }
-            if !placed {
-                columns.append([item])
-                columnEnds.append(item.end)
+            if !merged {
+                groups.append([item])
             }
         }
-        return columns
+        return groups
+    }
+
+    private func slotKey(_ day: Date, slotIndex: Int) -> String {
+        "\(Int(day.timeIntervalSince1970))_\(slotIndex)"
     }
 
     @ViewBuilder

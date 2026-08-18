@@ -2,6 +2,15 @@ import SwiftUI
 
 struct TaskRow: View {
     let task: TaskItem
+    var onChangeStatus: (TaskStatus) -> Void = { _ in }
+
+    private var statusColor: Color {
+        switch task.status {
+        case .pending: .gray
+        case .inProgress: .blue
+        case .completed: .green
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -26,11 +35,42 @@ struct TaskRow: View {
                         .padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
                 }
+                Spacer(minLength: 8)
+                statusMenu
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    private var statusMenu: some View {
+        Menu {
+            ForEach(TaskStatus.allCases) { status in
+                Button {
+                    onChangeStatus(status)
+                } label: {
+                    if status == task.status {
+                        Label(status.label, systemImage: "checkmark")
+                    } else {
+                        Text(status.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(task.status.label)
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9).weight(.semibold))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(statusColor.opacity(0.15), in: Capsule())
+            .foregroundStyle(statusColor)
+            .fixedSize()
+        }
     }
 }
 
@@ -66,6 +106,8 @@ struct TaskListView: View {
     @State private var showAddTask = false
     @State private var showNotificationSettings = false
     @State private var showSettings = false
+    @State private var showOverdue = false
+    @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
 
     private struct LoadKey: Hashable {
@@ -109,7 +151,11 @@ struct TaskListView: View {
                     List {
                         ForEach(taskService.tasks) { task in
                             NavigationLink(value: task) {
-                                TaskRow(task: task)
+                                TaskRow(task: task) { status in
+                                    Task {
+                                        try? await taskService.setStatus(status, for: task)
+                                    }
+                                }
                             }
                         }
                         .onDelete(perform: deleteTasks)
@@ -148,6 +194,16 @@ struct TaskListView: View {
                 }
 
                 ToolbarItemGroup(placement: .primaryAction) {
+                    if !taskService.overdueTasks.isEmpty {
+                        Button {
+                            showOverdue = true
+                        } label: {
+                            Label("Overdue", systemImage: "exclamationmark.triangle")
+                                .badge(taskService.overdueTasks.count)
+                        }
+                        .accessibilityIdentifier("overdueBadgeButton")
+                    }
+
                     Button {
                         showAddTask = true
                     } label: {
@@ -222,6 +278,17 @@ struct TaskListView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
+            .sheet(isPresented: $showOverdue) {
+                OverdueListSheet { task in
+                    showOverdue = false
+                    reschedulingTask = task
+                }
+            }
+            .sheet(item: $reschedulingTask) { task in
+                RescheduleSheet(task: task) { minutes, reason in
+                    Task { await reschedule(task, minutes: minutes, reason: reason) }
+                }
+            }
             .task(id: loadKey) {
                 await taskService.loadTasks(
                     search: searchText,
@@ -230,6 +297,9 @@ struct TaskListView: View {
                     sort: sortOption,
                     order: sortAscending ? "asc" : "desc"
                 )
+            }
+            .task {
+                await taskService.loadOverdue()
             }
             .onChange(of: taskService.tasks) { _, tasks in
                 notificationService.scheduleLocalNotifications(tasks: tasks)
@@ -261,6 +331,73 @@ struct TaskListView: View {
             for index in offsets {
                 let task = taskService.tasks[index]
                 try? await taskService.deleteTask(task)
+            }
+        }
+    }
+
+    private func reschedule(_ task: TaskItem, minutes: Int, reason: String?) async {
+        do {
+            _ = try await taskService.rescheduleTask(task, minutesRemaining: minutes, reason: reason)
+            await taskService.loadOverdue()
+        } catch {
+            taskService.presentError(error.localizedDescription)
+        }
+    }
+}
+
+private struct OverdueListSheet: View {
+    @Environment(TaskService.self) private var taskService
+    @Environment(\.dismiss) private var dismiss
+    let onReschedule: (TaskItem) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if taskService.overdueTasks.isEmpty {
+                    ContentUnavailableView(
+                        "No overdue tasks",
+                        systemImage: "checkmark.circle",
+                        description: Text("You're all caught up.")
+                    )
+                } else {
+                    ForEach(taskService.overdueTasks) { task in
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(task.title)
+                                    .font(.body.weight(.medium))
+                                if let deadline = task.deadline {
+                                    Text("Missed \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else if let start = task.startAt {
+                                    Text("Was scheduled at \(start.formatted(date: .omitted, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("Behind schedule")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Button("Reschedule") {
+                                onReschedule(task)
+                            }
+                            .font(.caption.weight(.semibold))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Overdue Tasks")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
             }
         }
     }

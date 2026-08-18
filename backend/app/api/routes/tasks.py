@@ -14,6 +14,8 @@ from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.user import User
 from app.schemas.task import CompleteTaskRequest
+from app.schemas.task import RescheduleRequest
+from app.schemas.task import RescheduleResponse
 from app.schemas.task import SnoozeRequest
 from app.schemas.task import SnoozeResponse
 from app.schemas.task import TaskCreate
@@ -91,6 +93,14 @@ def list_tasks(
         )
     except (InvalidSortError, ValueError) as exc:
         _handle_service_errors(exc)
+    return TaskListResponse(items=tasks, total=len(tasks))
+
+
+@router.get("/overdue", response_model=TaskListResponse)
+def list_overdue(
+    service: TaskService = Depends(_service),
+) -> TaskListResponse:
+    tasks = service.list_overdue()
     return TaskListResponse(items=tasks, total=len(tasks))
 
 
@@ -189,3 +199,21 @@ def snooze_task(
     except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
         _handle_service_errors(exc)
     return SnoozeResponse(task=task, blocks=blocks)
+
+
+@router.post("/{task_id}/reschedule", response_model=RescheduleResponse)
+def reschedule_task(
+    task_id: uuid.UUID,
+    payload: RescheduleRequest,
+    service: TaskService = Depends(_service),
+) -> RescheduleResponse:
+    try:
+        task, blocks = service.reschedule_task(
+            task_id,
+            payload.minutes_remaining,
+            payload.reason,
+            payload.timezone,
+        )
+    except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
+        _handle_service_errors(exc)
+    return RescheduleResponse(task=task, blocks=blocks)

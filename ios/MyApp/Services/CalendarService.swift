@@ -16,20 +16,6 @@ struct CalendarEventItem: Identifiable, Hashable, Sendable {
     let isAllDay: Bool
 }
 
-enum CalendarServiceError: LocalizedError {
-    case noDefaultCalendar
-    case eventNotFound
-
-    var errorDescription: String? {
-        switch self {
-        case .noDefaultCalendar:
-            return "No calendar is available for creating events."
-        case .eventNotFound:
-            return "The calendar event could not be found."
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class CalendarService {
@@ -146,47 +132,5 @@ final class CalendarService {
                 isAllDay: event.isAllDay
             )
         }
-    }
-
-    @discardableResult
-    func createTaskBlock(title: String, start: Date, end: Date) throws -> String {
-        guard let calendar = store.defaultCalendarForNewEvents else {
-            throw CalendarServiceError.noDefaultCalendar
-        }
-        let event = EKEvent(eventStore: store)
-        event.title = title
-        event.startDate = start
-        event.endDate = end
-        event.calendar = calendar
-        try store.save(event, span: .thisEvent)
-        return event.eventIdentifier
-    }
-
-    func updateTaskBlock(
-        eventIdentifier: String,
-        title: String? = nil,
-        start: Date? = nil,
-        end: Date? = nil
-    ) throws {
-        guard let event = store.event(withIdentifier: eventIdentifier) else {
-            throw CalendarServiceError.eventNotFound
-        }
-        if let title {
-            event.title = title
-        }
-        if let start {
-            event.startDate = start
-        }
-        if let end {
-            event.endDate = end
-        }
-        try store.save(event, span: .thisEvent)
-    }
-
-    func deleteTaskBlock(eventIdentifier: String) throws {
-        guard let event = store.event(withIdentifier: eventIdentifier) else {
-            return
-        }
-        try store.remove(event, span: .thisEvent)
     }
 }

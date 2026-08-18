@@ -208,3 +208,121 @@ class TestCalendarBlockSync:
             headers=_auth(data["access_token"]),
         )
         assert response.json()["total"] == 0
+
+
+class TestBlockCompletion:
+    def _blocks(self, client, token, task_id):
+        first = client.post(
+            "/api/v1/calendar/blocks",
+            json=_block_payload(task_id),
+            headers=_auth(token),
+        ).json()
+        second = client.post(
+            "/api/v1/calendar/blocks",
+            json=_block_payload(
+                task_id,
+                title="Study Algorithms",
+                start_at=(NOW + timedelta(hours=5)).isoformat(),
+                end_at=(NOW + timedelta(hours=6)).isoformat(),
+            ),
+            headers=_auth(token),
+        ).json()
+        return first, second
+
+    def test_complete_block_records_note_and_progress(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, _ = self._blocks(client, data["access_token"], task["id"])
+
+        response = client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={"note": "Finished the first half"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["completed_at"]
+        assert body["completion_note"] == "Finished the first half"
+
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=_auth(data["access_token"])
+        ).json()
+        assert task_after["progress_percent"] == 50
+
+    def test_complete_all_blocks_sets_100_percent(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, second = self._blocks(client, data["access_token"], task["id"])
+        headers = _auth(data["access_token"])
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        client.post(
+            f"/api/v1/calendar/blocks/{second['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after["progress_percent"] == 100
+
+    def test_reopen_block_clears_completion(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, _ = self._blocks(client, data["access_token"], task["id"])
+        headers = _auth(data["access_token"])
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={"note": "Done"},
+            headers=headers,
+        )
+        reopened = client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/reopen",
+            headers=headers,
+        )
+        assert reopened.status_code == 200
+        assert reopened.json()["completed_at"] is None
+        assert reopened.json()["completion_note"] is None
+
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after["progress_percent"] == 0
+
+    def test_delete_uncompleted_block_raises_progress(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"])
+        first, second = self._blocks(client, data["access_token"], task["id"])
+        headers = _auth(data["access_token"])
+        client.post(
+            f"/api/v1/calendar/blocks/{first['id']}/complete",
+            json={},
+            headers=headers,
+        )
+        client.delete(
+            f"/api/v1/calendar/blocks/{second['id']}", headers=headers
+        )
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}", headers=headers
+        ).json()
+        assert task_after["progress_percent"] == 100
+
+    def test_complete_unknown_block_returns_404(self, client):
+        data = _login(client)
+        response = client.post(
+            f"/api/v1/calendar/blocks/{uuid.uuid4()}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 404
+
+    def test_requires_authentication(self, client):
+        assert client.post(
+            f"/api/v1/calendar/blocks/{uuid.uuid4()}/complete", json={}
+        ).status_code == 401
+        assert client.post(
+            f"/api/v1/calendar/blocks/{uuid.uuid4()}/reopen"
+        ).status_code == 401

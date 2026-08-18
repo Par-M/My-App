@@ -1,9 +1,22 @@
 import uuid
 from datetime import datetime
+from datetime import timezone
+
+import pytest
 
 
 def _parse(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+@pytest.fixture(autouse=True)
+def freeze_now(monkeypatch):
+    fixed = datetime(2026, 8, 3, 9, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.services.scheduling_service._utc_now",
+        lambda: fixed,
+    )
+    return fixed
 
 
 def _login(client, email="parthiv@example.com", name="Parthiv"):
@@ -106,20 +119,56 @@ class TestGenerateSchedule:
 
     def test_overcommitment_detected(self, client):
         data = _login(client)
-        _create_task(client, data["access_token"], estimated_duration=600)
-
-        response = _generate(
+        _create_task(
             client,
             data["access_token"],
-            start_date="2026-08-03",
-            end_date="2026-08-03",
+            estimated_duration=600,
+            deadline="2026-08-03T12:00:00+00:00",
         )
+
+        response = _generate(client, data["access_token"])
         assert response.status_code == 200
         body = response.json()
         assert body["meta"]["overcommitted"] is True
         assert body["meta"]["risk"]
         assert "Algorithms Assignment" in body["meta"]["deferred_tasks"]
         assert body["message"] and "deferred" in body["message"]
+
+    def test_ignores_far_future_calendar_view(self, client):
+        data = _login(client)
+        _create_task(client, data["access_token"], estimated_duration=60)
+
+        response = _generate(
+            client,
+            data["access_token"],
+            start_date="2028-08-03",
+            end_date="2028-08-09",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"]
+        item = body["items"][0]
+        assert _parse(item["start"]) == _parse("2026-08-03T09:00:00+00:00")
+
+    def test_window_reaches_deadline_even_when_request_is_short(self, client):
+        data = _login(client)
+        _create_task(
+            client,
+            data["access_token"],
+            estimated_duration=60,
+            deadline="2026-08-07T10:00:00+00:00",
+        )
+
+        response = _generate(
+            client,
+            data["access_token"],
+            start_date="2026-08-03",
+            end_date="2026-08-04",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["items"]
+        assert _parse(body["items"][0]["start"]) < _parse("2026-08-07T10:00:00+00:00")
 
     def test_fixed_event_scheduled_at_exact_window(self, client):
         data = _login(client)
@@ -274,6 +323,156 @@ class TestAcceptRecommendation:
             headers=_auth(data["access_token"]),
         )
         assert accepted.status_code == 409
+
+
+class TestItemLevelActions:
+    def _proposal(self, client, token):
+        _create_task(client, token, title="Deep work")
+        _create_task(client, token, title="Standup")
+        response = _generate(client, token)
+        assert response.status_code == 200
+        return response.json()
+
+    def test_accept_item_creates_single_block(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+        items = proposal["items"]
+        assert len(items) == 2
+
+        response = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}"
+            f"/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["blocks"]) == 1
+        assert body["blocks"][0]["task_id"] == items[0]["task_id"]
+        assert body["recommendation"]["status"] == "pending"
+        accepted_items = body["recommendation"]["items"]
+        assert accepted_items[0]["accepted"] is True
+        assert accepted_items[1]["accepted"] is False
+
+        listed = client.get(
+            "/api/v1/calendar/blocks", headers=_auth(data["access_token"])
+        ).json()
+        assert listed["total"] == 1
+
+    def test_accepting_last_item_marks_recommendation_accepted(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+
+        first = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/1/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert second.status_code == 200
+        body = second.json()
+        assert body["recommendation"]["status"] == "accepted"
+        assert body["recommendation"]["accepted"] is True
+
+    def test_cannot_accept_item_twice(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+
+        first = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert second.status_code == 409
+
+    def test_unknown_item_index_rejected(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+
+        response = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/99/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 409
+
+    def test_full_accept_after_item_accept_creates_remaining_only(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+
+        item = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert item.status_code == 200
+
+        full = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert full.status_code == 200
+        body = full.json()
+        assert len(body["blocks"]) == 1
+        assert body["recommendation"]["status"] == "accepted"
+
+        listed = client.get(
+            "/api/v1/calendar/blocks", headers=_auth(data["access_token"])
+        ).json()
+        assert listed["total"] == 2
+
+    def test_redo_item_preserves_other_items_and_stays_valid(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+        items = proposal["items"]
+
+        response = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/1/redo",
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "pending"
+        assert len(body["items"]) == len(items)
+        assert body["items"][0]["task_id"] == items[0]["task_id"]
+        assert body["items"][0]["start"] == items[0]["start"]
+        assert body["items"][0]["end"] == items[0]["end"]
+
+        redo_block = body["items"][1]
+        kept_block = body["items"][0]
+        assert _parse(redo_block["end"]) > _parse(redo_block["start"])
+        assert not (
+            _parse(redo_block["start"]) < _parse(kept_block["end"])
+            and _parse(redo_block["end"]) > _parse(kept_block["start"])
+        )
+
+    def test_cannot_redo_an_approved_item(self, client):
+        data = _login(client)
+        proposal = self._proposal(client, data["access_token"])
+
+        accepted = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/accept",
+            headers=_auth(data["access_token"]),
+        )
+        assert accepted.status_code == 200
+
+        redo = client.post(
+            f"/api/v1/schedule/recommendations/{proposal['id']}/items/0/redo",
+            headers=_auth(data["access_token"]),
+        )
+        assert redo.status_code == 409
+
+    def test_redo_requires_authentication(self, client):
+        response = client.post(
+            f"/api/v1/schedule/recommendations/{uuid.uuid4()}/items/0/redo"
+        )
+        assert response.status_code == 401
 
 
 class TestListRecommendations:

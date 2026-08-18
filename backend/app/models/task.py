@@ -129,6 +129,12 @@ class Task(Base):
         nullable=True,
     )
 
+    progress_percent: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
     repeat_weekdays: Mapped[list[int] | None] = mapped_column(
         ARRAY(Integer),
         nullable=True,

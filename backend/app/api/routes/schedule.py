@@ -153,3 +153,46 @@ def reject_recommendation(
     ) as exc:
         _handle_service_errors(exc)
     return build_recommendation_response(recommendation)
+
+
+@router.post(
+    "/recommendations/{recommendation_id}/items/{item_index}/accept",
+    response_model=AcceptResponse,
+)
+def accept_item(
+    recommendation_id: uuid.UUID,
+    item_index: int,
+    service: SchedulingService = Depends(_service),
+) -> AcceptResponse:
+    try:
+        recommendation, blocks = service.accept_item(
+            recommendation_id, item_index
+        )
+    except (
+        RecommendationNotFoundError,
+        RecommendationNotAcceptableError,
+    ) as exc:
+        _handle_service_errors(exc)
+    return AcceptResponse(
+        recommendation=build_recommendation_response(recommendation),
+        blocks=blocks,
+    )
+
+
+@router.post(
+    "/recommendations/{recommendation_id}/items/{item_index}/redo",
+    response_model=RecommendationResponse,
+)
+def redo_item(
+    recommendation_id: uuid.UUID,
+    item_index: int,
+    service: SchedulingService = Depends(_service),
+) -> RecommendationResponse:
+    try:
+        recommendation = service.redo_item(recommendation_id, item_index)
+    except (
+        RecommendationNotFoundError,
+        RecommendationNotAcceptableError,
+    ) as exc:
+        _handle_service_errors(exc)
+    return build_recommendation_response(recommendation)

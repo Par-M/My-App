@@ -96,6 +96,8 @@ struct BlockTimeEditorView: View {
             title: "Write report",
             startAt: Date(),
             endAt: Date().addingTimeInterval(3600),
+            completedAt: nil,
+            completionNote: nil,
             createdAt: Date(),
             updatedAt: Date()
         )

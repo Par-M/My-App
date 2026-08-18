@@ -12,8 +12,12 @@ from app.models.calendar_block import CalendarBlock
 from app.models.task import Task
 from app.models.task import TaskPriority
 from app.models.task import TaskStatus
+from app.models.task_miss import TaskMiss
 from app.models.user_preference import UserPreference
+from app.schemas.planner import CategoryMissed
 from app.schemas.planner import DailySummaryResponse
+from app.schemas.planner import MissedReasonsResponse
+from app.schemas.planner import MissedTaskEntry
 from app.schemas.planner import ScheduledTask
 from app.schemas.planner import TodayResponse
 from app.schemas.task import TaskResponse
@@ -237,6 +241,18 @@ class PlannerService:
                 moved_tasks.add(task.id)
         tasks_moved = len(moved_tasks)
 
+        missed_today = list(
+            self.db.scalars(
+                select(TaskMiss)
+                .where(
+                    TaskMiss.user_id == self.user_id,
+                    TaskMiss.created_at >= today_start,
+                    TaskMiss.created_at < tomorrow,
+                )
+                .order_by(TaskMiss.created_at)
+            ).all()
+        )
+
         return DailySummaryResponse(
             date=today,
             completed=[TaskResponse.model_validate(t) for t in completed],
@@ -248,4 +264,32 @@ class PlannerService:
             tasks_remaining=tasks_remaining,
             tasks_moved=tasks_moved,
             schedule_adherence=schedule_adherence,
+            missed_today=[
+                MissedTaskEntry.model_validate(m) for m in missed_today
+            ],
         )
+
+    def missed_reasons(self) -> MissedReasonsResponse:
+        misses = list(
+            self.db.scalars(
+                select(TaskMiss)
+                .where(TaskMiss.user_id == self.user_id)
+                .order_by(TaskMiss.created_at.desc())
+            ).all()
+        )
+        grouped: dict[str, list[TaskMiss]] = {}
+        for miss in misses:
+            grouped.setdefault(miss.category or "Uncategorized", []).append(miss)
+        by_category = [
+            CategoryMissed(
+                category=category,
+                count=len(items),
+                reasons=[
+                    MissedTaskEntry.model_validate(m) for m in items
+                ],
+            )
+            for category, items in sorted(
+                grouped.items(), key=lambda item: -len(item[1])
+            )
+        ]
+        return MissedReasonsResponse(total=len(misses), by_category=by_category)

@@ -6,6 +6,7 @@ import Observation
 final class PlannerService {
     private(set) var today: TodayResponse?
     private(set) var summary: DailySummaryResponse?
+    private(set) var missedReasons: MissedReasonsResponse?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
@@ -38,6 +39,15 @@ final class PlannerService {
             summary = try await client.request(
                 PlannerEndpoint.dailySummary(timezone: TimeZone.current.identifier)
             )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadMissedReasons() async {
+        errorMessage = nil
+        do {
+            missedReasons = try await client.request(PlannerEndpoint.missedReasons)
         } catch {
             errorMessage = error.localizedDescription
         }

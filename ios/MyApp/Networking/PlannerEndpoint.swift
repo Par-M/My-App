@@ -3,6 +3,7 @@ import Foundation
 enum PlannerEndpoint: Endpoint {
     case today(timezone: String)
     case dailySummary(timezone: String)
+    case missedReasons
 
     var path: String {
         switch self {
@@ -10,6 +11,8 @@ enum PlannerEndpoint: Endpoint {
             return "/api/v1/today"
         case .dailySummary:
             return "/api/v1/daily-summary"
+        case .missedReasons:
+            return "/api/v1/missed-reasons"
         }
     }
 
@@ -25,6 +28,8 @@ enum PlannerEndpoint: Endpoint {
         switch self {
         case .today(let timezone), .dailySummary(let timezone):
             return [URLQueryItem(name: "timezone", value: timezone)]
+        case .missedReasons:
+            return nil
         }
     }
 }

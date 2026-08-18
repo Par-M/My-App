@@ -15,6 +15,7 @@ from app.schemas.calendar import CalendarBlockCreate
 from app.schemas.calendar import CalendarBlockListResponse
 from app.schemas.calendar import CalendarBlockResponse
 from app.schemas.calendar import CalendarBlockUpdate
+from app.schemas.calendar import CompleteBlockRequest
 from app.services.calendar_block_service import CalendarBlockNotFoundError
 from app.services.calendar_block_service import CalendarBlockService
 from app.services.calendar_block_service import InvalidCalendarBlockError
@@ -82,6 +83,29 @@ def update_block(
     try:
         return service.update_block(block_id, payload)
     except (CalendarBlockNotFoundError, InvalidCalendarBlockError) as exc:
+        _handle_service_errors(exc)
+
+
+@router.post("/blocks/{block_id}/complete", response_model=CalendarBlockResponse)
+def complete_block(
+    block_id: uuid.UUID,
+    payload: CompleteBlockRequest | None = None,
+    service: CalendarBlockService = Depends(_service),
+) -> CalendarBlockResponse:
+    try:
+        return service.complete_block(block_id, payload.note if payload else None)
+    except CalendarBlockNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.post("/blocks/{block_id}/reopen", response_model=CalendarBlockResponse)
+def reopen_block(
+    block_id: uuid.UUID,
+    service: CalendarBlockService = Depends(_service),
+) -> CalendarBlockResponse:
+    try:
+        return service.reopen_block(block_id)
+    except CalendarBlockNotFoundError as exc:
         _handle_service_errors(exc)
 
 

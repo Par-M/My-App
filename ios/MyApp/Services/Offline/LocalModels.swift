@@ -125,6 +125,7 @@ final class LocalTask {
             notes: notes,
             repeatWeekdays: repeatWeekdays,
             isArchived: isArchived,
+            progressPercent: 0,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -200,6 +201,8 @@ final class LocalBlock {
             title: title,
             startAt: startAt,
             endAt: endAt,
+            completedAt: nil,
+            completionNote: nil,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

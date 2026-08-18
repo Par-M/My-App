@@ -116,6 +116,7 @@ class TaskResponse(BaseModel):
     completed_at: datetime | None
     category: str | None
     notes: str | None
+    progress_percent: int
     repeat_weekdays: list[int] | None
     is_archived: bool
     created_at: datetime
@@ -138,5 +139,16 @@ class SnoozeRequest(BaseModel):
 
 
 class SnoozeResponse(BaseModel):
+    task: TaskResponse
+    blocks: list[CalendarBlockResponse]
+
+
+class RescheduleRequest(BaseModel):
+    minutes_remaining: int = Field(ge=1, le=525600)
+    reason: str | None = Field(default=None, max_length=2000)
+    timezone: str = "UTC"
+
+
+class RescheduleResponse(BaseModel):
     task: TaskResponse
     blocks: list[CalendarBlockResponse]

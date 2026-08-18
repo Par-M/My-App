@@ -20,6 +20,20 @@ struct DailySummaryView: View {
                             .tint(.accentColor)
                     }
 
+                    if !summary.missedToday.isEmpty {
+                        Section("Missed Today") {
+                            ForEach(summary.missedToday) { miss in
+                                missedRow(miss)
+                            }
+                        }
+                    }
+
+                    Section {
+                        NavigationLink("Why did I miss tasks?") {
+                            MissedReasonsView()
+                        }
+                    }
+
                     if !summary.completed.isEmpty {
                         Section("Completed") {
                             ForEach(summary.completed) { task in
@@ -56,6 +70,25 @@ struct DailySummaryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await planner.loadSummary() }
         .refreshable { await planner.loadSummary() }
+    }
+
+    private func missedRow(_ miss: MissedTaskEntry) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(miss.taskTitle)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                if let reason = miss.reason, !reason.isEmpty {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func summaryRow(_ task: ScheduledTask, icon: String, tint: Color) -> some View {

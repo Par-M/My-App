@@ -27,6 +27,8 @@ enum ScheduleEndpoint: Endpoint {
     case listRecommendations(status: RecommendationStatus?)
     case accept(UUID)
     case reject(UUID)
+    case acceptItem(recommendationID: UUID, itemIndex: Int)
+    case redoItem(recommendationID: UUID, itemIndex: Int)
 
     var path: String {
         switch self {
@@ -40,6 +42,10 @@ enum ScheduleEndpoint: Endpoint {
             return "/api/v1/schedule/recommendations/\(id.uuidString.lowercased())/accept"
         case .reject(let id):
             return "/api/v1/schedule/recommendations/\(id.uuidString.lowercased())/reject"
+        case .acceptItem(let id, let index):
+            return "/api/v1/schedule/recommendations/\(id.uuidString.lowercased())/items/\(index)/accept"
+        case .redoItem(let id, let index):
+            return "/api/v1/schedule/recommendations/\(id.uuidString.lowercased())/items/\(index)/redo"
         }
     }
 
@@ -47,7 +53,7 @@ enum ScheduleEndpoint: Endpoint {
         switch self {
         case .listRecommendations:
             return .get
-        case .generate, .replan, .accept, .reject:
+        case .generate, .replan, .accept, .reject, .acceptItem, .redoItem:
             return .post
         }
     }

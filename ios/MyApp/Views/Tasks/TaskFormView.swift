@@ -8,6 +8,7 @@ struct TaskFormView: View {
 
     @Environment(TaskService.self) private var taskService
     @Environment(ScheduleService.self) private var scheduleService
+    @Environment(CategoryStore.self) private var categoryStore
     @Environment(\.dismiss) private var dismiss
 
     let mode: Mode
@@ -134,6 +135,15 @@ struct TaskFormView: View {
         hasRepeat ? Array(repeatDays).sorted() : nil
     }
 
+    private var categorySuggestions: [String] {
+        guard !category.isEmpty else { return [] }
+        return Array(
+            categoryStore.categories(from: taskService.tasks)
+                .filter { $0.localizedCaseInsensitiveContains(category) && $0 != category }
+                .prefix(5)
+        )
+    }
+
     private func repeatDayButton(_ day: Int) -> some View {
         let isSelected = repeatDays.contains(day)
         return Button {
@@ -189,61 +199,63 @@ struct TaskFormView: View {
                         .datePickerStyle(.wheel)
                     }
 
-                    Toggle("Deadline", isOn: $hasDeadline)
-                    if hasDeadline {
-                        DatePicker(
-                            "Date",
-                            selection: $deadline,
-                            displayedComponents: .date
-                        )
-                        DatePicker(
-                            "Time",
-                            selection: $deadline,
-                            displayedComponents: .hourAndMinute
-                        )
-                        .datePickerStyle(.wheel)
-                    }
-
-                    Toggle("Estimated Duration", isOn: $hasDuration)
-                    if hasDuration {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Hours")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                TextField("0", value: $durationHours, format: .number)
-                                    .keyboardType(.numberPad)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 64)
-                            }
-                            Text("h")
-                                .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Minutes")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                TextField("0", value: $durationMinutesPart, format: .number)
-                                    .keyboardType(.numberPad)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 64)
-                            }
-                            Text("m")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(totalDurationLabel)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                    if !hasFixedEvent {
+                        Toggle("Deadline", isOn: $hasDeadline)
+                        if hasDeadline {
+                            DatePicker(
+                                "Date",
+                                selection: $deadline,
+                                displayedComponents: .date
+                            )
+                            DatePicker(
+                                "Time",
+                                selection: $deadline,
+                                displayedComponents: .hourAndMinute
+                            )
+                            .datePickerStyle(.wheel)
                         }
-                    }
 
-                    Toggle("Repeats", isOn: $hasRepeat)
-                    if hasRepeat {
-                        HStack(spacing: 8) {
-                            ForEach(0..<7, id: \.self) { day in
-                                repeatDayButton(day)
+                        Toggle("Estimated Duration", isOn: $hasDuration)
+                        if hasDuration {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Hours")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    TextField("0", value: $durationHours, format: .number)
+                                        .keyboardType(.numberPad)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 64)
+                                }
+                                Text("h")
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Minutes")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    TextField("0", value: $durationMinutesPart, format: .number)
+                                        .keyboardType(.numberPad)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 64)
+                                }
+                                Text("m")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(totalDurationLabel)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        .frame(maxWidth: .infinity)
+
+                        Toggle("Repeats", isOn: $hasRepeat)
+                        if hasRepeat {
+                            HStack(spacing: 8) {
+                                ForEach(0..<7, id: \.self) { day in
+                                    repeatDayButton(day)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
                     }
                 }
 
@@ -263,7 +275,24 @@ struct TaskFormView: View {
                 }
 
                 Section {
-                    TextField("Category", text: $category)
+                    VStack(alignment: .leading, spacing: 0) {
+                        TextField("Category", text: $category)
+                            .accessibilityIdentifier("categoryField")
+                        ForEach(categorySuggestions, id: \.self) { suggestion in
+                            Button {
+                                category = suggestion
+                            } label: {
+                                Text(suggestion)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("categorySuggestion_\(suggestion)")
+                        }
+                    }
                     TextField("Notes", text: $notes, axis: .vertical)
                         .lineLimit(2...6)
                 }

@@ -53,6 +53,7 @@ struct DailySummaryResponse: Codable, Sendable {
     let tasksRemaining: Int
     let tasksMoved: Int
     let scheduleAdherence: Double
+    let missedToday: [MissedTaskEntry]
 
     enum CodingKeys: String, CodingKey {
         case date
@@ -63,5 +64,48 @@ struct DailySummaryResponse: Codable, Sendable {
         case tasksRemaining = "tasks_remaining"
         case tasksMoved = "tasks_moved"
         case scheduleAdherence = "schedule_adherence"
+        case missedToday = "missed_today"
+    }
+}
+
+struct MissedTaskEntry: Codable, Identifiable, Hashable, Sendable {
+    let taskId: UUID
+    let taskTitle: String
+    var category: String?
+    var missedDeadline: Date?
+    var reason: String?
+    var minutesRemaining: Int?
+    var rescheduledTo: Date?
+    let createdAt: Date
+
+    var id: UUID { taskId }
+
+    enum CodingKeys: String, CodingKey {
+        case taskId = "task_id"
+        case taskTitle = "task_title"
+        case category
+        case missedDeadline = "missed_deadline"
+        case reason
+        case minutesRemaining = "minutes_remaining"
+        case rescheduledTo = "rescheduled_to"
+        case createdAt = "created_at"
+    }
+}
+
+struct CategoryMissed: Codable, Identifiable, Hashable, Sendable {
+    let category: String
+    let count: Int
+    let reasons: [MissedTaskEntry]
+
+    var id: String { category }
+}
+
+struct MissedReasonsResponse: Codable, Sendable {
+    let total: Int
+    let byCategory: [CategoryMissed]
+
+    enum CodingKeys: String, CodingKey {
+        case total
+        case byCategory = "by_category"
     }
 }

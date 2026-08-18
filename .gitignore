@@ -2,3 +2,5 @@
 nohup.out
 *.xcuserstate
 xcuserdata/
+.vercel
+.env*

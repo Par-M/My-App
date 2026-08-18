@@ -5,6 +5,8 @@ enum CalendarEndpoint: Endpoint {
     case createBlock(CalendarBlockCreateRequest)
     case updateBlock(id: UUID, request: CalendarBlockUpdateRequest)
     case deleteBlock(UUID)
+    case completeBlock(id: UUID, note: String?)
+    case reopenBlock(UUID)
 
     var path: String {
         switch self {
@@ -14,6 +16,10 @@ enum CalendarEndpoint: Endpoint {
             return "/api/v1/calendar/blocks/\(id.uuidString.lowercased())"
         case .deleteBlock(let id):
             return "/api/v1/calendar/blocks/\(id.uuidString.lowercased())"
+        case .completeBlock(let id, _):
+            return "/api/v1/calendar/blocks/\(id.uuidString.lowercased())/complete"
+        case .reopenBlock(let id):
+            return "/api/v1/calendar/blocks/\(id.uuidString.lowercased())/reopen"
         }
     }
 
@@ -27,6 +33,8 @@ enum CalendarEndpoint: Endpoint {
             return .patch
         case .deleteBlock:
             return .delete
+        case .completeBlock, .reopenBlock:
+            return .post
         }
     }
 
@@ -36,6 +44,8 @@ enum CalendarEndpoint: Endpoint {
             return request
         case .updateBlock(_, let request):
             return request
+        case .completeBlock(_, let note):
+            return CompleteBlockRequest(note: note)
         default:
             return nil
         }

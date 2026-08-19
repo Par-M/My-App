@@ -38,6 +38,8 @@ class TaskCreate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     repeat_weekdays: list[int] | None = None
+    before_task_ids: list[uuid.UUID] | None = None
+    after_task_ids: list[uuid.UUID] | None = None
 
     @field_validator("title")
     @classmethod
@@ -76,6 +78,8 @@ class TaskUpdate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     repeat_weekdays: list[int] | None = None
+    before_task_ids: list[uuid.UUID] | None = None
+    after_task_ids: list[uuid.UUID] | None = None
 
     @field_validator("title")
     @classmethod
@@ -88,6 +92,16 @@ class TaskUpdate(BaseModel):
     @classmethod
     def repeat_weekdays_valid(cls, value: list[int] | None) -> list[int] | None:
         return _normalize_weekdays(value)
+
+    @field_validator("before_task_ids")
+    @classmethod
+    def before_ids_valid(cls, value: list[uuid.UUID] | None) -> list[uuid.UUID] | None:
+        return list(dict.fromkeys(value)) if value else None
+
+    @field_validator("after_task_ids")
+    @classmethod
+    def after_ids_valid(cls, value: list[uuid.UUID] | None) -> list[uuid.UUID] | None:
+        return list(dict.fromkeys(value)) if value else None
 
     @model_validator(mode="after")
     def fixed_event_times_valid(self):
@@ -118,6 +132,8 @@ class TaskResponse(BaseModel):
     notes: str | None
     progress_percent: int
     repeat_weekdays: list[int] | None
+    before_task_ids: list[uuid.UUID] | None
+    after_task_ids: list[uuid.UUID] | None
     is_archived: bool
     created_at: datetime
     updated_at: datetime

@@ -140,6 +140,16 @@ class Task(Base):
         nullable=True,
     )
 
+    before_task_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=True,
+    )
+
+    after_task_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=True,
+    )
+
     is_archived: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

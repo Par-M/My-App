@@ -97,7 +97,9 @@ final class TaskService {
         estimatedDuration: Int?,
         category: String?,
         notes: String?,
-        repeatWeekdays: [Int]?
+        repeatWeekdays: [Int]?,
+        beforeTaskIds: [UUID]? = nil,
+        afterTaskIds: [UUID]? = nil
     ) async throws -> TaskItem {
         let request = TaskCreateRequest(
             title: title,
@@ -110,7 +112,9 @@ final class TaskService {
             estimatedDuration: estimatedDuration,
             category: category,
             notes: notes,
-            repeatWeekdays: repeatWeekdays
+            repeatWeekdays: repeatWeekdays,
+            beforeTaskIds: beforeTaskIds,
+            afterTaskIds: afterTaskIds
         )
 
         if !connectivity.isConnected, let store {
@@ -133,6 +137,8 @@ final class TaskService {
                 category: request.category,
                 notes: request.notes,
                 repeatWeekdays: request.repeatWeekdays,
+                beforeTaskIds: request.beforeTaskIds,
+                afterTaskIds: request.afterTaskIds,
                 isArchived: false,
                 progressPercent: 0,
                 createdAt: now,
@@ -173,6 +179,8 @@ final class TaskService {
                     category: request.category,
                     notes: request.notes,
                     repeatWeekdays: request.repeatWeekdays,
+                    beforeTaskIds: request.beforeTaskIds,
+                    afterTaskIds: request.afterTaskIds,
                     isArchived: false,
                     progressPercent: 0,
                     createdAt: now,
@@ -247,6 +255,9 @@ final class TaskService {
         } else {
             do {
                 _ = try await client.request(TaskEndpoint.delete(task.id)) as MessageResponse
+                store?.purgeTask(id: task.id)
+                isOfflineMode = false
+            } catch NetworkError.httpStatus(404) {
                 store?.purgeTask(id: task.id)
                 isOfflineMode = false
             } catch {

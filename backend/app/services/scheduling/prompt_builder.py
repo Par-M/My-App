@@ -35,6 +35,19 @@ def _fixed_window(task: TaskContext, timezone: str) -> str:
     )
 
 
+def _ordering(task: TaskContext) -> str:
+    parts = []
+    if task.after_task_titles:
+        parts.append(
+            "after: " + ", ".join(f'"{title}"' for title in task.after_task_titles)
+        )
+    if task.before_task_titles:
+        parts.append(
+            "before: " + ", ".join(f'"{title}"' for title in task.before_task_titles)
+        )
+    return "; ".join(parts) if parts else "none"
+
+
 def _hour_text(value: float) -> str:
     hour = int(value)
     minute = int(round((value - hour) * 60))
@@ -64,7 +77,9 @@ def build_prompt(context: SchedulingContext) -> str:
         lines.append(
             f"- id={task.id} | {task.title} | {task.duration_minutes} min "
             f"| priority={task.priority.value} | deadline={_deadline(task)} "
+            f"| overdue={'yes' if task.is_overdue else 'no'} "
             f"| fixed={_fixed_window(task, context.timezone)} "
+            f"| ordering={_ordering(task)} "
             f"| energy={task.energy_level}"
         )
     lines.append("")
@@ -108,10 +123,26 @@ def build_prompt(context: SchedulingContext) -> str:
         "deadline, omit it entirely and say so in reasoning."
     )
     lines.append(
+        "Overdue tasks (overdue=yes) have a deadline that has already passed. "
+        "They are the TOP priority: schedule them as early as possible in the "
+        "window, before any non-overdue task, even if that places a block after "
+        "their (already past) due date. Only omit an overdue task if there is "
+        "genuinely no free slot that fits its duration. Never deprioritize an "
+        "overdue task or omit it just because its due date has passed."
+    )
+    lines.append(
         "Fixed tasks (fixed value other than \"none\") are HARD time constraints: "
         "schedule each one as exactly ONE block spanning its fixed start and end times, "
         "in that exact window. Never move, shorten, split, or extend a fixed task, and "
         "never place any other task's block inside a fixed task's window. If a fixed "
         "window cannot be honoured, omit that task and explain why in reasoning."
+    )
+    lines.append(
+        "Ordering constraints: when a task's ordering lists another task under "
+        "\\\"after\\\", its blocks (or at least the first block) must be scheduled AFTER "
+        "all blocks of that referenced task. When a task's ordering lists another task "
+        "under \\\"before\\\", its blocks must be scheduled BEFORE any block of that "
+        "referenced task. Respect every ordering constraint; if the ordering forces an "
+        "unschedulable layout, omit the task that cannot be placed and say so in reasoning."
     )
     return "\n".join(lines)

@@ -257,6 +257,9 @@ final class TaskService {
                 _ = try await client.request(TaskEndpoint.delete(task.id)) as MessageResponse
                 store?.purgeTask(id: task.id)
                 isOfflineMode = false
+            } catch NetworkError.httpStatus(404) {
+                store?.purgeTask(id: task.id)
+                isOfflineMode = false
             } catch {
                 if let store, isNetworkUnavailable(error) {
                     store.markDeleted(taskId: task.id)

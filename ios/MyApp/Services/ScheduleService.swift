@@ -217,6 +217,8 @@ final class ScheduleService {
             do {
                 _ = try await client.request(CalendarEndpoint.deleteBlock(block.id)) as MessageResponse
                 store?.purgeBlock(id: block.id)
+            } catch NetworkError.httpStatus(404) {
+                store?.purgeBlock(id: block.id)
             } catch {
                 if let store, isNetworkUnavailable(error) {
                     store.markDeleted(blockId: block.id)

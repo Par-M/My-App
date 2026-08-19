@@ -89,10 +89,16 @@ def validate_schedule(
 
         task = tasks_by_id[block.task_id]
         if task.deadline is not None and end > _normalize(task.deadline):
-            validation.errors.append(
-                f"Deadline violation for '{block.task_title}': "
-                f"block ends after its deadline"
-            )
+            if task.is_overdue:
+                validation.warnings.append(
+                    f"'{block.task_title}' is overdue and scheduled after its "
+                    "already-passed deadline, which is allowed."
+                )
+            else:
+                validation.errors.append(
+                    f"Deadline violation for '{block.task_title}': "
+                    f"block ends after its deadline"
+                )
 
         if task.is_fixed and (
             start != _normalize(task.start_at) or end != _normalize(task.end_at)

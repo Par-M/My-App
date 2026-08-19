@@ -30,10 +30,10 @@ struct TaskFormView: View {
     @State private var repeatDays: Set<Int>
     @State private var category: String
     @State private var notes: String
+    @State private var beforeTaskIDs: Set<UUID>
+    @State private var afterTaskIDs: Set<UUID>
     @State private var isSaving = false
     @State private var errorMessage: String?
-    @State private var showPositionSheet = false
-    @State private var createdTask: TaskItem?
 
     init(mode: Mode, onSaved: ((TaskItem) -> Void)? = nil) {
         self.mode = mode
@@ -57,6 +57,8 @@ struct TaskFormView: View {
             _repeatDays = State(initialValue: [])
             _category = State(initialValue: "")
             _notes = State(initialValue: "")
+            _beforeTaskIDs = State(initialValue: [])
+            _afterTaskIDs = State(initialValue: [])
         case .edit(let task):
             _title = State(initialValue: task.title)
             _detail = State(initialValue: task.description ?? "")
@@ -78,6 +80,8 @@ struct TaskFormView: View {
             _repeatDays = State(initialValue: Set(task.repeatWeekdays ?? []))
             _category = State(initialValue: task.category ?? "")
             _notes = State(initialValue: task.notes ?? "")
+            _beforeTaskIDs = State(initialValue: Set(task.beforeTaskIds ?? []))
+            _afterTaskIDs = State(initialValue: Set(task.afterTaskIds ?? []))
         }
     }
 
@@ -137,6 +141,17 @@ struct TaskFormView: View {
         hasRepeat ? Array(repeatDays).sorted() : nil
     }
 
+    private var selfTaskID: UUID? {
+        if case .edit(let task) = mode {
+            return task.id
+        }
+        return nil
+    }
+
+    private var candidateTasks: [TaskItem] {
+        taskService.tasks.filter { $0.id != selfTaskID }
+    }
+
     private var categorySuggestions: [String] {
         guard !category.isEmpty else { return [] }
         return Array(
@@ -166,6 +181,45 @@ struct TaskFormView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("repeatDay\(day)")
+    }
+
+    @ViewBuilder
+    private func orderingList(title: String, selection: Binding<Set<UUID>>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            ForEach(orderedCandidates) { task in
+                let isSelected = selection.wrappedValue.contains(task.id)
+                Button {
+                    if isSelected {
+                        selection.wrappedValue.remove(task.id)
+                    } else {
+                        selection.wrappedValue.insert(task.id)
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        Text(task.title)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("ordering_\(title)_\(task.id)")
+            }
+        }
+    }
+
+    private var orderedCandidates: [TaskItem] {
+        candidateTasks.sorted {
+            let lhsDeadline = $0.deadline ?? $0.createdAt
+            let rhsDeadline = $1.deadline ?? $1.createdAt
+            return lhsDeadline < rhsDeadline
+        }
     }
 
     var body: some View {
@@ -261,6 +315,15 @@ struct TaskFormView: View {
                     }
                 }
 
+                if !candidateTasks.isEmpty {
+                    Section("Ordering") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            orderingList(title: "Do before", selection: $beforeTaskIDs)
+                            orderingList(title: "Do after", selection: $afterTaskIDs)
+                        }
+                    }
+                }
+
                 Section {
                     Picker("Priority", selection: $priority) {
                         ForEach(TaskPriority.allCases) { priority in
@@ -333,18 +396,6 @@ struct TaskFormView: View {
                     .accessibilityIdentifier("saveTaskButton")
                 }
             }
-            .sheet(isPresented: $showPositionSheet) {
-                if let created = createdTask {
-                    PositionTaskSheet(
-                        taskTitle: created.title,
-                        existingTasks: taskService.tasks,
-                        onPositioned: { referenceTask, before in
-                            Task { await repositionTask(created, relativeTo: referenceTask, before: before) }
-                        },
-                        onSkip: { dismiss() }
-                    )
-                }
-            }
         }
     }
 
@@ -395,6 +446,8 @@ struct TaskFormView: View {
         let descriptionValue = detail.isEmpty ? nil : detail
         let notesValue = notes.isEmpty ? nil : notes
         let repeatWeekdaysValue = hasRepeat ? selectedWeekdaysValue : nil
+        let beforeTaskIdsValue = beforeTaskIDs.isEmpty ? nil : Array(beforeTaskIDs)
+        let afterTaskIdsValue = afterTaskIDs.isEmpty ? nil : Array(afterTaskIDs)
 
         do {
             switch mode {
@@ -410,10 +463,11 @@ struct TaskFormView: View {
                     estimatedDuration: durationValue,
                     category: categoryValue,
                     notes: notesValue,
-                    repeatWeekdays: repeatWeekdaysValue
+                    repeatWeekdays: repeatWeekdaysValue,
+                    beforeTaskIds: beforeTaskIdsValue,
+                    afterTaskIds: afterTaskIdsValue
                 )
-                createdTask = created
-                showPositionSheet = true
+                onSaved?(created)
             case .edit(let task):
                 var updated = task
                 updated.title = trimmedTitle
@@ -427,6 +481,8 @@ struct TaskFormView: View {
                 updated.category = categoryValue
                 updated.notes = notesValue
                 updated.repeatWeekdays = repeatWeekdaysValue
+                updated.beforeTaskIds = beforeTaskIdsValue
+                updated.afterTaskIds = afterTaskIdsValue
                 let saved = try await taskService.updateTask(updated)
                 onSaved?(saved)
             }
@@ -434,27 +490,5 @@ struct TaskFormView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func repositionTask(_ task: TaskItem, relativeTo reference: TaskItem, before: Bool) async {
-        let cal = Calendar.current
-        let refDeadline = reference.deadline ?? Date()
-        let newDeadline: Date
-
-        if before {
-            newDeadline = cal.date(byAdding: .day, value: -1, to: refDeadline) ?? refDeadline
-        } else {
-            newDeadline = cal.date(byAdding: .day, value: 1, to: refDeadline) ?? refDeadline
-        }
-
-        var updated = task
-        updated.deadline = newDeadline
-        do {
-            _ = try await taskService.updateTask(updated)
-            onSaved?(updated)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        dismiss()
     }
 }

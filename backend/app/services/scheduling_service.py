@@ -176,6 +176,8 @@ class SchedulingService:
             for offset in range((effective_end - today).days + 1)
         ]
         factors = self._productivity_factors(tasks)
+        by_id = {task.id: task for task in tasks}
+        now = _utc_now()
         context = SchedulingContext(
             tasks=[
                 TaskContext(
@@ -190,6 +192,19 @@ class SchedulingService:
                     energy_level=preference.energy_level,
                     start_at=task.start_at,
                     end_at=task.end_at,
+                    before_task_titles=tuple(
+                        by_id[t].title
+                        for t in (task.before_task_ids or [])
+                        if t in by_id
+                    ),
+                    after_task_titles=tuple(
+                        by_id[t].title
+                        for t in (task.after_task_ids or [])
+                        if t in by_id
+                    ),
+                    is_overdue=(
+                        task.deadline is not None and task.deadline < now
+                    ),
                 )
                 for task in tasks
             ],

@@ -74,6 +74,71 @@ struct TaskRow: View {
     }
 }
 
+struct DeferredTaskRow: View {
+    let task: TaskItem
+    var onChangeStatus: (TaskStatus) -> Void = { _ in }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    PriorityBadge(priority: task.priority)
+                    Text(task.title)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                }
+                HStack(spacing: 12) {
+                    if let deadline = task.deadline {
+                        Label(
+                            "Missed \(deadline.formatted(date: .abbreviated, time: .shortened))",
+                            systemImage: "calendar.badge.exclamationmark"
+                        )
+                    } else if let start = task.startAt {
+                        Label(
+                            "Was scheduled \(start.formatted(date: .omitted, time: .shortened))",
+                            systemImage: "clock.badge.exclamationmark"
+                        )
+                    } else {
+                        Text("Behind schedule")
+                    }
+                    Spacer(minLength: 8)
+                    Menu {
+                        ForEach(TaskStatus.allCases) { status in
+                            Button {
+                                onChangeStatus(status)
+                            } label: {
+                                if status == task.status {
+                                    Label(status.label, systemImage: "checkmark")
+                                } else {
+                                    Text(status.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(task.status.label)
+                                .font(.caption2.weight(.medium))
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9).weight(.semibold))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.15), in: Capsule())
+                        .foregroundStyle(.orange)
+                        .fixedSize()
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 struct PriorityBadge: View {
     let priority: TaskPriority
 
@@ -140,6 +205,16 @@ struct TaskListView: View {
         taskService.tasks.filter { $0.status == .completed }
     }
 
+    private var deferredTasks: [TaskItem] {
+        let deferredIDs = Set(taskService.overdueTasks.map(\.id))
+        return activeTasks.filter { deferredIDs.contains($0.id) }
+    }
+
+    private var schedulableTasks: [TaskItem] {
+        let deferredIDs = Set(taskService.overdueTasks.map(\.id))
+        return activeTasks.filter { !deferredIDs.contains($0.id) }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -157,7 +232,28 @@ struct TaskListView: View {
                     )
                 } else {
                     List {
-                        ForEach(activeTasks) { task in
+                        if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
+                            Section {
+                                ForEach(deferredTasks) { task in
+                                    NavigationLink(value: task) {
+                                        DeferredTaskRow(task: task) { status in
+                                            Task {
+                                                try? await taskService.setStatus(status, for: task)
+                                            }
+                                        }
+                                    }
+                                }
+                            } header: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(.orange)
+                                    Text("Behind Schedule")
+                                        .font(.caption.weight(.semibold))
+                                }
+                            }
+                        }
+
+                        ForEach(schedulableTasks) { task in
                             NavigationLink(value: task) {
                                 TaskRow(task: task) { status in
                                     Task {

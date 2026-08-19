@@ -27,6 +27,9 @@ class TaskContext:
     energy_level: int
     start_at: datetime | None = None
     end_at: datetime | None = None
+    before_task_titles: tuple[str, ...] = ()
+    after_task_titles: tuple[str, ...] = ()
+    is_overdue: bool = False
 
     @property
     def is_fixed(self) -> bool:

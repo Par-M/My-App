@@ -199,6 +199,31 @@ class TestValidator:
         assert not result.is_valid
         assert any("Deadline" in e for e in result.errors)
 
+    def test_allows_overdue_block_past_deadline(self):
+        deadline = datetime(2026, 8, 2, 10, 0, tzinfo=UTC)
+        t = TaskContext(
+            id=uuid.uuid4(),
+            title="Late",
+            deadline=deadline,
+            duration_minutes=60,
+            priority=TaskPriority.medium,
+            energy_level=3,
+            is_overdue=True,
+        )
+        context = build_context([t])
+        result = validate_schedule(
+            ProposedBlock(
+                task_id=t.id,
+                task_title=t.title,
+                start=utc("2026-08-03T09:00:00+00:00"),
+                end=utc("2026-08-03T10:00:00+00:00"),
+                reason="x",
+            ),
+            context,
+        )
+        assert result.is_valid
+        assert any("overdue" in w for w in result.warnings)
+
     def test_rejects_invalid_time(self):
         t = task()
         context = build_context([t])
@@ -671,6 +696,56 @@ class TestHeuristicProvider:
         assert [b.task_title for b in result.items] == ["High"]
         assert result.items[0].end == utc("2026-08-03T10:00:00+00:00")
         assert "Low" in result.reasoning
+
+    def test_overdue_beats_high_priority_non_overdue(self):
+        overdue = task("Overdue", priority=TaskPriority.medium, duration=60)
+        overdue = TaskContext(
+            id=overdue.id,
+            title=overdue.title,
+            deadline=datetime(2026, 8, 1, 10, 0, tzinfo=UTC),
+            duration_minutes=60,
+            priority=TaskPriority.medium,
+            energy_level=3,
+            is_overdue=True,
+        )
+        high = task("High", priority=TaskPriority.high, duration=60)
+        context = SchedulingContext(
+            tasks=[high, overdue],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T13:00:00+00:00")],
+            buffer_minutes=15,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert [b.task_title for b in result.items] == ["Overdue", "High"]
+        assert result.items[0].start == utc("2026-08-03T09:00:00+00:00")
+
+    def test_schedules_overdue_past_deadline(self):
+        overdue = TaskContext(
+            id=uuid.uuid4(),
+            title="Late",
+            deadline=datetime(2026, 8, 2, 10, 0, tzinfo=UTC),
+            duration_minutes=120,
+            priority=TaskPriority.medium,
+            energy_level=3,
+            is_overdue=True,
+        )
+        context = SchedulingContext(
+            tasks=[overdue],
+            dates=[DATES[0]],
+            timezone="UTC",
+            free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T12:00:00+00:00")],
+            buffer_minutes=0,
+        )
+        provider = HeuristicProvider()
+        result = provider.generate_schedule(context, build_prompt(context))
+        assert len(result.items) >= 1
+        assert sum(
+            int((b.end - b.start).total_seconds() // 60) for b in result.items
+        ) == 120
+        assert result.items[-1].end > overdue.deadline
+        assert "overdue" in result.items[0].reason.lower()
 
     def test_places_fixed_task_at_exact_window(self):
         t = task(

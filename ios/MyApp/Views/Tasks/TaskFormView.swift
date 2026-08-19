@@ -32,6 +32,8 @@ struct TaskFormView: View {
     @State private var notes: String
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showPositionSheet = false
+    @State private var createdTask: TaskItem?
 
     init(mode: Mode, onSaved: ((TaskItem) -> Void)? = nil) {
         self.mode = mode
@@ -331,6 +333,18 @@ struct TaskFormView: View {
                     .accessibilityIdentifier("saveTaskButton")
                 }
             }
+            .sheet(isPresented: $showPositionSheet) {
+                if let created = createdTask {
+                    PositionTaskSheet(
+                        taskTitle: created.title,
+                        existingTasks: taskService.tasks,
+                        onPositioned: { referenceTask, before in
+                            Task { await repositionTask(created, relativeTo: referenceTask, before: before) }
+                        },
+                        onSkip: { dismiss() }
+                    )
+                }
+            }
         }
     }
 
@@ -398,7 +412,8 @@ struct TaskFormView: View {
                     notes: notesValue,
                     repeatWeekdays: repeatWeekdaysValue
                 )
-                onSaved?(created)
+                createdTask = created
+                showPositionSheet = true
             case .edit(let task):
                 var updated = task
                 updated.title = trimmedTitle
@@ -419,5 +434,27 @@ struct TaskFormView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func repositionTask(_ task: TaskItem, relativeTo reference: TaskItem, before: Bool) async {
+        let cal = Calendar.current
+        let refDeadline = reference.deadline ?? Date()
+        let newDeadline: Date
+
+        if before {
+            newDeadline = cal.date(byAdding: .day, value: -1, to: refDeadline) ?? refDeadline
+        } else {
+            newDeadline = cal.date(byAdding: .day, value: 1, to: refDeadline) ?? refDeadline
+        }
+
+        var updated = task
+        updated.deadline = newDeadline
+        do {
+            _ = try await taskService.updateTask(updated)
+            onSaved?(updated)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        dismiss()
     }
 }

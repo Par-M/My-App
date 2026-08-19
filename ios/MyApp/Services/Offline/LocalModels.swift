@@ -20,6 +20,8 @@ final class LocalTask {
     var category: String?
     var notes: String?
     var repeatWeekdays: [Int]?
+    var beforeTaskIds: [UUID]?
+    var afterTaskIds: [UUID]?
     var isArchived: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -45,6 +47,8 @@ final class LocalTask {
         category: String? = nil,
         notes: String? = nil,
         repeatWeekdays: [Int]? = nil,
+        beforeTaskIds: [UUID]? = nil,
+        afterTaskIds: [UUID]? = nil,
         isArchived: Bool = false,
         createdAt: Date,
         updatedAt: Date,
@@ -69,6 +73,8 @@ final class LocalTask {
         self.category = category
         self.notes = notes
         self.repeatWeekdays = repeatWeekdays
+        self.beforeTaskIds = beforeTaskIds
+        self.afterTaskIds = afterTaskIds
         self.isArchived = isArchived
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -96,6 +102,8 @@ final class LocalTask {
             category: task.category,
             notes: task.notes,
             repeatWeekdays: task.repeatWeekdays,
+            beforeTaskIds: task.beforeTaskIds,
+            afterTaskIds: task.afterTaskIds,
             isArchived: task.isArchived,
             createdAt: task.createdAt,
             updatedAt: task.updatedAt,
@@ -124,6 +132,8 @@ final class LocalTask {
             category: category,
             notes: notes,
             repeatWeekdays: repeatWeekdays,
+            beforeTaskIds: beforeTaskIds,
+            afterTaskIds: afterTaskIds,
             isArchived: isArchived,
             progressPercent: 0,
             createdAt: createdAt,

@@ -136,6 +136,7 @@ class HeuristicProvider:
         flexible = sorted(
             (task for task in context.tasks if not task.is_fixed),
             key=lambda task: (
+                not task.is_overdue,
                 -PRIORITY_RANK.get(task.priority, 1),
                 task.deadline is None,
                 task.deadline or datetime.max.replace(tzinfo=ZoneInfo("UTC")),
@@ -248,6 +249,7 @@ class HeuristicProvider:
                     continue
                 if (
                     deadline is not None
+                    and not task.is_overdue
                     and slot.start + timedelta(minutes=chunk) > deadline
                 ):
                     continue
@@ -293,9 +295,11 @@ class HeuristicProvider:
         self, task, start: datetime, part: int = 1, total_parts: int = 1
     ) -> str:
         reasons = []
-        if task.priority == TaskPriority.high:
+        if task.is_overdue:
+            reasons.append("overdue, scheduled ASAP as top priority")
+        elif task.priority == TaskPriority.high:
             reasons.append("high priority")
-        if task.deadline is not None:
+        if task.deadline is not None and not task.is_overdue:
             reasons.append(
                 f"deadline {task.deadline.date().isoformat()}, scheduled before it"
             )

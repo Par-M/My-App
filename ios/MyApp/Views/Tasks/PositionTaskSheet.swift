@@ -7,13 +7,17 @@ struct PositionTaskSheet: View {
     let onSkip: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTask: TaskItem?
-    @State private var placeBefore = true
+    @State private var beforeTask: TaskItem?
+    @State private var afterTask: TaskItem?
 
     private var activeTasks: [TaskItem] {
         existingTasks
             .filter { $0.status != .completed }
             .sorted { ($0.deadline ?? .distantFuture) < ($1.deadline ?? .distantFuture) }
+    }
+
+    private var canPlace: Bool {
+        beforeTask != nil || afterTask != nil
     }
 
     var body: some View {
@@ -23,7 +27,7 @@ struct PositionTaskSheet: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Position \"\(taskTitle)\"")
                             .font(.headline)
-                        Text("Should this task come before or after an existing task?")
+                        Text("Choose a task this one should come before or after.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -39,41 +43,43 @@ struct PositionTaskSheet: View {
                         )
                     }
                 } else {
-                    Section("Place relative to") {
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .foregroundStyle(.blue)
+                            Text("Before:")
+                                .font(.headline)
+                            Spacer()
+                        }
                         ForEach(activeTasks) { task in
-                            Button {
-                                selectedTask = task
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(task.title)
-                                            .font(.body.weight(.medium))
-                                            .foregroundStyle(selectedTask?.id == task.id ? .primary : .primary)
-                                        if let deadline = task.deadline {
-                                            Text("Due \(deadline.formatted(date: .abbreviated, time: .shortened))")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    if selectedTask?.id == task.id {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.blue)
-                                    }
+                            taskButton(task, isSelected: beforeTask?.id == task.id) {
+                                if beforeTask?.id == task.id {
+                                    beforeTask = nil
+                                } else {
+                                    beforeTask = task
+                                    afterTask = nil
                                 }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
 
-                    if selectedTask != nil {
-                        Section("Position") {
-                            Picker("Position", selection: $placeBefore) {
-                                Text("Before").tag(true)
-                                Text("After").tag(false)
+                    Section {
+                        HStack(spacing: 12) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("After:")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        ForEach(activeTasks) { task in
+                            taskButton(task, isSelected: afterTask?.id == task.id) {
+                                if afterTask?.id == task.id {
+                                    afterTask = nil
+                                } else {
+                                    afterTask = task
+                                    beforeTask = nil
+                                }
                             }
-                            .pickerStyle(.segmented)
-                            .listRowBackground(Color(.secondarySystemBackground))
                         }
                     }
                 }
@@ -89,14 +95,38 @@ struct PositionTaskSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Place") {
-                        if let selected = selectedTask {
-                            onPositioned(selected, placeBefore)
+                        if let selected = beforeTask {
+                            onPositioned(selected, true)
+                        } else if let selected = afterTask {
+                            onPositioned(selected, false)
                         }
                         dismiss()
                     }
-                    .disabled(selectedTask == nil)
+                    .disabled(!canPlace)
                 }
             }
         }
+    }
+
+    private func taskButton(_ task: TaskItem, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.body.weight(.medium))
+                    if let deadline = task.deadline {
+                        Text("Due \(deadline.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.blue)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 }

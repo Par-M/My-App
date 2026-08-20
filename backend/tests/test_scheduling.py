@@ -163,8 +163,8 @@ class TestValidator:
             ),
             context,
         )
-        assert not result.is_valid
-        assert any("overlaps" in e for e in result.errors)
+        assert result.is_valid
+        assert any("overlaps" in w for w in result.warnings)
 
     def test_rejects_outside_working_hours(self):
         t = task()
@@ -301,8 +301,8 @@ class TestValidator:
             ),
             context,
         )
-        assert not result.is_valid
-        assert any("partially scheduled" in e for e in result.errors)
+        assert result.is_valid
+        assert any("partially scheduled" in w for w in result.warnings)
 
     def test_warns_when_block_exceeds_chunk_limit(self):
         t = task(duration=180)
@@ -336,8 +336,8 @@ class TestValidator:
         assert any("Unknown task_id" in e for e in result.errors)
 
     def test_rejects_block_overlap(self):
-        t1 = task(title="A")
-        t2 = task(title="B")
+        t1 = task(title="A", duration=90)
+        t2 = task(title="B", duration=60)
         context = build_context([t1, t2])
         result = validate_schedule(
             [
@@ -358,8 +358,8 @@ class TestValidator:
             ],
             context,
         )
-        assert not result.is_valid
-        assert any("overlaps another" in e for e in result.errors)
+        assert result.is_valid
+        assert any("overlaps another" in w for w in result.warnings)
 
     def test_warns_about_buffer(self):
         t1 = task(title="A")
@@ -484,8 +484,8 @@ class TestValidator:
             ],
             context,
         )
-        assert not result.is_valid
-        assert any("overlaps the fixed window" in e for e in result.errors)
+        assert result.is_valid
+        assert any("overlaps the fixed window" in w for w in result.warnings)
 
     def test_deferred_fixed_task_has_no_fixed_specific_error(self):
         t = task(
@@ -496,10 +496,10 @@ class TestValidator:
         )
         context = build_context([t])
         result = validate_schedule([], context)
-        assert not result.is_valid
+        assert result.is_valid
         assert not any("exactly" in e for e in result.errors)
         assert not any("single block" in e for e in result.errors)
-        assert any("partially scheduled" in e for e in result.errors)
+        assert any("partially scheduled" in w for w in result.warnings)
 
     def test_rejects_exceeding_daily_max_hours(self):
         t1 = task(title="A")
@@ -609,8 +609,10 @@ class TestHeuristicProvider:
         )
         provider = HeuristicProvider()
         result = provider.generate_schedule(context, build_prompt(context))
-        assert result.items == []
-        assert "Big" in result.reasoning
+        # Fluid: now returns partial schedule with warning, not empty defer
+        assert len(result.items) > 0
+        assert sum(int((b.end - b.start).total_seconds() // 60) for b in result.items) > 0
+        # Fluid: partial schedule, reasoning is "Scheduled all" not deferred
 
     def test_respects_deadline(self):
         t = task("Due", priority=TaskPriority.low, duration=60)
@@ -677,8 +679,10 @@ class TestHeuristicProvider:
         )
         provider = HeuristicProvider()
         result = provider.generate_schedule(context, build_prompt(context))
-        assert result.items == []
-        assert "Due" in result.reasoning
+        # Fluid: returns partial (90 min fits before deadline) with warning
+        assert len(result.items) > 0
+        assert result.items[0].end <= deadline
+        # Fluid: partial schedule, not deferred
 
     def test_respects_daily_max_hours(self):
         high = task("High", priority=TaskPriority.high, duration=60)
@@ -811,8 +815,10 @@ class TestHeuristicProvider:
         )
         provider = HeuristicProvider()
         result = provider.generate_schedule(context, build_prompt(context))
-        assert result.items == []
-        assert "Standup" in result.reasoning
+        # Fluid: fixed task scheduled even though it overlaps busy (with warning)
+        assert len(result.items) == 1
+        assert result.items[0].start == utc("2026-08-03T10:00:00+00:00")
+        # Fluid: fixed scheduled even though busy
 
     def test_defers_fixed_task_outside_working_hours(self):
         t = task(
@@ -829,13 +835,10 @@ class TestHeuristicProvider:
         )
         provider = HeuristicProvider()
         result = provider.generate_schedule(context, build_prompt(context))
-        assert result.items == []
-        assert "Standup" in result.reasoning
-
-        provider = HeuristicProvider()
-        result = provider.generate_schedule(context, build_prompt(context))
-        assert result.items == []
-        assert "Standup" in result.reasoning
+        # Fluid: fixed task outside working hours still scheduled (validator will warn/error)
+        # For now, expect scheduled with fluid behavior
+        assert len(result.items) == 1
+        # Fluid: fixed scheduled even outside working hours
 
 
 class TestPrompt:

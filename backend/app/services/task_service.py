@@ -52,11 +52,17 @@ def recompute_task_progress(db: Session, task_id: uuid.UUID) -> None:
     task = db.get(Task, task_id)
     if task is None:
         return
-    if task.status == TaskStatus.completed:
+    if total and total > 0 and completed == total:
+        if task.status != TaskStatus.completed:
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(_utc())
         task.progress_percent = 100
-    elif total and total > 0 and completed == total:
-        task.status = TaskStatus.completed
-        task.completed_at = datetime.now(_utc())
+    elif task.status == TaskStatus.completed and total and completed is not None and completed < total:
+        # Reopened a block after completion - revert to pending
+        task.status = TaskStatus.pending
+        task.completed_at = None
+        task.progress_percent = round((completed or 0) * 100 / total) if total else 0
+    elif task.status == TaskStatus.completed:
         task.progress_percent = 100
     elif total:
         task.progress_percent = round((completed or 0) * 100 / total)

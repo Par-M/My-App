@@ -220,7 +220,28 @@ class HeuristicProvider:
                 remaining[index:index + 1] = carved
                 remaining.sort(key=lambda slot: (slot.start, slot.end))
                 return blocks, remaining
-        return None
+        # Fluid: if no free slot fully contains the fixed window, still schedule it
+        # at its exact window with a warning (overlaps busy). Carve any overlapping slots.
+        blocks = [
+            ProposedBlock(
+                task_id=task.id,
+                task_title=task.title,
+                start=window.start,
+                end=window.end,
+                reason="fixed event, scheduled at its exact window (overlaps busy time - fluid schedule)",
+            )
+        ]
+        remaining: list[TimeSlot] = []
+        for slot in available:
+            if slot.end <= window.start or slot.start >= window.end:
+                remaining.append(slot)
+            else:
+                if slot.start < window.start:
+                    remaining.append(TimeSlot(slot.start, window.start))
+                if window.end < slot.end:
+                    remaining.append(TimeSlot(window.end, slot.end))
+        remaining.sort(key=lambda slot: (slot.start, slot.end))
+        return blocks, remaining
 
     def _place_task(
         self,
@@ -278,7 +299,7 @@ class HeuristicProvider:
             if not placed_in_this_pass:
                 break
 
-        if remaining_duration > 0:
+        if not blocks:
             return None
         return blocks, remaining_slots
 

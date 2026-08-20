@@ -101,16 +101,9 @@ class SchedulingService:
             statement = statement.where(Task.id.in_(task_ids))
         tasks = list(self.db.scalars(statement).all())
 
-        if tasks:
-            scheduled_ids = set(
-                self.db.scalars(
-                    select(CalendarBlock.task_id).where(
-                        CalendarBlock.user_id == self.user_id,
-                    )
-                ).all()
-            )
-            tasks = [t for t in tasks if t.id not in scheduled_ids]
-
+        # Fluid: keep tasks with pending blocks as reschedulable so they can move
+        # Only exclude tasks whose blocks are all completed (task already done) - but those are already filtered by status != completed
+        # For pending blocks, we keep the task in the pool and handle busy exclusion in _build_context
         return tasks
 
     def _preferences(self) -> UserPreference:
@@ -225,13 +218,16 @@ class SchedulingService:
                 )
             ).all()
         )
+        # Fluid: don't treat blocks for tasks being rescheduled as hard busy - they can move
+        reschedulable_ids = {t.id for t in tasks}
+        fluid_blocks = [b for b in existing_blocks if b.task_id not in reschedulable_ids]
         context.free_slots = find_free_slots(
             dates=dates,
             busy=[
                 *context.busy_times,
                 *[
                     TimeSlot(block.start_at, block.end_at)
-                    for block in existing_blocks
+                    for block in fluid_blocks
                     if block.start_at is not None and block.end_at is not None
                 ],
                 TimeSlot(

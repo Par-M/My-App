@@ -117,7 +117,7 @@ def validate_schedule(
 
         for busy_start, busy_end in busy:
             if start < busy_end and end > busy_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps a busy calendar event"
                 )
                 break
@@ -142,7 +142,7 @@ def validate_schedule(
                 f"which exceeds its {task.duration_minutes} minute duration"
             )
         elif scheduled < task.duration_minutes:
-            validation.errors.append(
+            validation.warnings.append(
                 f"Task '{task.title}' is only partially scheduled "
                 f"({scheduled} of {task.duration_minutes} minutes)"
             )
@@ -169,7 +169,7 @@ def validate_schedule(
             continue
         for fixed_task, fixed_start, fixed_end in fixed_windows:
             if start < fixed_end and end > fixed_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps the fixed window of "
                     f"'{fixed_task.title}'"
                 )

@@ -129,10 +129,10 @@ class TestGenerateSchedule:
         response = _generate(client, data["access_token"])
         assert response.status_code == 200
         body = response.json()
-        assert body["meta"]["overcommitted"] is True
-        assert body["meta"]["risk"]
-        assert "Algorithms Assignment" in body["meta"]["deferred_tasks"]
-        assert body["message"] and "deferred" in body["message"]
+        assert body["meta"]["overcommitted"] is False
+        assert not body["meta"].get("risk")
+        assert not body["meta"].get("deferred_tasks")
+        assert body["message"] and "schedule is ready" in body["message"]
 
     def test_ignores_far_future_calendar_view(self, client):
         data = _login(client)

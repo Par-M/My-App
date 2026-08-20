@@ -162,8 +162,9 @@ class SchedulingService:
         preference: UserPreference,
         request: ScheduleGenerateRequest,
     ) -> SchedulingContext:
+        now = _utc_now()
         tz = ZoneInfo(request.timezone)
-        today = _utc_now().astimezone(tz).date()
+        today = now.astimezone(tz).date()
         effective_end = today + timedelta(days=DEFAULT_SCHEDULE_HORIZON_DAYS)
         for task in tasks:
             for when in (task.deadline, task.end_at):
@@ -177,7 +178,6 @@ class SchedulingService:
         ]
         factors = self._productivity_factors(tasks)
         by_id = {task.id: task for task in tasks}
-        now = _utc_now()
         context = SchedulingContext(
             tasks=[
                 TaskContext(
@@ -217,13 +217,30 @@ class SchedulingService:
             energy_level=preference.energy_level,
             max_daily_hours=preference.max_daily_hours,
         )
+        existing_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.completed_at.is_(None),
+                )
+            ).all()
+        )
         context.free_slots = find_free_slots(
             dates=dates,
             busy=[
                 *context.busy_times,
+                *[
+                    TimeSlot(block.start_at, block.end_at)
+                    for block in existing_blocks
+                    if block.start_at is not None and block.end_at is not None
+                ],
                 TimeSlot(
-                    start=_utc_now(),
-                    end=_utc_now() + timedelta(minutes=5),
+                    start=now - timedelta(days=1),
+                    end=now,
+                ),
+                TimeSlot(
+                    start=now,
+                    end=now + timedelta(minutes=5),
                 ),
             ],
             start_hour=context.work_start_hour,

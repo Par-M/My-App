@@ -358,7 +358,7 @@ struct WeeklyScheduleView: View {
 
     private func daySection(_ day: Date) -> some View {
         let calendar = Calendar.current
-        let groups = groupOverlapping(dayItems(for: day))
+        let groups = groupExactOverlap(dayItems(for: day))
         let isToday = calendar.isDateInToday(day)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -484,13 +484,13 @@ struct WeeklyScheduleView: View {
         return (blocks + events).sorted { $0.start < $1.start }
     }
 
-    private func groupOverlapping(_ items: [DayItem]) -> [[DayItem]] {
+    private func groupExactOverlap(_ items: [DayItem]) -> [[DayItem]] {
         let sorted = items.sorted { $0.start < $1.start }
         var groups: [[DayItem]] = []
         for item in sorted {
             var merged = false
             for i in groups.indices {
-                if groups[i].contains(where: { $0.start < item.end && item.start < $0.end }) {
+                if groups[i].contains(where: { $0.start == item.start && $0.end == item.end }) {
                     groups[i].append(item)
                     merged = true
                     break

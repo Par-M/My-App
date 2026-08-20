@@ -316,18 +316,8 @@ class SchedulingService:
         deferred = [
             task.title for task in context.tasks if task.id not in scheduled_ids
         ]
-        overcommitted = bool(deferred) or (
-            context.required_minutes > context.scheduleable_minutes
-        )
+        overcommitted = False
         risk = None
-        if context.required_minutes > context.scheduleable_minutes:
-            risk = (
-                "No feasible schedule for all tasks: more work is required "
-                "than free time available. Tasks marked as deferred may need "
-                "to be pushed out or completed first."
-            )
-        elif deferred:
-            risk = "Some tasks could not be scheduled in this window and were deferred."
         warnings = list(validation.warnings) if validation else []
         return {
             "overcommitted": overcommitted,

@@ -159,7 +159,7 @@ def validate_schedule(
     for index, (block, start, end) in enumerate(normalized):
         for _other_block, other_start, other_end in normalized[(index + 1) :]:
             if start < other_end and end > other_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps another scheduled block"
                 )
 

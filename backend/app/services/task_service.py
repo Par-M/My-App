@@ -147,7 +147,28 @@ class TaskService:
         task = task_repository.update_task(self.db, task, data)
         if data.status is not None:
             if task.status == TaskStatus.completed:
+                # Carry over to calendar view: mark pending blocks completed
+                pending_blocks = list(
+                    self.db.scalars(
+                        select(CalendarBlock).where(
+                            CalendarBlock.task_id == task.id,
+                            CalendarBlock.completed_at.is_(None),
+                        )
+                    ).all()
+                )
+                now_ts = datetime.now(_utc())
+                for blk in pending_blocks:
+                    blk.completed_at = now_ts
                 task.progress_percent = 100
+                self.db.flush()
+                # Auto-regen after marking complete
+                try:
+                    from app.services.scheduling_service import SchedulingService
+
+                    svc = SchedulingService(self.db, self.user_id)
+                    svc.auto_regenerate(trigger=f"task '{task.title}' marked complete")
+                except Exception:
+                    pass
             else:
                 recompute_task_progress(self.db, task.id)
         self.db.commit()
@@ -156,8 +177,17 @@ class TaskService:
 
     def delete_task(self, task_id: uuid.UUID) -> None:
         task = self.get_task(task_id)
+        title = task.title
         task_repository.delete_task(self.db, task)
         self.db.commit()
+        # Fluid: fixed or any event deleted - auto-regenerate and request approval
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"task '{title}' deleted")
+        except Exception:
+            pass
 
     def archive_task(self, task_id: uuid.UUID) -> Task:
         task = self.get_task(task_id)
@@ -210,9 +240,31 @@ class TaskService:
                 task.actual_duration = int(max(1, round(elapsed)))
             else:
                 task.actual_duration = 0
+        # Carry over to calendar view: mark all pending blocks as completed
+        pending_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.completed_at.is_(None),
+                )
+            ).all()
+        )
+        now_ts = datetime.now(_utc())
+        for blk in pending_blocks:
+            blk.completed_at = now_ts
         task.progress_percent = 100
         self.db.commit()
         self.db.refresh(task)
+        for blk in pending_blocks:
+            self.db.refresh(blk)
+        # Fluid: task finished (maybe early) - free up time and request approval for new schedule
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"task '{task.title}' marked complete")
+        except Exception:
+            pass
         return task
 
     def list_overdue(self) -> list[Task]:

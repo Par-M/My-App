@@ -83,14 +83,31 @@ class CalendarBlockService:
         block = calendar_block_repository.update_block(self.db, block, data)
         self.db.commit()
         self.db.refresh(block)
+        # Fluid: time dragged - auto-regenerate and request approval
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"event '{block.title}' time changed")
+        except Exception:
+            pass
         return block
 
     def delete_block(self, block_id: uuid.UUID) -> None:
         block = self.get_block(block_id)
         task_id = block.task_id
+        title = block.title
         calendar_block_repository.delete_block(self.db, block)
         recompute_task_progress(self.db, task_id)
         self.db.commit()
+        # Fluid: event deleted - auto-regenerate and request approval
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"event '{title}' deleted")
+        except Exception:
+            pass
 
     def complete_block(
         self, block_id: uuid.UUID, note: str | None = None

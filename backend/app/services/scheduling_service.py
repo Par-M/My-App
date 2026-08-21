@@ -700,7 +700,7 @@ class SchedulingService:
                 *[
                     BusyTime(start=_parse(entry["start"]), end=_parse(entry["end"]))
                     for entry in items
-                    if entry["task_id"] != str(target_id)
+                    # Include ALL items (including target's old slots) as busy to force a new time slot
                 ],
             ],
             task_ids=[target_id],

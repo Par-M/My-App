@@ -276,6 +276,11 @@ class SchedulingService:
         # Final tasks: only new tasks (no existing block) or flexible tasks needing move + all fixed tasks
         # Fixed tasks are always in tasks list and always need scheduling (they have no existing block yet)
         tasks_staying = {task_id for task_id in flexible_blocks_by_task.keys() if task_id not in tasks_needing_move}
+        # Fixed already planned never shows again (fixed never moves) - if fixed already has pending block, don't re-propose
+        existing_block_task_ids = {b.task_id for b in existing_blocks}
+        for t in tasks:
+            if t.start_at is not None and t.end_at is not None and t.id in existing_block_task_ids:
+                tasks_staying.add(t.id)
         # Remove tasks that already have a fitting block and don't need to move
         tasks = [t for t in tasks if t.id not in tasks_staying]
         # Also filter context.tasks to match (so proposal only shows moved tasks)

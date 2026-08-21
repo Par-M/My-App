@@ -219,8 +219,70 @@ class SchedulingService:
             ).all()
         )
         # Fluid: only flexible pending blocks are movable; fixed blocks are hard and never move
+        # Already-planned flexible tasks shouldn't show in proposal unless they need to move.
+        # Check which flexible pending blocks still fit in free slots (with new fixed/busy); only those that overlap need rescheduling.
         flexible_ids = {t.id for t in tasks if t.start_at is None or t.end_at is None}
-        fluid_blocks = [b for b in existing_blocks if b.task_id not in flexible_ids]
+        # Initial hard busy: fixed blocks + external busy + past + NEW fixed tasks windows
+        hard_blocks_initial = [b for b in existing_blocks if b.task_id not in flexible_ids]
+        new_fixed_windows = [
+            TimeSlot(t.start_at, t.end_at)
+            for t in tasks
+            if t.start_at is not None and t.end_at is not None
+        ]
+        initial_free = find_free_slots(
+            dates=dates,
+            busy=[
+                *context.busy_times,
+                *[
+                    TimeSlot(block.start_at, block.end_at)
+                    for block in hard_blocks_initial
+                    if block.start_at is not None and block.end_at is not None
+                ],
+                *new_fixed_windows,
+                TimeSlot(start=now - timedelta(days=1), end=now),
+                TimeSlot(start=now, end=now + timedelta(minutes=5)),
+            ],
+            start_hour=context.work_start_hour,
+            end_hour=context.work_end_hour,
+            timezone=context.timezone,
+        )
+
+        def _block_fits(block: CalendarBlock, free_slots: list[TimeSlot]) -> bool:
+            if block.start_at is None or block.end_at is None:
+                return False
+            for slot in free_slots:
+                if slot.start <= block.start_at and block.end_at <= slot.end:
+                    return True
+            return False
+
+        # Group flexible pending blocks by task
+        from collections import defaultdict
+
+        flexible_blocks_by_task: dict[uuid.UUID, list[CalendarBlock]] = defaultdict(list)
+        for blk in existing_blocks:
+            if blk.task_id in flexible_ids:
+                flexible_blocks_by_task[blk.task_id].append(blk)
+
+        tasks_needing_move: set[uuid.UUID] = set()
+        hard_flexible_blocks: list[CalendarBlock] = []
+        for task_id, blks in flexible_blocks_by_task.items():
+            # If any block for this task doesn't fit, whole task needs rescheduling
+            if any(not _block_fits(b, initial_free) for b in blks):
+                tasks_needing_move.add(task_id)
+            else:
+                # Still fits - keep as hard busy, don't reschedule
+                hard_flexible_blocks.extend(blks)
+
+        # Final tasks: only new tasks (no existing block) or flexible tasks needing move + all fixed tasks
+        # Fixed tasks are always in tasks list and always need scheduling (they have no existing block yet)
+        tasks_staying = {task_id for task_id in flexible_blocks_by_task.keys() if task_id not in tasks_needing_move}
+        # Remove tasks that already have a fitting block and don't need to move
+        tasks = [t for t in tasks if t.id not in tasks_staying]
+        # Also filter context.tasks to match (so proposal only shows moved tasks)
+        context.tasks = [tc for tc in context.tasks if tc.id not in tasks_staying]
+
+        # Final hard busy: fixed blocks + flexible blocks that still fit
+        fluid_blocks = hard_blocks_initial + hard_flexible_blocks
         context.free_slots = find_free_slots(
             dates=dates,
             busy=[
@@ -483,6 +545,24 @@ class SchedulingService:
                 "Recommendation has no schedule items to accept"
             )
 
+        # If a task is being rescheduled (already had pending blocks), delete originals
+        moving_task_ids = {
+            uuid.UUID(item["task_id"]) for item in items if not item.get("accepted")
+        }
+        if moving_task_ids:
+            old_blocks = list(
+                self.db.scalars(
+                    select(CalendarBlock).where(
+                        CalendarBlock.user_id == self.user_id,
+                        CalendarBlock.task_id.in_(moving_task_ids),
+                        CalendarBlock.completed_at.is_(None),
+                    )
+                ).all()
+            )
+            for ob in old_blocks:
+                self.db.delete(ob)
+            self.db.flush()
+
         blocks: list[CalendarBlock] = []
         for item in items:
             if item.get("accepted"):
@@ -540,6 +620,21 @@ class SchedulingService:
             raise RecommendationNotAcceptableError(
                 "This item has already been approved"
             )
+
+        # If this task already had pending blocks (being moved), delete originals
+        moving_id = uuid.UUID(item["task_id"])
+        old_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.task_id == moving_id,
+                    CalendarBlock.completed_at.is_(None),
+                )
+            ).all()
+        )
+        for ob in old_blocks:
+            self.db.delete(ob)
+        self.db.flush()
 
         block = CalendarBlock(
             user_id=self.user_id,

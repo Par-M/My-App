@@ -38,13 +38,13 @@ class UserPreference(Base):
     work_hours_start: Mapped[float] = mapped_column(
         Float,
         nullable=False,
-        default=9,
+        default=5.5,
     )
 
     work_hours_end: Mapped[float] = mapped_column(
         Float,
         nullable=False,
-        default=17,
+        default=21.5,
     )
 
     buffer_minutes: Mapped[int] = mapped_column(

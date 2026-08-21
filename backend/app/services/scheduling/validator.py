@@ -193,7 +193,7 @@ def validate_schedule(
                 daily_fixed[day] = daily_fixed.get(day, 0) + minutes
         for day, total in daily_total.items():
             if total > cap_minutes and daily_fixed.get(day, 0) <= cap_minutes:
-                validation.errors.append(
+                validation.warnings.append(
                     f"Schedules more than {context.max_daily_hours} hours of "
                     f"work on {day.isoformat()}"
                 )

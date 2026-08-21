@@ -97,12 +97,12 @@ class TestComprehensiveScheduler:
         print(f"\n08 Priority: {[b.task_title for b in res.items]}")
 
     def test_09_deadline_vs_priority(self):
-        # Priority first, then deadline - high priority with later deadline still before low with sooner deadline
+        # Deadline over priority - sooner deadline wins even if lower priority
         ctx = SchedulingContext(tasks=[task("LaterHigh", priority=TaskPriority.high, duration=60, deadline=utc("2026-08-05T12:00:00+00:00")), task("SoonerLow", priority=TaskPriority.low, duration=60, deadline=utc("2026-08-03T12:00:00+00:00"))], dates=[date(2026,8,3)], timezone="UTC", busy_times=[], buffer_minutes=5, max_daily_hours=12)
         ctx.free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T17:00:00+00:00")]
         res = provider.generate_schedule(ctx, build_prompt(ctx))
-        assert res.items[0].task_title=="LaterHigh"
-        print(f"\n09 Deadline vs Priority: {[b.task_title for b in res.items]} (high priority wins)")
+        assert res.items[0].task_title=="SoonerLow"
+        print(f"\n09 Deadline vs Priority: {[b.task_title for b in res.items]} (deadline wins)")
 
     def test_10_overdue_beats_high(self):
         ctx = SchedulingContext(tasks=[task("High", priority=TaskPriority.high, duration=60), TaskContext(id=uuid.uuid4(), title="Overdue", deadline=utc("2026-08-01T10:00:00+00:00"), duration_minutes=60, priority=TaskPriority.medium, energy_level=3, is_overdue=True)], dates=[date(2026,8,3)], timezone="UTC", busy_times=[], buffer_minutes=5, max_daily_hours=12)

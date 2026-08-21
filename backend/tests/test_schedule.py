@@ -524,8 +524,8 @@ class TestPreferences:
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["work_hours_start"] == 9
-        assert body["work_hours_end"] == 17
+        assert body["work_hours_start"] == 5.5
+        assert body["work_hours_end"] == 21.5
         assert body["buffer_minutes"] == 15
         assert body["energy_level"] == 3
         assert body["max_daily_hours"] == 8

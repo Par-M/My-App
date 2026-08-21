@@ -524,8 +524,8 @@ class TestValidator:
             ],
             context,
         )
-        assert not result.is_valid
-        assert any("hours of work" in e for e in result.errors)
+        assert result.is_valid
+        assert any("hours of work" in w for w in result.warnings)
 
     def test_allows_fixed_task_exceeding_daily_max(self):
         t = task(

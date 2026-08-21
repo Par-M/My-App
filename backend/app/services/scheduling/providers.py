@@ -137,9 +137,9 @@ class HeuristicProvider:
             (task for task in context.tasks if not task.is_fixed),
             key=lambda task: (
                 not task.is_overdue,
-                -PRIORITY_RANK.get(task.priority, 1),
                 task.deadline is None,
                 task.deadline or datetime.max.replace(tzinfo=ZoneInfo("UTC")),
+                -PRIORITY_RANK.get(task.priority, 1),
             ),
         )
 

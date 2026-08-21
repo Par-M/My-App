@@ -584,7 +584,10 @@ class TestHeuristicProvider:
         result = provider.generate_schedule(context, build_prompt(context))
         assert len(result.items) == 3
         assert all(b.task_id == big.id for b in result.items)
-        assert all(b.task_title == "Big" for b in result.items)
+        assert all(b.task_title.startswith("Big") for b in result.items)
+        assert result.items[0].task_title == "Big (Part 1/3)"
+        assert result.items[1].task_title == "Big (Part 2/3)"
+        assert result.items[2].task_title == "Big (Part 3/3)"
         assert sum(
             int((b.end - b.start).total_seconds() // 60) for b in result.items
         ) == 240

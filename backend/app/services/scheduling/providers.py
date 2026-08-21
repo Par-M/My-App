@@ -286,10 +286,11 @@ class HeuristicProvider:
                 ):
                     continue
                 part = len(blocks) + 1
+                title = f"{task.title} (Part {part}/{total_parts})" if total_parts > 1 else task.title
                 blocks.append(
                     ProposedBlock(
                         task_id=task.id,
-                        task_title=task.title,
+                        task_title=title,
                         start=slot.start,
                         end=slot.start + timedelta(minutes=chunk),
                         reason=self._reason_for(task, slot.start, part, total_parts),

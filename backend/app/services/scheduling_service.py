@@ -263,14 +263,27 @@ class SchedulingService:
             if blk.task_id in flexible_ids:
                 flexible_blocks_by_task[blk.task_id].append(blk)
 
+        # Build required duration map for checking partial (deleted part) case
+        required_by_id = {tc.id: tc.duration_minutes for tc in context.tasks}
         tasks_needing_move: set[uuid.UUID] = set()
         hard_flexible_blocks: list[CalendarBlock] = []
         for task_id, blks in flexible_blocks_by_task.items():
-            # If any block for this task doesn't fit, whole task needs rescheduling
-            if any(not _block_fits(b, initial_free) for b in blks):
+            # If any block doesn't fit, whole task needs rescheduling
+            needs_move = any(not _block_fits(b, initial_free) for b in blks)
+            # Also if total scheduled < required (e.g., one of two parts deleted), need to reschedule missing part
+            if not needs_move:
+                required = required_by_id.get(task_id, 0)
+                scheduled_total = sum(
+                    int((b.end_at - b.start_at).total_seconds() / 60)
+                    for b in blks
+                    if b.start_at and b.end_at
+                )
+                if required and scheduled_total + 5 < required:  # 5m tolerance
+                    needs_move = True
+            if needs_move:
                 tasks_needing_move.add(task_id)
             else:
-                # Still fits - keep as hard busy, don't reschedule
+                # Still fits and fully scheduled - keep as hard busy, don't reschedule
                 hard_flexible_blocks.extend(blks)
 
         # Final tasks: only new tasks (no existing block) or flexible tasks needing move + all fixed tasks

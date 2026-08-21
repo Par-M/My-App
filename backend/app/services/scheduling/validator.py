@@ -111,9 +111,14 @@ def validate_schedule(
 
         window_start, window_end = _window_for(start, context)
         if start < window_start or end > window_end:
-            validation.errors.append(
-                f"'{block.task_title}' is scheduled outside working hours"
-            )
+            if task.is_fixed:
+                validation.warnings.append(
+                    f"'{block.task_title}' is scheduled outside working hours (fixed event)"
+                )
+            else:
+                validation.errors.append(
+                    f"'{block.task_title}' is scheduled outside working hours"
+                )
 
         for busy_start, busy_end in busy:
             if start < busy_end and end > busy_start:

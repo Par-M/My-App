@@ -1,7 +1,7 @@
 """update work hours default to 5.5-21.5
 
 Revision ID: d4e5f6a7b8c9
-Revises: c3f1a2b4d5e6
+Revises: d0e1f2a3b4c5
 Create Date: 2026-05-11
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "d4e5f6a7b8c9"
-down_revision: Union[str, None] = "c3f1a2b4d5e6"
+down_revision: Union[str, None] = "d0e1f2a3b4c5"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

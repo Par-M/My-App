@@ -121,6 +121,15 @@ class TaskService:
         )
         self.db.commit()
         self.db.refresh(task)
+        # Fluid: if fixed event added last-minute, auto-regenerate and request approval
+        if task.start_at is not None and task.end_at is not None:
+            try:
+                from app.services.scheduling_service import SchedulingService
+
+                svc = SchedulingService(self.db, self.user_id)
+                svc.auto_regenerate(trigger=f"fixed event '{task.title}' added")
+            except Exception:
+                pass
         return task
 
     def update_task(self, task_id: uuid.UUID, data: TaskUpdate) -> Task:

@@ -218,9 +218,9 @@ class SchedulingService:
                 )
             ).all()
         )
-        # Fluid: don't treat blocks for tasks being rescheduled as hard busy - they can move
-        reschedulable_ids = {t.id for t in tasks}
-        fluid_blocks = [b for b in existing_blocks if b.task_id not in reschedulable_ids]
+        # Fluid: only flexible pending blocks are movable; fixed blocks are hard and never move
+        flexible_ids = {t.id for t in tasks if t.start_at is None or t.end_at is None}
+        fluid_blocks = [b for b in existing_blocks if b.task_id not in flexible_ids]
         context.free_slots = find_free_slots(
             dates=dates,
             busy=[
@@ -393,6 +393,32 @@ class SchedulingService:
         self.db.commit()
         self.db.refresh(recommendation)
         return recommendation
+
+    def auto_regenerate(self, trigger: str = "schedule change") -> AIRecommendation | None:
+        """Auto-regenerate a pending proposal and request user approval.
+
+        Called when a task finishes early or a fixed event is added last-minute
+        so the calendar stays fluid. The new proposal is stored as pending and
+        must be approved via the normal accept flow.
+        """
+        try:
+            # Use UTC and default horizon; _build_context will extend to deadlines
+            today = _utc_now().date()
+            request = ScheduleGenerateRequest(
+                start_date=today,
+                end_date=today + timedelta(days=DEFAULT_SCHEDULE_HORIZON_DAYS),
+                timezone="UTC",
+                busy_times=[],
+                task_ids=None,
+            )
+            rec = self.generate(request)
+            if rec and rec.reasoning and trigger:
+                rec.reasoning = f"[Auto] {trigger}: " + rec.reasoning
+                self.db.commit()
+                self.db.refresh(rec)
+            return rec
+        except Exception:
+            return None
 
     def _restore_request(self, stored: dict) -> ScheduleGenerateRequest:
         raw = stored.get("request")

@@ -76,7 +76,7 @@ def build_prompt(context: SchedulingContext) -> str:
     for task in context.tasks:
         lines.append(
             f"- id={task.id} | {task.title} | {task.duration_minutes} min "
-            f"| priority={task.priority.value} | deadline={_deadline(task)} "
+            f"| deadline={_deadline(task)} "
             f"| overdue={'yes' if task.is_overdue else 'no'} "
             f"| fixed={_fixed_window(task, context.timezone)} "
             f"| ordering={_ordering(task)} "

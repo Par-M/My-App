@@ -551,8 +551,9 @@ class TestValidator:
 
 class TestHeuristicProvider:
     def test_schedules_by_priority(self):
-        high = task("High", priority=TaskPriority.high, duration=60)
-        low = task("Low", priority=TaskPriority.low, duration=90)
+        # Priority removed: now ordered by deadline (earlier deadline first)
+        high = task("High", priority=TaskPriority.high, duration=60, deadline=utc("2026-08-03T12:00:00+00:00"))
+        low = task("Low", priority=TaskPriority.low, duration=90, deadline=utc("2026-08-04T12:00:00+00:00"))
         context = SchedulingContext(
             tasks=[low, high],
             dates=[DATES[0]],
@@ -688,8 +689,8 @@ class TestHeuristicProvider:
         # Fluid: partial schedule, not deferred
 
     def test_respects_daily_max_hours(self):
-        high = task("High", priority=TaskPriority.high, duration=60)
-        low = task("Low", priority=TaskPriority.low, duration=60)
+        high = task("High", priority=TaskPriority.high, duration=60, deadline=utc("2026-08-03T12:00:00+00:00"))
+        low = task("Low", priority=TaskPriority.low, duration=60, deadline=utc("2026-08-04T12:00:00+00:00"))
         context = SchedulingContext(
             tasks=[low, high],
             dates=[DATES[0]],

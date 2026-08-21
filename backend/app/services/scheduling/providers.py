@@ -123,7 +123,7 @@ class GeminiProvider:
 
 
 class HeuristicProvider:
-    """Deterministic fallback scheduler: first-fit by priority and deadline.
+    """Deterministic fallback scheduler: first-fit by deadline (priority removed per user).
 
     This keeps the product working when no Gemini key is configured or when
     the model is unavailable, and doubles as a deterministic test double.
@@ -133,19 +133,13 @@ class HeuristicProvider:
         self, context: SchedulingContext, prompt: str
     ) -> ProviderResult:
         fixed_tasks = [task for task in context.tasks if task.is_fixed]
-        # Weighted score: deadline over priority, but priority adjusts deadline by small bonus
-        # Overdue still absolute first, then effective deadline (deadline - priority_bonus)
-        # Bonus: high=1 day, medium=0.5 day, low=0 — deadline dominates, priority breaks close ties
+        # Priority removed: sort purely by deadline (overdue first, then earliest deadline)
         def _weighted_key(task):
-            bonus_days = {TaskPriority.high: 1, TaskPriority.medium: 0.5, TaskPriority.low: 0}.get(
-                task.priority, 1
-            )
             if task.deadline is None:
-                # No deadline: far future, but high priority still a bit earlier
-                eff = datetime.max.replace(tzinfo=ZoneInfo("UTC")) - timedelta(days=bonus_days)
+                eff = datetime.max.replace(tzinfo=ZoneInfo("UTC"))
                 is_none = True
             else:
-                eff = task.deadline - timedelta(days=bonus_days)
+                eff = task.deadline
                 is_none = False
             return (not task.is_overdue, is_none, eff)
 
@@ -329,9 +323,7 @@ class HeuristicProvider:
     ) -> str:
         reasons = []
         if task.is_overdue:
-            reasons.append("overdue, scheduled ASAP as top priority")
-        elif task.priority == TaskPriority.high:
-            reasons.append("high priority")
+            reasons.append("overdue, scheduled ASAP")
         if task.deadline is not None and not task.is_overdue:
             reasons.append(
                 f"deadline {task.deadline.date().isoformat()}, scheduled before it"

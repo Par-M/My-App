@@ -90,11 +90,12 @@ class TestComprehensiveScheduler:
         print(f"\n07 Flex around fixed: flex {flex.start.strftime('%H:%M')} fixed {fixed.start.strftime('%H:%M')}")
 
     def test_08_priority_ordering(self):
-        ctx = SchedulingContext(tasks=[task("Low", priority=TaskPriority.low, duration=60), task("High", priority=TaskPriority.high, duration=60)], dates=[date(2026,8,3)], timezone="UTC", busy_times=[], buffer_minutes=5, max_daily_hours=12)
+        # Priority removed: ordered by deadline, earlier deadline first
+        ctx = SchedulingContext(tasks=[task("Low", priority=TaskPriority.low, duration=60, deadline=utc("2026-08-04T12:00:00+00:00")), task("High", priority=TaskPriority.high, duration=60, deadline=utc("2026-08-03T12:00:00+00:00"))], dates=[date(2026,8,3)], timezone="UTC", busy_times=[], buffer_minutes=5, max_daily_hours=12)
         ctx.free_slots=[slot("2026-08-03T09:00:00+00:00", "2026-08-03T12:00:00+00:00")]
         res = provider.generate_schedule(ctx, build_prompt(ctx))
         assert [b.task_title for b in res.items]==["High","Low"]
-        print(f"\n08 Priority: {[b.task_title for b in res.items]}")
+        print(f"\n08 Deadline ordering: {[b.task_title for b in res.items]}")
 
     def test_09_deadline_vs_priority(self):
         # Deadline over priority - sooner deadline wins even if lower priority

@@ -696,6 +696,9 @@ class SchedulingService:
             raise RecommendationNotFoundError("Task not found")
         preference = self._preferences()
 
+        # For redo, only the specific chunk being redone is forced to move (its old time as busy),
+        # other chunks for same task remain free so the whole task can be rescheduled with correct chunking.
+        # This ensures a task broken into 2 still reschedules as 2, not 1, and the new time is actually different.
         redo_request = ScheduleGenerateRequest(
             start_date=request.start_date,
             end_date=request.end_date,
@@ -704,8 +707,8 @@ class SchedulingService:
                 *request.busy_times,
                 *[
                     BusyTime(start=_parse(entry["start"]), end=_parse(entry["end"]))
-                    for entry in items
-                    # Include ALL items (including target's old slots) as busy to force a new time slot
+                    for idx, entry in enumerate(items)
+                    if entry["task_id"] != str(target_id) or idx == item_index
                 ],
             ],
             task_ids=[target_id],

@@ -11,8 +11,6 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
     let deadline: Date?
     let isOverdue: Bool
     let reason: String
-    let recommendedStart: Date?
-    let recommendedEnd: Date?
 
     var id: String {
         "\(taskId.uuidString)-\(partIndex)"
@@ -29,8 +27,6 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
         case deadline
         case isOverdue = "is_overdue"
         case reason
-        case recommendedStart = "recommended_start"
-        case recommendedEnd = "recommended_end"
     }
 }
 

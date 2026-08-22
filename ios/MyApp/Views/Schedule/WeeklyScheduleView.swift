@@ -468,29 +468,14 @@ struct WeeklyScheduleView: View {
                 }
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                if let timeRange = recommendedTimeRange(item) {
-                    Text(timeRange)
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-                Text(formatMinutes(item.minutes))
-                    .font(.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
+            Text(formatMinutes(item.minutes))
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background(Color.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
-    }
-
-    private func recommendedTimeRange(_ item: RecommendedPart) -> String? {
-        guard let start = item.recommendedStart else { return nil }
-        let end = item.recommendedEnd ?? start
-        return "\(start.formatted(date: .omitted, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))"
     }
 
     private var unscheduledSection: some View {

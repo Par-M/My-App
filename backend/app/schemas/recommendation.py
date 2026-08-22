@@ -29,9 +29,6 @@ class RecommendedPart(BaseModel):
     deadline: datetime | None = None
     is_overdue: bool = False
     reason: str = ""
-    # Concrete suggested time window (user-local ISO with offset).
-    recommended_start: datetime | None = None
-    recommended_end: datetime | None = None
 
 
 class UnscheduledPart(BaseModel):

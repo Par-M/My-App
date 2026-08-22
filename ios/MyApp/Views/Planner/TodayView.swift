@@ -6,11 +6,21 @@ struct TodayView: View {
     @Environment(ScheduleService.self) private var scheduleService
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
+    @Environment(RecommendationService.self) private var recommendationService
 
     @State private var showSummary = false
     @State private var errorDismissed = false
     @State private var showSettings = false
     @State private var reschedulingTask: TaskItem?
+    @State private var quickTaskTitle = ""
+    @State private var isAddingQuickTask = false
+
+    private var calendar: Calendar { Calendar.current }
+
+    private var recommendationsForToday: [RecommendedPart] {
+        let today = calendar.startOfDay(for: Date())
+        return recommendationService.recommendations(for: today)?.items ?? []
+    }
 
     var body: some View {
         NavigationStack {
@@ -19,6 +29,10 @@ struct TodayView: View {
                     List {
                         Section {
                             header(today)
+                        }
+
+                        Section {
+                            quickAddField
                         }
 
                         if !taskService.overdueTasks.isEmpty {
@@ -33,6 +47,14 @@ struct TodayView: View {
                             Section("Up Next") {
                                 ForEach(today.nextTasks) { task in
                                     nextTaskRow(task)
+                                }
+                            }
+                        }
+
+                        if !recommendationsForToday.isEmpty {
+                            Section("Recommended Today") {
+                                ForEach(recommendationsForToday) { item in
+                                    recommendedRow(item)
                                 }
                             }
                         }
@@ -75,15 +97,18 @@ struct TodayView: View {
             .task {
                 await planner.loadToday()
                 await taskService.loadOverdue()
+                await loadRecommendations()
             }
             .refreshable {
                 await planner.loadToday()
                 await taskService.loadOverdue()
+                await loadRecommendations()
             }
             .onChange(of: notificationService.lastDeepLink) { _, _ in
                 Task {
                     await planner.loadToday()
                     await taskService.loadOverdue()
+                    await loadRecommendations()
                 }
             }
             .sheet(item: $reschedulingTask) { task in
@@ -238,8 +263,107 @@ struct TodayView: View {
         .background(.quinary, in: Capsule())
     }
 
-    private func nextTaskRow(_ task: ScheduledTask) -> some View {
-        HStack(spacing: 12) {
+    // MARK: - Quick add + recommendations
+
+    private var quickAddField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(.secondary)
+            TextField("Quick add a task…", text: $quickTaskTitle)
+                .submitLabel(.done)
+                .onSubmit {
+                    Task { await addQuickTask() }
+                }
+            if isAddingQuickTask {
+                ProgressView()
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func addQuickTask() async {
+        let title = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !isAddingQuickTask else { return }
+        isAddingQuickTask = true
+        defer { isAddingQuickTask = false }
+        do {
+            _ = try await taskService.createTask(
+                title: title,
+                description: nil,
+                deadline: nil,
+                startAt: nil,
+                endAt: nil,
+                priority: .medium,
+                status: .pending,
+                estimatedDuration: nil,
+                category: nil,
+                notes: nil,
+                repeatWeekdays: nil
+            )
+            quickTaskTitle = ""
+            await taskService.loadOverdue()
+            await loadRecommendations()
+        } catch {
+            // TaskService records the error message for its own surfaces.
+        }
+    }
+
+    private func loadRecommendations() async {
+        let today = calendar.startOfDay(for: Date())
+        let end = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        await recommendationService.load(from: today, to: end)
+    }
+
+    private func recommendedRow(_ item: RecommendedPart) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(priorityColor(item.priority))
+                .frame(width: 4, height: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle(item))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                if !item.reason.isEmpty {
+                    Text(item.reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Text(formatMinutes(item.minutes))
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func displayTitle(_ item: RecommendedPart) -> String {
+        guard let partTitle = item.partTitle else { return item.taskTitle }
+        if partTitle == item.taskTitle || partTitle.hasPrefix(item.taskTitle) {
+            return partTitle
+        }
+        return "\(item.taskTitle) — \(partTitle)"
+    }
+
+    private func priorityColor(_ priority: TaskPriority) -> Color {
+        switch priority {
+        case .high: .red
+        case .medium: .orange
+        case .low: .gray
+        }
+    }
+
+    private func formatMinutes(_ minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+        let hours = minutes / 60
+        let mins = minutes % 60
+        return mins == 0 ? "\(hours)h" : "\(hours)h \(mins)m"
+    }
+
+    private func nextTaskRow(_ task: ScheduledTask) -> some View {        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(task.title)
@@ -382,4 +506,5 @@ private extension TodayResponse {
         .environment(ScheduleService())
         .environment(CalendarService())
         .environment(NotificationService.shared)
+        .environment(RecommendationService())
 }

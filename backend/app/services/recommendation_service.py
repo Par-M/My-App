@@ -125,6 +125,9 @@ class RecommendationService:
                     Task.user_id == self.user_id,
                     Task.is_archived.is_(False),
                     Task.status != TaskStatus.completed,
+                    # Tasks with an explicit start time are already placed
+                    # (fixed events); never re-recommend them.
+                    Task.start_at.is_(None),
                 )
             ).all()
         )
@@ -214,26 +217,14 @@ class RecommendationService:
         unscheduled: list[dict] = []
 
         for day in dates:
-            day_slots = sorted(slots_by_day.get(day, []), key=lambda s: s.start)
+            day_slots = slots_by_day.get(day, [])
             capacity = sum(slot.duration_minutes for slot in day_slots)
-            slot_remaining = [slot.duration_minutes for slot in day_slots]
             items: list[dict] = []
 
             while pending and capacity > 0:
                 task, part, part_count = pending[0]
                 minutes = part["minutes"]
                 if minutes <= capacity:
-                    slot_index = next(
-                        index
-                        for index, remaining in enumerate(slot_remaining)
-                        if remaining >= minutes
-                    )
-                    slot = day_slots[slot_index]
-                    used_in_slot = slot.duration_minutes - slot_remaining[slot_index]
-                    start_local = (
-                        slot.start.astimezone(tz) + timedelta(minutes=used_in_slot)
-                    )
-                    end_local = start_local + timedelta(minutes=minutes)
                     items.append(
                         {
                             "task_id": str(task.id),
@@ -252,11 +243,8 @@ class RecommendationService:
                             "reason": self._reason(
                                 task, part["index"], part_count, tz
                             ),
-                            "recommended_start": start_local.isoformat(),
-                            "recommended_end": end_local.isoformat(),
                         }
                     )
-                    slot_remaining[slot_index] -= minutes
                     capacity -= minutes
                     pending.pop(0)
                 else:

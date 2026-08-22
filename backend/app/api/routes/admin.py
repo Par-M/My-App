@@ -29,8 +29,9 @@ def run_migrations(
 
     report: dict = {}
 
-    backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    backend_root = os.path.dirname(backend_root)
+    backend_root = os.path.dirname(os.path.abspath(__file__))  # routes/
+    backend_root = os.path.dirname(backend_root)  # app/
+    backend_root = os.path.dirname(backend_root)  # backend/
     script_dir = os.path.join(backend_root, "alembic")
     report["alembic_dir_exists"] = os.path.isdir(script_dir)
     versions_dir = os.path.join(script_dir, "versions")

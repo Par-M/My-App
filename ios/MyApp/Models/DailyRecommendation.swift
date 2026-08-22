@@ -64,6 +64,50 @@ struct DayRecommendation: Codable, Identifiable, Hashable, Sendable {
         case availableMinutes = "available_minutes"
         case items
     }
+
+    init(date: Date, availableMinutes: Int, items: [RecommendedPart]) {
+        self.date = date
+        self.availableMinutes = availableMinutes
+        self.items = items
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let dateString = try container.decode(String.self, forKey: .date)
+        // The backend sends a bare "YYYY-MM-DD" marking a CALENDAR day. The
+        // shared ISO decoder anchors that to UTC midnight, which lands on the
+        // previous local day west of UTC and breaks same-day matching. Anchor
+        // to local midnight instead.
+        if let localDate = Self.localCalendarDate(from: dateString) {
+            self.date = localDate
+        } else if let parsed = JSONCoding.parseISO8601(dateString) {
+            self.date = parsed
+        } else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .date,
+                in: container,
+                debugDescription: "Unparseable date: \(dateString)"
+            )
+        }
+        self.availableMinutes = try container.decode(
+            Int.self, forKey: .availableMinutes
+        )
+        self.items = try container.decode(
+            [RecommendedPart].self, forKey: .items
+        )
+    }
+
+    private static func localCalendarDate(from dateString: String) -> Date? {
+        let parts = dateString.split(separator: "-")
+        guard parts.count == 3,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2])
+        else { return nil }
+        return Calendar.current.date(
+            from: DateComponents(year: year, month: month, day: day)
+        )
+    }
 }
 
 struct DailyRecommendationsResponse: Codable, Sendable {

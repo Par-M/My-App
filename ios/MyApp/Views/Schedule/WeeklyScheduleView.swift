@@ -434,6 +434,15 @@ struct WeeklyScheduleView: View {
                         }
                     }
                 }
+            } else if !recommendationService.isLoading,
+                      let message = recommendationService.errorMessage {
+                VStack(alignment: .leading, spacing: 4) {
+                    Divider()
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .padding(.vertical, 4)
+                }
             }
         }
     }

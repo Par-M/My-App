@@ -1,16 +1,17 @@
 # Lock In Bud
 
-An AI-powered daily planner for iOS. It turns your tasks into a realistic daily schedule by negotiating with your calendar's free time, tracks your progress block by block, and helps you recover when you miss a deadline.
+An AI-powered daily planner for iOS. It shows the events already in your Apple Calendar, then recommends which tasks you can realistically complete each day based on your free time, task durations, priorities, and due dates — no forced time slots, just smart guidance.
 
 - **iOS app** — SwiftUI, offline-first with local storage and background sync
 - **Backend API** — Python FastAPI + PostgreSQL, AI scheduling via Google Gemini, deployed on Vercel
 
 ## Features
 
+- **Calendar view** — displays only the Apple Calendars you've selected (Settings → Calendars), with day / week / month modes
+- **Daily recommendations** — below each day's calendar events, see the tasks you should be able to complete that day, computed from free time between events, working hours, estimated duration, priority, and deadlines
+- **Description-aware breakdown** — tasks with structured descriptions ("1. … 2. …" or sentences) are automatically split into named parts; long tasks are chunked into ≤90-minute pieces spread across days
+- **Overload detection** — anything that doesn't fit the selected window is surfaced in a separate "Doesn't fit this window" section
 - **Tasks** — titles, notes, priorities, statuses, deadlines, categories, repeating weekday schedules, estimated durations
-- **AI schedule generation** — proposes a schedule across a date window, respecting your preferences (daily max hours, work window), real calendar events, and task deadlines. Approve, reject, or redo individual items before committing
-- **Calendar integration** — reads your real calendar events to find free time and marks conflicts as busy (events can be ignored)
-- **Time blocks** — each scheduled task is broken into blocks; check blocks off as you complete them and record a note per block
 - **Task progress** — percent complete computed from checked-off blocks
 - **Today planner** — shows your current task, today's priority, what's up next, a focus timer, and day progress
 - **Missed-deadline recovery** — detects overdue tasks, lets you reschedule them into the remaining time, records why you missed them, and surfaces patterns in "Why did I miss tasks?"
@@ -57,7 +58,8 @@ All endpoints are under `/api/v1`:
 | `/auth` | Google sign-in, dev login, token refresh, `/me` |
 | `/tasks` | CRUD, overdue list, snooze, reschedule |
 | `/calendar` | Time blocks, block completion (`/blocks/{id}/complete`, `/reopen`) |
-| `/schedule` | AI schedule generation + per-item accept/reject/redo |
+| `/schedule` | AI schedule generation + per-item accept/reject/redo (legacy flow) |
+| `/recommendations` | **New:** `POST /daily` per-day task recommendations from free time/priority/deadlines; `POST /breakdown/{task_id}` splits a task description into parts |
 | `/preferences` | Scheduling preferences |
 | `/planner` | Today view, daily summary (incl. `missed_today`), `missed-reasons` |
 | `/devices`, `/notifications` | Push notification device tokens + preferences |
@@ -67,7 +69,11 @@ Interactive docs are available at `/docs` when running locally.
 
 ### Database
 
-PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The `CalendarBlock` and `Task` models track per-block completion; `TaskMiss` records every missed deadline and its reschedule.
+PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. In addition to the core tables, this update adds:
+
+- `task_breakdowns` — stores description-derived subtask parts per task
+- `daily_task_recommendations` — persisted daily recommendation rows (per user/date/task/subtask)
+- `tasks.is_broken_down` — flag marking tasks whose description has been analyzed into parts
 
 ## Getting Started
 

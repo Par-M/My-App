@@ -13,6 +13,7 @@ struct MyAppApp: App {
     @State private var plannerService = PlannerService()
     @State private var calendarService: CalendarService
     @State private var scheduleService: ScheduleService
+    @State private var recommendationService: RecommendationService
     @State private var categoryStore = CategoryStore()
     @State private var appearance = AppearanceSettings()
     @State private var habitService = HabitService()
@@ -30,6 +31,9 @@ struct MyAppApp: App {
         _connectivity = State(initialValue: connectivity)
         _syncManager = State(initialValue: syncManager)
         _calendarService = State(initialValue: calendarService)
+        _recommendationService = State(
+            initialValue: RecommendationService(calendarService: calendarService)
+        )
         _scheduleService = State(
             initialValue: ScheduleService(
                 store: store,
@@ -50,6 +54,7 @@ struct MyAppApp: App {
                 .environment(NotificationService.shared)
                 .environment(calendarService)
                 .environment(scheduleService)
+                .environment(recommendationService)
                 .environment(syncManager)
                 .environment(connectivity)
                 .environment(categoryStore)

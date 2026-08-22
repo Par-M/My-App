@@ -34,5 +34,6 @@ struct DashboardView: View {
         .environment(NotificationService.shared)
         .environment(CalendarService())
         .environment(ScheduleService())
+        .environment(RecommendationService())
         .environment(HabitService())
 }

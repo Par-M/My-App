@@ -265,24 +265,26 @@ struct TaskListView: View {
                         }
 
                         if !completedTasks.isEmpty && statusFilter == nil {
-                            DisclosureGroup(isExpanded: $isCompletedExpanded) {
-                                ForEach(completedTasks) { task in
-                                    NavigationLink(value: task) {
-                                        TaskRow(task: task) { status in
-                                            Task {
-                                                try? await taskService.setStatus(status, for: task)
+                            Section {
+                                DisclosureGroup(isExpanded: $isCompletedExpanded) {
+                                    ForEach(completedTasks) { task in
+                                        NavigationLink(value: task) {
+                                            TaskRow(task: task) { status in
+                                                Task {
+                                                    try? await taskService.setStatus(status, for: task)
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            } label: {
-                                HStack {
-                                    Text("Completed")
-                                        .font(.caption)
-                                    Spacer()
-                                    Text("\(completedTasks.count)")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                } label: {
+                                    HStack {
+                                        Text("Completed")
+                                            .font(.caption)
+                                        Spacer()
+                                        Text("\(completedTasks.count)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }

@@ -66,6 +66,21 @@ class TestDailyRecommendationsEndpoint:
         response = client.post("/api/v1/recommendations/daily", json={})
         assert response.status_code == 401
 
+    def test_accepts_iso_datetime_strings(self, client):
+        data = _login(client)
+        _create(client, data["access_token"], estimated_duration=60)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": "2026-08-22T07:00:00Z",
+                "end_date": "2026-08-29T07:00:00Z",
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+
     def test_recommends_tasks_for_today(self, client):
         data = _login(client)
         _create(client, data["access_token"], estimated_duration=60)

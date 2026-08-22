@@ -33,8 +33,8 @@ def daily_recommendations(
 ) -> DailyRecommendationsResponse:
     result = service.daily_recommendations(
         timezone_name=payload.timezone,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
+        start_date=payload.start_date.date() if payload.start_date else None,
+        end_date=payload.end_date.date() if payload.end_date else None,
         busy_times=payload.busy_times,
     )
     return DailyRecommendationsResponse.model_validate(result)

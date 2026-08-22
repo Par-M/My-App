@@ -11,8 +11,10 @@ from app.schemas.calendar import BusyTime
 
 class DailyRecommendationsRequest(BaseModel):
     timezone: str = "UTC"
-    start_date: date | None = None
-    end_date: date | None = None
+    # Accepts full ISO datetimes (e.g. "2026-08-22T07:00:00Z" from iOS's
+    # ISO8601 JSONEncoder) as well as plain "2026-08-22" dates.
+    start_date: datetime | None = None
+    end_date: datetime | None = None
     busy_times: list[BusyTime] = Field(default_factory=list)
 
 

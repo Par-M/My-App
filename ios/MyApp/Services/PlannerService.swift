@@ -66,13 +66,27 @@ final class PlannerService {
         let nextTitle = today?.nextTasks.first?.title
         let tasksRemaining = (today?.currentTask != nil ? 1 : 0) + (today?.nextTasks.count ?? 0)
 
+        let candidates = ([today?.currentTask].compactMap { $0 }) + (today?.nextTasks ?? [])
+        let topTaskTitles = Self.topPriorityTitles(from: candidates, limit: 3)
+
         WidgetDataStore.write(
             currentTaskTitle: currentTitle,
             nextTaskTitle: nextTitle,
             tasksRemaining: tasksRemaining,
-            habitsRemaining: existing.habitsRemaining
+            habitsRemaining: existing.habitsRemaining,
+            topTaskTitles: topTaskTitles
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
+    }
+
+    private static func topPriorityTitles(from tasks: [ScheduledTask], limit: Int) -> [String] {
+        let rank: [TaskPriority: Int] = [.high: 0, .medium: 1, .low: 2]
+        return Array(
+            tasks
+                .sorted { (rank[$0.priority] ?? 1) < (rank[$1.priority] ?? 1) }
+                .prefix(limit)
+                .map(\.title)
+        )
     }
 }

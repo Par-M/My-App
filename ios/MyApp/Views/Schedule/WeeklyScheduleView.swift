@@ -3,6 +3,7 @@ import SwiftUI
 struct WeeklyScheduleView: View {
     @Environment(ScheduleService.self) private var scheduleService
     @Environment(CalendarService.self) private var calendarService
+    @Environment(RecommendationService.self) private var recommendationService
     @Environment(TaskService.self) private var taskService
 
     private enum ScheduleViewMode: String, CaseIterable, Identifiable {
@@ -25,9 +26,6 @@ struct WeeklyScheduleView: View {
 
     @State private var viewMode: ScheduleViewMode = .day
     @State private var selectedDate = Date()
-    @State private var showProposal = false
-    @State private var editingBlock: CalendarBlock?
-    @State private var completingBlock: CalendarBlock?
     @State private var showPreferences = false
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
@@ -106,17 +104,17 @@ struct WeeklyScheduleView: View {
                     viewModePicker
                     navigator
 
-                    if scheduleService.isGenerating {
+                    if recommendationService.isLoading {
                         HStack {
                             Spacer()
-                            ProgressView("Generating schedule…")
+                            ProgressView("Finding recommendations…")
                             Spacer()
                         }
                         .padding(.vertical, 8)
                     }
 
-                    if let errorMessage = scheduleService.errorMessage, !errorDismissed {
-                        errorBanner(errorMessage)
+                    if let message = activeErrorMessage, !errorDismissed {
+                        errorBanner(message)
                     }
 
                     if calendarService.permission == .denied {
@@ -126,10 +124,12 @@ struct WeeklyScheduleView: View {
                     switch viewMode {
                     case .day:
                         dayContent
+                        unscheduledSection
                     case .week:
                         ForEach(weekDays, id: \.self) { day in
                             daySection(day)
                         }
+                        unscheduledSection
                     case .month:
                         monthGrid
                     }
@@ -139,13 +139,6 @@ struct WeeklyScheduleView: View {
             .navigationTitle("Schedule")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Button {
-                        Task { await generate() }
-                    } label: {
-                        Label("Generate Schedule", systemImage: "wand.and.stars")
-                    }
-                    .disabled(scheduleService.isGenerating)
-
                     Button {
                         showPreferences = true
                     } label: {
@@ -168,28 +161,24 @@ struct WeeklyScheduleView: View {
                         Label("Today", systemImage: "sun.max")
                     }
                     Spacer()
+                    NavigationLink {
+                        CalendarSelectionView()
+                    } label: {
+                        Label("Calendars", systemImage: "calendar")
+                    }
                 }
             }
             .task(id: visibleStart) {
                 await loadData()
             }
-            .sheet(isPresented: $showProposal) {
-                ScheduleProposalView()
-            }
-            .sheet(item: $editingBlock) { block in
-                BlockTimeEditorView(block: block)
-            }
-            .sheet(item: $completingBlock) { block in
-                BlockCompletionSheet(block: block) { note in
-                    Task {
-                        await complete(block, note: note)
-                    }
-                }
-            }
             .sheet(isPresented: $showPreferences) {
                 PreferencesView()
             }
         }
+    }
+
+    private var activeErrorMessage: String? {
+        recommendationService.errorMessage ?? scheduleService.errorMessage
     }
 
     private var viewModePicker: some View {
@@ -298,9 +287,9 @@ struct WeeklyScheduleView: View {
     }
 
     private func monthCell(_ day: Date) -> some View {
-        let hasContent = scheduleService.blocks.contains {
-            calendar.isDate($0.startAt, inSameDayAs: day)
-        } || busyEvents.contains { calendar.isDate($0.start, inSameDayAs: day) }
+        let hasEvents = busyEvents.contains {
+            calendar.isDate($0.start, inSameDayAs: day)
+        }
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
         let isToday = calendar.isDateInToday(day)
 
@@ -313,7 +302,7 @@ struct WeeklyScheduleView: View {
                     .font(.subheadline)
                     .fontWeight(isToday ? .bold : .regular)
                 Circle()
-                    .fill(hasContent ? Color.accentColor : Color.clear)
+                    .fill(hasEvents ? Color.accentColor : Color.clear)
                     .frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity)
@@ -348,7 +337,7 @@ struct WeeklyScheduleView: View {
     private var permissionDeniedBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "calendar.badge.exclamationmark")
-            Text("Calendar access is off. Enable it in Settings to find free time.")
+            Text("Calendar access is off. Enable it in Settings to see your events.")
                 .font(.footnote)
             Spacer()
         }
@@ -356,9 +345,10 @@ struct WeeklyScheduleView: View {
         .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    // MARK: - Day section (calendar events + recommendations)
+
     private func daySection(_ day: Date) -> some View {
-        let calendar = Calendar.current
-        let groups = groupExactOverlap(dayItems(for: day))
+        let groups = groupExactOverlap(events(for: day))
         let isToday = calendar.isDateInToday(day)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -388,13 +378,15 @@ struct WeeklyScheduleView: View {
                 VStack(spacing: 6) {
                     ForEach(Array(groups.enumerated()), id: \.offset) { slotIndex, group in
                         if group.count == 1 {
-                            dayItemRow(group[0])
+                            eventRow(group[0])
                         } else {
                             eventSlot(group, day: day, slotIndex: slotIndex)
                         }
                     }
                 }
             }
+
+            recommendationsSection(day)
         }
         .padding()
         .background(.background, in: RoundedRectangle(cornerRadius: 12))
@@ -404,7 +396,183 @@ struct WeeklyScheduleView: View {
         )
     }
 
-    private func eventSlot(_ items: [DayItem], day: Date, slotIndex: Int) -> some View {
+    // MARK: - Recommendations
+
+    private func recommendationsSection(_ day: Date) -> some View {
+        let recommendation = recommendationService.recommendations(for: day)
+
+        return Group {
+            if let recommendation {
+                VStack(alignment: .leading, spacing: 6) {
+                    Divider()
+                    HStack(spacing: 6) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                        Text("Recommended")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text("\(formatMinutes(recommendation.availableMinutes)) free")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+
+                    if recommendation.items.isEmpty {
+                        Text("Nothing recommended — no free time or no open tasks.")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(recommendation.items) { item in
+                            recommendedRow(item)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func recommendedRow(_ item: RecommendedPart) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(priorityColor(item.priority))
+                .frame(width: 4, height: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle(item))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                if !item.reason.isEmpty {
+                    Text(item.reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(formatMinutes(item.minutes))
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                if item.isOverdue {
+                    Label("Overdue", systemImage: "exclamationmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .background(Color.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var unscheduledSection: some View {
+        let parts = recommendationService.unscheduled
+        return Group {
+            if !parts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text("Doesn't fit this window")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    Text("These tasks need more free time than the selected window has. Extend work hours in Preferences or free up calendar time.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(parts) { part in
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(priorityColor(part.priority))
+                                .frame(width: 4, height: 22)
+                            Text(displayTitle(taskTitle: part.taskTitle, partTitle: part.partTitle))
+                                .font(.subheadline)
+                                .lineLimit(2)
+                            Spacer()
+                            Text(formatMinutes(part.minutes))
+                                .font(.caption.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .background(
+                            Color.orange.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+                    }
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.separator), lineWidth: 0.5)
+                )
+            }
+        }
+    }
+
+    private func displayTitle(_ item: RecommendedPart) -> String {
+        displayTitle(taskTitle: item.taskTitle, partTitle: item.partTitle)
+    }
+
+    private func displayTitle(taskTitle: String, partTitle: String?) -> String {
+        guard let partTitle else { return taskTitle }
+        if partTitle == taskTitle || partTitle.hasPrefix(taskTitle) {
+            return partTitle
+        }
+        return "\(taskTitle) — \(partTitle)"
+    }
+
+    private func priorityColor(_ priority: TaskPriority) -> Color {
+        switch priority {
+        case .high: .red
+        case .medium: .orange
+        case .low: .gray
+        }
+    }
+
+    private func formatMinutes(_ minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+        let hours = minutes / 60
+        let mins = minutes % 60
+        return mins == 0 ? "\(hours)h" : "\(hours)h \(mins)m"
+    }
+
+    // MARK: - Events
+
+    private func events(for day: Date) -> [CalendarEventItem] {
+        busyEvents.filter { calendar.isDate($0.start, inSameDayAs: day) }
+            .sorted { $0.start < $1.start }
+    }
+
+    private func groupExactOverlap(_ items: [CalendarEventItem]) -> [[CalendarEventItem]] {
+        let sorted = items.sorted { $0.start < $1.start }
+        var groups: [[CalendarEventItem]] = []
+        for item in sorted {
+            var merged = false
+            for i in groups.indices {
+                if groups[i].contains(where: { $0.start == item.start && $0.end == item.end }) {
+                    groups[i].append(item)
+                    merged = true
+                    break
+                }
+            }
+            if !merged {
+                groups.append([item])
+            }
+        }
+        return groups
+    }
+
+    private func slotKey(_ day: Date, slotIndex: Int) -> String {
+        "\(Int(day.timeIntervalSince1970))_\(slotIndex)"
+    }
+
+    private func eventSlot(_ items: [CalendarEventItem], day: Date, slotIndex: Int) -> some View {
         let key = slotKey(day, slotIndex: slotIndex)
         let isExpanded = expandedSlots.contains(key)
 
@@ -414,7 +582,7 @@ struct WeeklyScheduleView: View {
                     if idx > 0 {
                         Divider().padding(.horizontal, 8)
                     }
-                    dayItemRow(item)
+                    eventRow(item)
                 }
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -436,17 +604,11 @@ struct WeeklyScheduleView: View {
                     }
                 } label: {
                     HStack(spacing: 10) {
-                        if first.event != nil {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(.gray)
-                                .frame(width: 4)
-                        } else if let block = first.block {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(block.completedAt != nil ? Color.green : Color.accentColor)
-                                .frame(width: 4)
-                        }
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.gray)
+                            .frame(width: 4)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(first.event?.title ?? first.block?.title ?? "")
+                            Text(first.title)
                                 .font(.subheadline)
                                 .lineLimit(1)
                             Text("\(first.start.formatted(date: .omitted, time: .shortened)) – \(first.end.formatted(date: .omitted, time: .shortened))")
@@ -470,49 +632,6 @@ struct WeeklyScheduleView: View {
                 }
                 .buttonStyle(.plain)
             }
-        }
-    }
-
-    private func dayItems(for day: Date) -> [DayItem] {
-        let calendar = Calendar.current
-        let blocks = scheduleService.blocks
-            .filter { calendar.isDate($0.startAt, inSameDayAs: day) }
-            .map(DayItem.init(block:))
-        let events = busyEvents
-            .filter { calendar.isDate($0.start, inSameDayAs: day) }
-            .map(DayItem.init(event:))
-        return (blocks + events).sorted { $0.start < $1.start }
-    }
-
-    private func groupExactOverlap(_ items: [DayItem]) -> [[DayItem]] {
-        let sorted = items.sorted { $0.start < $1.start }
-        var groups: [[DayItem]] = []
-        for item in sorted {
-            var merged = false
-            for i in groups.indices {
-                if groups[i].contains(where: { $0.start == item.start && $0.end == item.end }) {
-                    groups[i].append(item)
-                    merged = true
-                    break
-                }
-            }
-            if !merged {
-                groups.append([item])
-            }
-        }
-        return groups
-    }
-
-    private func slotKey(_ day: Date, slotIndex: Int) -> String {
-        "\(Int(day.timeIntervalSince1970))_\(slotIndex)"
-    }
-
-    @ViewBuilder
-    private func dayItemRow(_ item: DayItem) -> some View {
-        if let event = item.event {
-            eventRow(event)
-        } else if let block = item.block {
-            blockRow(block)
         }
     }
 
@@ -555,140 +674,25 @@ struct WeeklyScheduleView: View {
         .buttonStyle(.plain)
     }
 
-    private func blockRow(_ block: CalendarBlock) -> some View {
-        let isCompleted = block.completedAt != nil
-        return HStack(spacing: 10) {
-            Button {
-                editingBlock = block
-            } label: {
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(isCompleted ? Color.green : Color.accentColor)
-                        .frame(width: 4)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(block.title)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                            .strikethrough(isCompleted, color: .secondary)
-                        Text("\(block.startAt.formatted(date: .omitted, time: .shortened)) – \(block.endAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let note = block.completionNote, !note.isEmpty {
-                            Text(note)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: "pencil")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 8)
-                .background(
-                    isCompleted
-                        ? Color.green.opacity(0.12)
-                        : Color.accentColor.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 8)
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                toggleBlockCompletion(block)
-            } label: {
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isCompleted ? Color.green : Color.secondary)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isCompleted ? "Mark block not done" : "Mark block done")
-        }
-    }
-
-    private func toggleBlockCompletion(_ block: CalendarBlock) {
-        if block.completedAt != nil {
-            Task {
-                do {
-                    try await scheduleService.reopenBlock(block)
-                    await taskService.loadTasks()
-                } catch {
-                    scheduleService.presentError(error.localizedDescription)
-                }
-            }
-        } else {
-            completingBlock = block
-        }
-    }
-
-    private func complete(_ block: CalendarBlock, note: String?) async {
-        do {
-            try await scheduleService.completeBlock(block, note: note)
-            await taskService.loadTasks()
-        } catch {
-            scheduleService.presentError(error.localizedDescription)
-        }
-    }
+    // MARK: - Data loading
 
     private func loadData() async {
-        await scheduleService.loadBlocks()
+        errorDismissed = false
         await scheduleService.loadPreferences()
+
         guard await calendarService.requestPermission() == .granted else {
             busyEvents = []
+            recommendationService.clear()
             return
         }
+
         busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
-    }
 
-    private func generate() async {
-        errorDismissed = false
-        let ourEventIds = Set(scheduleService.blocks.compactMap { $0.calendarEventId })
-
-        var busy: [BusyTimeRequest] = []
-        if calendarService.permission == .granted {
-            busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
-            busy.append(contentsOf: busyEvents
-                .filter {
-                    !ourEventIds.contains($0.id)
-                        && !$0.isAllDay
-                        && !calendarService.isIgnored($0)
-                }
-                .map { BusyTimeRequest(start: $0.start, end: $0.end) })
-        }
-        busy.append(contentsOf: scheduleService.blocks
-            .filter { $0.startAt < visibleEnd && $0.endAt > visibleStart }
-            .map { BusyTimeRequest(start: $0.startAt, end: $0.endAt) })
-
-        await scheduleService.generate(startDate: visibleStart, endDate: visibleEnd, busyTimes: busy)
-        if scheduleService.proposal != nil {
-            showProposal = true
-        }
-    }
-}
-
-private struct DayItem: Identifiable {
-    let id: String
-    let start: Date
-    let end: Date
-    let event: CalendarEventItem?
-    let block: CalendarBlock?
-
-    init(event: CalendarEventItem) {
-        id = "event-\(event.id)"
-        start = event.start
-        end = event.end
-        self.event = event
-        block = nil
-    }
-
-    init(block: CalendarBlock) {
-        id = "block-\(block.id.uuidString)"
-        start = block.startAt
-        end = block.endAt
-        self.block = block
-        event = nil
+        await recommendationService.load(
+            from: visibleStart,
+            to: visibleEnd,
+            excluding: Set(busyEvents.filter { calendarService.isIgnored($0) }.map(\.id))
+        )
     }
 }
 
@@ -697,47 +701,5 @@ private struct DayItem: Identifiable {
         .environment(ScheduleService())
         .environment(CalendarService())
         .environment(TaskService())
-}
-
-private struct BlockCompletionSheet: View {
-    let block: CalendarBlock
-    let onComplete: (String?) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var note = ""
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Block") {
-                    LabeledContent("Task", value: block.title)
-                    LabeledContent(
-                        "Time",
-                        value: "\(block.startAt.formatted(date: .omitted, time: .shortened)) – \(block.endAt.formatted(date: .omitted, time: .shortened))"
-                    )
-                }
-                Section("Completion note (optional)") {
-                    TextField("e.g. Finished the outline", text: $note, axis: .vertical)
-                        .lineLimit(3...6)
-                }
-            }
-            .navigationTitle("Mark Block Done")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Complete") {
-                        onComplete(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? nil
-                            : note.trimmingCharacters(in: .whitespacesAndNewlines))
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
+        .environment(RecommendationService())
 }

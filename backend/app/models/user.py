@@ -97,3 +97,13 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    task_breakdowns: Mapped[list["TaskBreakdown"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    daily_task_recommendations: Mapped[list["DailyTaskRecommendation"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

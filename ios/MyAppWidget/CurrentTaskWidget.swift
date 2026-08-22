@@ -3,15 +3,14 @@ import SwiftUI
 
 struct CurrentTaskProvider: TimelineProvider {
     func placeholder(in context: Context) -> CurrentTaskEntry {
-        CurrentTaskEntry(date: Date(), currentTaskTitle: "Write report", nextTaskTitle: "Review PRs", tasksRemaining: 4, habitsRemaining: 2)
+        CurrentTaskEntry(date: Date(), topTaskTitles: ["Finish pitch deck", "Review PRs", "Email landlord"], tasksRemaining: 4, habitsRemaining: 2)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
         let data = WidgetDataStore.read()
         completion(CurrentTaskEntry(
             date: Date(),
-            currentTaskTitle: data.currentTaskTitle,
-            nextTaskTitle: data.nextTaskTitle,
+            topTaskTitles: data.topTaskTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         ))
@@ -21,8 +20,7 @@ struct CurrentTaskProvider: TimelineProvider {
         let data = WidgetDataStore.read()
         let entry = CurrentTaskEntry(
             date: Date(),
-            currentTaskTitle: data.currentTaskTitle,
-            nextTaskTitle: data.nextTaskTitle,
+            topTaskTitles: data.topTaskTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         )
@@ -33,8 +31,7 @@ struct CurrentTaskProvider: TimelineProvider {
 
 struct CurrentTaskEntry: TimelineEntry {
     let date: Date
-    let currentTaskTitle: String?
-    let nextTaskTitle: String?
+    let topTaskTitles: [String]
     let tasksRemaining: Int
     let habitsRemaining: Int
 }
@@ -46,23 +43,22 @@ struct CurrentTaskWidget: Widget {
         StaticConfiguration(kind: kind, provider: CurrentTaskProvider()) { entry in
             CurrentTaskWidgetView(entry: entry)
         }
-        .configurationDisplayName("Current Task")
-        .description("Shows your current and next task.")
+        .configurationDisplayName("Top Priority Today")
+        .description("Shows your highest priority tasks to complete today.")
         .supportedFamilies([.accessoryRectangular])
     }
 }
 
 struct TasksRemainingProvider: TimelineProvider {
     func placeholder(in context: Context) -> CurrentTaskEntry {
-        CurrentTaskEntry(date: Date(), currentTaskTitle: "Write report", nextTaskTitle: "Review PRs", tasksRemaining: 4, habitsRemaining: 2)
+        CurrentTaskEntry(date: Date(), topTaskTitles: [], tasksRemaining: 4, habitsRemaining: 2)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
         let data = WidgetDataStore.read()
         completion(CurrentTaskEntry(
             date: Date(),
-            currentTaskTitle: data.currentTaskTitle,
-            nextTaskTitle: data.nextTaskTitle,
+            topTaskTitles: data.topTaskTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         ))
@@ -72,8 +68,7 @@ struct TasksRemainingProvider: TimelineProvider {
         let data = WidgetDataStore.read()
         let entry = CurrentTaskEntry(
             date: Date(),
-            currentTaskTitle: data.currentTaskTitle,
-            nextTaskTitle: data.nextTaskTitle,
+            topTaskTitles: data.topTaskTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         )

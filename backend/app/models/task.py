@@ -156,6 +156,12 @@ class Task(Base):
         default=False,
     )
 
+    is_broken_down: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -171,6 +177,16 @@ class Task(Base):
 
     user: Mapped["User"] = relationship(back_populates="tasks")
     calendar_blocks: Mapped[list["CalendarBlock"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    breakdowns: Mapped[list["TaskBreakdown"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    daily_recommendations: Mapped[list["DailyTaskRecommendation"]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
     )

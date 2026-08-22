@@ -11,6 +11,7 @@ final class RecommendationService {
 
     private let client: APIClient
     private let calendarService: CalendarService?
+    private var requestGeneration = 0
 
     init(client: APIClient? = nil, calendarService: CalendarService? = nil) {
         self.client = client ?? APIClient()
@@ -18,9 +19,11 @@ final class RecommendationService {
     }
 
     func load(from start: Date, to end: Date, excluding eventIDs: Set<String> = []) async {
+        requestGeneration += 1
+        let generation = requestGeneration
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { if generation == requestGeneration { isLoading = false } }
 
         var busyTimes: [BusyTimeRequest] = []
         if let calendarService, calendarService.permission == .granted {
@@ -43,12 +46,16 @@ final class RecommendationService {
             let response: DailyRecommendationsResponse = try await client.request(
                 RecommendationEndpoint.daily(request)
             )
+            guard generation == requestGeneration else { return }
             days = response.days
             unscheduled = response.unscheduled
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
+            guard generation == requestGeneration else { return }
             errorMessage = error.localizedDescription
-            days = []
-            unscheduled = []
         }
     }
 

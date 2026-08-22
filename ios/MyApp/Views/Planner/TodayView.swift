@@ -29,12 +29,6 @@ struct TodayView: View {
                             }
                         }
 
-                        if let current = today.currentTask {
-                            Section("Now Working") {
-                                currentTaskRow(current)
-                            }
-                        }
-
                         if !today.nextTasks.isEmpty {
                             Section("Up Next") {
                                 ForEach(today.nextTasks) { task in
@@ -242,27 +236,6 @@ struct TodayView: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .background(.quinary, in: Capsule())
-    }
-
-    private func currentTaskRow(_ task: ScheduledTask) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(task.title)
-                    .font(.headline)
-                Spacer()
-                if let start = task.start {
-                    Text(start, format: .dateTime.hour().minute())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let end = task.end {
-                Text("Scheduled until \(end.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     private func nextTaskRow(_ task: ScheduledTask) -> some View {

@@ -29,6 +29,14 @@ def _create(client, token, **overrides):
     return response.json()
 
 
+def _parse_iso(value: str):
+    from datetime import datetime
+
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
+
+
 class TestSplitHelpers:
     def test_numbered_steps(self):
         steps = split_description_into_steps(
@@ -98,6 +106,39 @@ class TestDailyRecommendationsEndpoint:
         item = today["items"][0]
         assert item["task_title"] == "Write report"
         assert item["minutes"] == 60
+
+    def test_items_include_suggested_time_window(self, client):
+        data = _login(client)
+        _create(client, data["access_token"], estimated_duration=45)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        items = [
+            item
+            for day in response.json()["days"]
+            for item in day["items"]
+        ]
+        assert len(items) >= 1
+        first = items[0]
+        start = _parse_iso(first["recommended_start"])
+        end = _parse_iso(first["recommended_end"])
+        assert start < end
+        assert int((end - start).total_seconds() // 60) == first["minutes"]
+
+        # Sequential parts never overlap: each next start >= previous end.
+        windows = [
+            (
+                _parse_iso(item["recommended_start"]),
+                _parse_iso(item["recommended_end"]),
+            )
+            for item in items
+        ]
+        assert windows == sorted(windows)
+
 
     def test_completed_tasks_not_recommended(self, client):
         data = _login(client)

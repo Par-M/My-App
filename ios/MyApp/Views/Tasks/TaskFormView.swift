@@ -325,13 +325,6 @@ struct TaskFormView: View {
                 }
 
                 Section {
-                    Picker("Priority", selection: $priority) {
-                        ForEach(TaskPriority.allCases) { priority in
-                            Text(priority.label).tag(priority)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
                     Picker("Status", selection: $status) {
                         ForEach(TaskStatus.allCases) { status in
                             Text(status.label).tag(status)

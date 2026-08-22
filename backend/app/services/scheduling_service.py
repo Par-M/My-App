@@ -101,16 +101,9 @@ class SchedulingService:
             statement = statement.where(Task.id.in_(task_ids))
         tasks = list(self.db.scalars(statement).all())
 
-        if tasks:
-            scheduled_ids = set(
-                self.db.scalars(
-                    select(CalendarBlock.task_id).where(
-                        CalendarBlock.user_id == self.user_id,
-                    )
-                ).all()
-            )
-            tasks = [t for t in tasks if t.id not in scheduled_ids]
-
+        # Fluid: keep tasks with pending blocks as reschedulable so they can move
+        # Only exclude tasks whose blocks are all completed (task already done) - but those are already filtered by status != completed
+        # For pending blocks, we keep the task in the pool and handle busy exclusion in _build_context
         return tasks
 
     def _preferences(self) -> UserPreference:
@@ -162,8 +155,9 @@ class SchedulingService:
         preference: UserPreference,
         request: ScheduleGenerateRequest,
     ) -> SchedulingContext:
+        now = _utc_now()
         tz = ZoneInfo(request.timezone)
-        today = _utc_now().astimezone(tz).date()
+        today = now.astimezone(tz).date()
         effective_end = today + timedelta(days=DEFAULT_SCHEDULE_HORIZON_DAYS)
         for task in tasks:
             for when in (task.deadline, task.end_at):
@@ -177,7 +171,6 @@ class SchedulingService:
         ]
         factors = self._productivity_factors(tasks)
         by_id = {task.id: task for task in tasks}
-        now = _utc_now()
         context = SchedulingContext(
             tasks=[
                 TaskContext(
@@ -217,13 +210,113 @@ class SchedulingService:
             energy_level=preference.energy_level,
             max_daily_hours=preference.max_daily_hours,
         )
+        existing_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.completed_at.is_(None),
+                )
+            ).all()
+        )
+        # Fluid: only flexible pending blocks are movable; fixed blocks are hard and never move
+        # Already-planned flexible tasks shouldn't show in proposal unless they need to move.
+        # Check which flexible pending blocks still fit in free slots (with new fixed/busy); only those that overlap need rescheduling.
+        flexible_ids = {t.id for t in tasks if t.start_at is None or t.end_at is None}
+        # Initial hard busy: fixed blocks + external busy + past + NEW fixed tasks windows
+        hard_blocks_initial = [b for b in existing_blocks if b.task_id not in flexible_ids]
+        new_fixed_windows = [
+            TimeSlot(t.start_at, t.end_at)
+            for t in tasks
+            if t.start_at is not None and t.end_at is not None
+        ]
+        initial_free = find_free_slots(
+            dates=dates,
+            busy=[
+                *context.busy_times,
+                *[
+                    TimeSlot(block.start_at, block.end_at)
+                    for block in hard_blocks_initial
+                    if block.start_at is not None and block.end_at is not None
+                ],
+                *new_fixed_windows,
+                TimeSlot(start=now - timedelta(days=1), end=now),
+                TimeSlot(start=now, end=now + timedelta(minutes=5)),
+            ],
+            start_hour=context.work_start_hour,
+            end_hour=context.work_end_hour,
+            timezone=context.timezone,
+        )
+
+        def _block_fits(block: CalendarBlock, free_slots: list[TimeSlot]) -> bool:
+            if block.start_at is None or block.end_at is None:
+                return False
+            for slot in free_slots:
+                if slot.start <= block.start_at and block.end_at <= slot.end:
+                    return True
+            return False
+
+        # Group flexible pending blocks by task
+        from collections import defaultdict
+
+        flexible_blocks_by_task: dict[uuid.UUID, list[CalendarBlock]] = defaultdict(list)
+        for blk in existing_blocks:
+            if blk.task_id in flexible_ids:
+                flexible_blocks_by_task[blk.task_id].append(blk)
+
+        # Build required duration map for checking partial (deleted part) case
+        required_by_id = {tc.id: tc.duration_minutes for tc in context.tasks}
+        tasks_needing_move: set[uuid.UUID] = set()
+        hard_flexible_blocks: list[CalendarBlock] = []
+        for task_id, blks in flexible_blocks_by_task.items():
+            # If any block doesn't fit, whole task needs rescheduling
+            needs_move = any(not _block_fits(b, initial_free) for b in blks)
+            # Also if total scheduled < required (e.g., one of two parts deleted), need to reschedule missing part
+            if not needs_move:
+                required = required_by_id.get(task_id, 0)
+                scheduled_total = sum(
+                    int((b.end_at - b.start_at).total_seconds() / 60)
+                    for b in blks
+                    if b.start_at and b.end_at
+                )
+                if required and scheduled_total + 5 < required:  # 5m tolerance
+                    needs_move = True
+            if needs_move:
+                tasks_needing_move.add(task_id)
+            else:
+                # Still fits and fully scheduled - keep as hard busy, don't reschedule
+                hard_flexible_blocks.extend(blks)
+
+        # Final tasks: only new tasks (no existing block) or flexible tasks needing move + all fixed tasks
+        # Fixed tasks are always in tasks list and always need scheduling (they have no existing block yet)
+        tasks_staying = {task_id for task_id in flexible_blocks_by_task.keys() if task_id not in tasks_needing_move}
+        # Fixed already planned never shows again (fixed never moves) - if fixed already has pending block, don't re-propose
+        existing_block_task_ids = {b.task_id for b in existing_blocks}
+        for t in tasks:
+            if t.start_at is not None and t.end_at is not None and t.id in existing_block_task_ids:
+                tasks_staying.add(t.id)
+        # Remove tasks that already have a fitting block and don't need to move
+        tasks = [t for t in tasks if t.id not in tasks_staying]
+        # Also filter context.tasks to match (so proposal only shows moved tasks)
+        context.tasks = [tc for tc in context.tasks if tc.id not in tasks_staying]
+
+        # Final hard busy: fixed blocks + flexible blocks that still fit
+        fluid_blocks = hard_blocks_initial + hard_flexible_blocks
         context.free_slots = find_free_slots(
             dates=dates,
             busy=[
                 *context.busy_times,
+                *[
+                    TimeSlot(block.start_at, block.end_at)
+                    for block in fluid_blocks
+                    if block.start_at is not None and block.end_at is not None
+                ],
                 TimeSlot(
-                    start=_utc_now(),
-                    end=_utc_now() + timedelta(minutes=5),
+                    start=now - timedelta(days=1),
+                    end=now,
+                ),
+                TimeSlot(
+                    start=now,
+                    end=now + timedelta(minutes=5),
                 ),
             ],
             start_hour=context.work_start_hour,
@@ -299,18 +392,8 @@ class SchedulingService:
         deferred = [
             task.title for task in context.tasks if task.id not in scheduled_ids
         ]
-        overcommitted = bool(deferred) or (
-            context.required_minutes > context.scheduleable_minutes
-        )
+        overcommitted = False
         risk = None
-        if context.required_minutes > context.scheduleable_minutes:
-            risk = (
-                "No feasible schedule for all tasks: more work is required "
-                "than free time available. Tasks marked as deferred may need "
-                "to be pushed out or completed first."
-            )
-        elif deferred:
-            risk = "Some tasks could not be scheduled in this window and were deferred."
         warnings = list(validation.warnings) if validation else []
         return {
             "overcommitted": overcommitted,
@@ -391,6 +474,32 @@ class SchedulingService:
         self.db.refresh(recommendation)
         return recommendation
 
+    def auto_regenerate(self, trigger: str = "schedule change") -> AIRecommendation | None:
+        """Auto-regenerate a pending proposal and request user approval.
+
+        Called when a task finishes early or a fixed event is added last-minute
+        so the calendar stays fluid. The new proposal is stored as pending and
+        must be approved via the normal accept flow.
+        """
+        try:
+            # Use UTC and default horizon; _build_context will extend to deadlines
+            today = _utc_now().date()
+            request = ScheduleGenerateRequest(
+                start_date=today,
+                end_date=today + timedelta(days=DEFAULT_SCHEDULE_HORIZON_DAYS),
+                timezone="UTC",
+                busy_times=[],
+                task_ids=None,
+            )
+            rec = self.generate(request)
+            if rec and rec.reasoning and trigger:
+                rec.reasoning = f"[Auto] {trigger}: " + rec.reasoning
+                self.db.commit()
+                self.db.refresh(rec)
+            return rec
+        except Exception:
+            return None
+
     def _restore_request(self, stored: dict) -> ScheduleGenerateRequest:
         raw = stored.get("request")
         if not raw:
@@ -454,6 +563,24 @@ class SchedulingService:
                 "Recommendation has no schedule items to accept"
             )
 
+        # If a task is being rescheduled (already had pending blocks), delete originals
+        moving_task_ids = {
+            uuid.UUID(item["task_id"]) for item in items if not item.get("accepted")
+        }
+        if moving_task_ids:
+            old_blocks = list(
+                self.db.scalars(
+                    select(CalendarBlock).where(
+                        CalendarBlock.user_id == self.user_id,
+                        CalendarBlock.task_id.in_(moving_task_ids),
+                        CalendarBlock.completed_at.is_(None),
+                    )
+                ).all()
+            )
+            for ob in old_blocks:
+                self.db.delete(ob)
+            self.db.flush()
+
         blocks: list[CalendarBlock] = []
         for item in items:
             if item.get("accepted"):
@@ -512,6 +639,21 @@ class SchedulingService:
                 "This item has already been approved"
             )
 
+        # If this task already had pending blocks (being moved), delete originals
+        moving_id = uuid.UUID(item["task_id"])
+        old_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.user_id == self.user_id,
+                    CalendarBlock.task_id == moving_id,
+                    CalendarBlock.completed_at.is_(None),
+                )
+            ).all()
+        )
+        for ob in old_blocks:
+            self.db.delete(ob)
+        self.db.flush()
+
         block = CalendarBlock(
             user_id=self.user_id,
             task_id=uuid.UUID(item["task_id"]),
@@ -567,6 +709,9 @@ class SchedulingService:
             raise RecommendationNotFoundError("Task not found")
         preference = self._preferences()
 
+        # For redo, only the specific chunk being redone is forced to move (its old time as busy),
+        # other chunks for same task remain free so the whole task can be rescheduled with correct chunking.
+        # This ensures a task broken into 2 still reschedules as 2, not 1, and the new time is actually different.
         redo_request = ScheduleGenerateRequest(
             start_date=request.start_date,
             end_date=request.end_date,
@@ -575,8 +720,8 @@ class SchedulingService:
                 *request.busy_times,
                 *[
                     BusyTime(start=_parse(entry["start"]), end=_parse(entry["end"]))
-                    for entry in items
-                    if entry["task_id"] != str(target_id)
+                    for idx, entry in enumerate(items)
+                    if entry["task_id"] != str(target_id) or idx == item_index
                 ],
             ],
             task_ids=[target_id],

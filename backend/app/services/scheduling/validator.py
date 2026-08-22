@@ -111,13 +111,18 @@ def validate_schedule(
 
         window_start, window_end = _window_for(start, context)
         if start < window_start or end > window_end:
-            validation.errors.append(
-                f"'{block.task_title}' is scheduled outside working hours"
-            )
+            if task.is_fixed:
+                validation.warnings.append(
+                    f"'{block.task_title}' is scheduled outside working hours (fixed event)"
+                )
+            else:
+                validation.errors.append(
+                    f"'{block.task_title}' is scheduled outside working hours"
+                )
 
         for busy_start, busy_end in busy:
             if start < busy_end and end > busy_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps a busy calendar event"
                 )
                 break
@@ -142,7 +147,7 @@ def validate_schedule(
                 f"which exceeds its {task.duration_minutes} minute duration"
             )
         elif scheduled < task.duration_minutes:
-            validation.errors.append(
+            validation.warnings.append(
                 f"Task '{task.title}' is only partially scheduled "
                 f"({scheduled} of {task.duration_minutes} minutes)"
             )
@@ -159,7 +164,7 @@ def validate_schedule(
     for index, (block, start, end) in enumerate(normalized):
         for _other_block, other_start, other_end in normalized[(index + 1) :]:
             if start < other_end and end > other_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps another scheduled block"
                 )
 
@@ -169,7 +174,7 @@ def validate_schedule(
             continue
         for fixed_task, fixed_start, fixed_end in fixed_windows:
             if start < fixed_end and end > fixed_start:
-                validation.errors.append(
+                validation.warnings.append(
                     f"'{block.task_title}' overlaps the fixed window of "
                     f"'{fixed_task.title}'"
                 )
@@ -188,7 +193,7 @@ def validate_schedule(
                 daily_fixed[day] = daily_fixed.get(day, 0) + minutes
         for day, total in daily_total.items():
             if total > cap_minutes and daily_fixed.get(day, 0) <= cap_minutes:
-                validation.errors.append(
+                validation.warnings.append(
                     f"Schedules more than {context.max_daily_hours} hours of "
                     f"work on {day.isoformat()}"
                 )

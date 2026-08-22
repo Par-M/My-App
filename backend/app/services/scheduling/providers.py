@@ -123,7 +123,7 @@ class GeminiProvider:
 
 
 class HeuristicProvider:
-    """Deterministic fallback scheduler: first-fit by priority and deadline.
+    """Deterministic fallback scheduler: first-fit by deadline (priority removed per user).
 
     This keeps the product working when no Gemini key is configured or when
     the model is unavailable, and doubles as a deterministic test double.
@@ -133,14 +133,19 @@ class HeuristicProvider:
         self, context: SchedulingContext, prompt: str
     ) -> ProviderResult:
         fixed_tasks = [task for task in context.tasks if task.is_fixed]
+        # Priority removed: sort purely by deadline (overdue first, then earliest deadline)
+        def _weighted_key(task):
+            if task.deadline is None:
+                eff = datetime.max.replace(tzinfo=ZoneInfo("UTC"))
+                is_none = True
+            else:
+                eff = task.deadline
+                is_none = False
+            return (not task.is_overdue, is_none, eff)
+
         flexible = sorted(
             (task for task in context.tasks if not task.is_fixed),
-            key=lambda task: (
-                not task.is_overdue,
-                -PRIORITY_RANK.get(task.priority, 1),
-                task.deadline is None,
-                task.deadline or datetime.max.replace(tzinfo=ZoneInfo("UTC")),
-            ),
+            key=_weighted_key,
         )
 
         available = list(context.free_slots)
@@ -220,7 +225,28 @@ class HeuristicProvider:
                 remaining[index:index + 1] = carved
                 remaining.sort(key=lambda slot: (slot.start, slot.end))
                 return blocks, remaining
-        return None
+        # Fluid: if no free slot fully contains the fixed window, still schedule it
+        # at its exact window with a warning (overlaps busy). Carve any overlapping slots.
+        blocks = [
+            ProposedBlock(
+                task_id=task.id,
+                task_title=task.title,
+                start=window.start,
+                end=window.end,
+                reason="fixed event, scheduled at its exact window (overlaps busy time - fluid schedule)",
+            )
+        ]
+        remaining: list[TimeSlot] = []
+        for slot in available:
+            if slot.end <= window.start or slot.start >= window.end:
+                remaining.append(slot)
+            else:
+                if slot.start < window.start:
+                    remaining.append(TimeSlot(slot.start, window.start))
+                if window.end < slot.end:
+                    remaining.append(TimeSlot(window.end, slot.end))
+        remaining.sort(key=lambda slot: (slot.start, slot.end))
+        return blocks, remaining
 
     def _place_task(
         self,
@@ -254,10 +280,11 @@ class HeuristicProvider:
                 ):
                     continue
                 part = len(blocks) + 1
+                title = f"{task.title} (Part {part}/{total_parts})" if total_parts > 1 else task.title
                 blocks.append(
                     ProposedBlock(
                         task_id=task.id,
-                        task_title=task.title,
+                        task_title=title,
                         start=slot.start,
                         end=slot.start + timedelta(minutes=chunk),
                         reason=self._reason_for(task, slot.start, part, total_parts),
@@ -278,7 +305,7 @@ class HeuristicProvider:
             if not placed_in_this_pass:
                 break
 
-        if remaining_duration > 0:
+        if not blocks:
             return None
         return blocks, remaining_slots
 
@@ -296,9 +323,7 @@ class HeuristicProvider:
     ) -> str:
         reasons = []
         if task.is_overdue:
-            reasons.append("overdue, scheduled ASAP as top priority")
-        elif task.priority == TaskPriority.high:
-            reasons.append("high priority")
+            reasons.append("overdue, scheduled ASAP")
         if task.deadline is not None and not task.is_overdue:
             reasons.append(
                 f"deadline {task.deadline.date().isoformat()}, scheduled before it"

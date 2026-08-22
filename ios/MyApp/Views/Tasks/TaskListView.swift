@@ -174,6 +174,7 @@ struct TaskListView: View {
     @State private var showOverdue = false
     @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
+    @State private var isCompletedExpanded = false
 
     private struct LoadKey: Hashable {
         let search: String
@@ -265,18 +266,26 @@ struct TaskListView: View {
 
                         if !completedTasks.isEmpty && statusFilter == nil {
                             Section {
-                                ForEach(completedTasks) { task in
-                                    NavigationLink(value: task) {
-                                        TaskRow(task: task) { status in
-                                            Task {
-                                                try? await taskService.setStatus(status, for: task)
+                                DisclosureGroup(isExpanded: $isCompletedExpanded) {
+                                    ForEach(completedTasks) { task in
+                                        NavigationLink(value: task) {
+                                            TaskRow(task: task) { status in
+                                                Task {
+                                                    try? await taskService.setStatus(status, for: task)
+                                                }
                                             }
                                         }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text("Completed")
+                                            .font(.caption)
+                                        Spacer()
+                                        Text("\(completedTasks.count)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
-                            } header: {
-                                Text("Completed")
-                                    .font(.caption)
                             }
                         }
                     }

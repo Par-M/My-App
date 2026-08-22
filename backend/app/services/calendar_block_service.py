@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -82,26 +83,54 @@ class CalendarBlockService:
         block = calendar_block_repository.update_block(self.db, block, data)
         self.db.commit()
         self.db.refresh(block)
+        # Fluid: time dragged - auto-regenerate and request approval
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"event '{block.title}' time changed")
+        except Exception:
+            pass
         return block
 
     def delete_block(self, block_id: uuid.UUID) -> None:
         block = self.get_block(block_id)
         task_id = block.task_id
+        title = block.title
         calendar_block_repository.delete_block(self.db, block)
         recompute_task_progress(self.db, task_id)
         self.db.commit()
+        # Fluid: event deleted - auto-regenerate and request approval
+        try:
+            from app.services.scheduling_service import SchedulingService
+
+            svc = SchedulingService(self.db, self.user_id)
+            svc.auto_regenerate(trigger=f"event '{title}' deleted")
+        except Exception:
+            pass
 
     def complete_block(
         self, block_id: uuid.UUID, note: str | None = None
     ):
         block = self.get_block(block_id)
-        block.completed_at = datetime.now(_utc())
+        now = datetime.now(_utc())
+        finished_early = block.end_at is not None and block.end_at > now + timedelta(minutes=5)
+        block.completed_at = now
         block.completion_note = (
             note.strip() if note and note.strip() else None
         )
         recompute_task_progress(self.db, block.task_id)
         self.db.commit()
         self.db.refresh(block)
+        # Fluid: if finished early, free up extra time and request approval for new schedule
+        if finished_early:
+            try:
+                from app.services.scheduling_service import SchedulingService
+
+                svc = SchedulingService(self.db, self.user_id)
+                svc.auto_regenerate(trigger="task finished early - freed up time")
+            except Exception:
+                pass
         return block
 
     def reopen_block(self, block_id: uuid.UUID):

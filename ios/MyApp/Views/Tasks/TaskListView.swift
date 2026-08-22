@@ -174,6 +174,7 @@ struct TaskListView: View {
     @State private var showOverdue = false
     @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
+    @State private var isCompletedExpanded = false
 
     private struct LoadKey: Hashable {
         let search: String
@@ -264,7 +265,7 @@ struct TaskListView: View {
                         }
 
                         if !completedTasks.isEmpty && statusFilter == nil {
-                            Section {
+                            DisclosureGroup(isExpanded: $isCompletedExpanded) {
                                 ForEach(completedTasks) { task in
                                     NavigationLink(value: task) {
                                         TaskRow(task: task) { status in
@@ -274,9 +275,15 @@ struct TaskListView: View {
                                         }
                                     }
                                 }
-                            } header: {
-                                Text("Completed")
-                                    .font(.caption)
+                            } label: {
+                                HStack {
+                                    Text("Completed")
+                                        .font(.caption)
+                                    Spacer()
+                                    Text("\(completedTasks.count)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }

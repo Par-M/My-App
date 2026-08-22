@@ -10,36 +10,27 @@ struct CurrentTaskWidgetView: View {
     }
 
     private var rectangularView: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if let current = entry.currentTaskTitle {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 6, height: 6)
-                    Text(current)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                if let next = entry.nextTaskTitle {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color.secondary.opacity(0.4))
-                            .frame(width: 5, height: 5)
-                        Text(next)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                }
-            } else {
+        VStack(alignment: .leading, spacing: 4) {
+            if entry.topTaskTitles.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.system(size: 12))
                     Text("All clear")
                         .font(.system(size: 13, weight: .medium))
+                }
+            } else {
+                ForEach(Array(entry.topTaskTitles.enumerated()), id: \.offset) { index, title in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(index == 0 ? Color.orange : Color.secondary.opacity(0.4))
+                            .frame(width: index == 0 ? 6 : 5, height: index == 0 ? 6 : 5)
+                        Text(title)
+                            .font(.system(size: index == 0 ? 13 : 11, weight: index == 0 ? .semibold : .regular))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(index == 0 ? Color.primary : Color.secondary)
                 }
             }
         }

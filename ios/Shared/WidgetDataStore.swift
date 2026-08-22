@@ -11,7 +11,8 @@ struct WidgetDataStore {
         currentTaskTitle: String?,
         nextTaskTitle: String?,
         tasksRemaining: Int,
-        habitsRemaining: Int
+        habitsRemaining: Int,
+        topTaskTitles: [String] = []
     ) {
         guard let defaults = shared else { return }
 
@@ -27,18 +28,26 @@ struct WidgetDataStore {
         }
         defaults.set(tasksRemaining, forKey: "tasks_remaining")
         defaults.set(habitsRemaining, forKey: "habits_remaining")
+        defaults.set(topTaskTitles, forKey: "top_task_titles")
         defaults.set(Date().timeIntervalSince1970, forKey: "last_updated")
     }
 
     static func read() -> WidgetData {
         guard let defaults = shared else {
-            return WidgetData(currentTaskTitle: nil, nextTaskTitle: nil, tasksRemaining: 0, habitsRemaining: 0)
+            return WidgetData(
+                currentTaskTitle: nil,
+                nextTaskTitle: nil,
+                tasksRemaining: 0,
+                habitsRemaining: 0,
+                topTaskTitles: []
+            )
         }
         return WidgetData(
             currentTaskTitle: defaults.string(forKey: "current_task_title"),
             nextTaskTitle: defaults.string(forKey: "next_task_title"),
             tasksRemaining: defaults.integer(forKey: "tasks_remaining"),
-            habitsRemaining: defaults.integer(forKey: "habits_remaining")
+            habitsRemaining: defaults.integer(forKey: "habits_remaining"),
+            topTaskTitles: defaults.stringArray(forKey: "top_task_titles") ?? []
         )
     }
 }
@@ -48,4 +57,5 @@ struct WidgetData {
     let nextTaskTitle: String?
     let tasksRemaining: Int
     let habitsRemaining: Int
+    var topTaskTitles: [String] = []
 }

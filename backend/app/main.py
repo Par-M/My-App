@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.auth import router as auth_router
+from app.api.routes.admin import router as admin_router
 from app.api.routes.calendar import router as calendar_router
 from app.api.routes.devices import router as devices_router
 from app.api.routes.habits import router as habits_router
@@ -25,6 +26,7 @@ app.include_router(planner_router, prefix="/api/v1")
 app.include_router(devices_router, prefix="/api/v1")
 app.include_router(notifications_router, prefix="/api/v1")
 app.include_router(habits_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 
 @app.get("/")

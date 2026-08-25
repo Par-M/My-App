@@ -10,6 +10,7 @@ struct WeeklyScheduleView: View {
         case day
         case week
         case month
+        case review
 
         var id: String { rawValue }
 
@@ -18,6 +19,7 @@ struct WeeklyScheduleView: View {
             case .day: "Day"
             case .week: "Week"
             case .month: "Month"
+            case .review: "Review"
             }
         }
     }
@@ -30,6 +32,8 @@ struct WeeklyScheduleView: View {
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
     @State private var expandedSlots: Set<String> = []
+    @State private var reviewStore = ScheduleReviewStore()
+    @State private var confirmedReviewKeys: Set<String> = []
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -65,6 +69,7 @@ struct WeeklyScheduleView: View {
         case .day: return dayStart
         case .week: return weekStart
         case .month: return monthStart
+        case .review: return monthStart
         }
     }
 
@@ -73,6 +78,7 @@ struct WeeklyScheduleView: View {
         case .day: return dayEnd
         case .week: return weekEnd
         case .month: return monthEnd
+        case .review: return monthEnd
         }
     }
 
@@ -132,6 +138,8 @@ struct WeeklyScheduleView: View {
                         unscheduledSection
                     case .month:
                         monthGrid
+                    case .review:
+                        reviewContent
                     }
                 }
                 .padding()
@@ -234,6 +242,8 @@ struct WeeklyScheduleView: View {
             return "Week of \(weekStart.formatted(date: .abbreviated, time: .omitted))"
         case .month:
             return selectedDate.formatted(.dateTime.month(.wide).year())
+        case .review:
+            return "Review fixed events"
         }
     }
 
@@ -245,6 +255,8 @@ struct WeeklyScheduleView: View {
             selectedDate = calendar.date(byAdding: .weekOfYear, value: delta, to: selectedDate) ?? selectedDate
         case .month:
             selectedDate = calendar.date(byAdding: .month, value: delta, to: selectedDate) ?? selectedDate
+        case .review:
+            break
         }
     }
 
@@ -523,6 +535,121 @@ struct WeeklyScheduleView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Review fixed events
+
+    private var scheduledTasks: [TaskItem] {
+        taskService.tasks
+            .filter {
+                $0.startAt != nil && $0.status != .completed && !$0.isArchived
+            }
+            .sorted { ($0.startAt ?? .distantPast) < ($1.startAt ?? .distantPast) }
+    }
+
+    private var pendingReviews: [TaskItem] {
+        scheduledTasks.filter { !confirmedReviewKeys.contains(reviewStore.key(for: $0)) }
+    }
+
+    private var reviewContent: some View {
+        Group {
+            if pendingReviews.isEmpty {
+                ContentUnavailableView(
+                    "All caught up",
+                    systemImage: "checkmark.seal.fill",
+                    description: Text(
+                        "Fixed-event tasks you schedule will appear here so you can confirm the details before they sit in your calendar."
+                    )
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(pendingReviews.count) event\(pendingReviews.count == 1 ? "" : "s") to confirm")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+
+                    ForEach(pendingReviews) { task in
+                        reviewRow(task)
+                    }
+                }
+            }
+        }
+        .task(id: viewMode) {
+            if viewMode == .review {
+                await taskService.loadTasks()
+                confirmedReviewKeys = Set(
+                    scheduledTasks
+                        .filter { reviewStore.isConfirmed($0) }
+                        .map { reviewStore.key(for: $0) }
+                )
+            }
+        }
+    }
+
+    private func reviewRow(_ task: TaskItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(priorityColor(task.priority))
+                    .frame(width: 4, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
+                    if let start = task.startAt, let end = task.endAt {
+                        Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if let start = task.startAt {
+                        Text(start.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button {
+                    confirmReview(task)
+                } label: {
+                    Label("Looks good", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            HStack(spacing: 8) {
+                if let duration = reviewDuration(task) {
+                    Label(formatMinutes(duration), systemImage: "clock")
+                }
+                if let deadline = task.deadline {
+                    Label(deadline.formatted(date: .abbreviated, time: .omitted), systemImage: "flag")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func reviewDuration(_ task: TaskItem) -> Int? {
+        if let start = task.startAt, let end = task.endAt {
+            let minutes = Int(end.timeIntervalSince(start) / 60)
+            return minutes > 0 ? minutes : nil
+        }
+        return task.estimatedDuration
+    }
+
+    private func confirmReview(_ task: TaskItem) {
+        reviewStore.confirm(task)
+        confirmedReviewKeys.insert(reviewStore.key(for: task))
     }
 
     private func displayTitle(_ item: RecommendedPart) -> String {

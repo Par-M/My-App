@@ -10,6 +10,7 @@ struct WeeklyScheduleView: View {
         case day
         case week
         case month
+        case review
 
         var id: String { rawValue }
 
@@ -18,6 +19,7 @@ struct WeeklyScheduleView: View {
             case .day: "Day"
             case .week: "Week"
             case .month: "Month"
+            case .review: "Review"
             }
         }
     }
@@ -30,6 +32,12 @@ struct WeeklyScheduleView: View {
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
     @State private var expandedSlots: Set<String> = []
+    @State private var reviewStore = ScheduleReviewStore()
+    @State private var confirmedReviewKeys: Set<String> = []
+    @State private var orderStore = RecommendationOrderStore()
+    @State private var draggingId: String?
+    @State private var dragStartCenter: CGFloat?
+    @State private var rowCenters: [String: CGFloat] = [:]
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -65,6 +73,7 @@ struct WeeklyScheduleView: View {
         case .day: return dayStart
         case .week: return weekStart
         case .month: return monthStart
+        case .review: return monthStart
         }
     }
 
@@ -73,6 +82,7 @@ struct WeeklyScheduleView: View {
         case .day: return dayEnd
         case .week: return weekEnd
         case .month: return monthEnd
+        case .review: return monthEnd
         }
     }
 
@@ -132,8 +142,11 @@ struct WeeklyScheduleView: View {
                         unscheduledSection
                     case .month:
                         monthGrid
+                    case .review:
+                        reviewContent
                     }
                 }
+                .coordinateSpace(name: "schedule")
                 .padding()
             }
             .navigationTitle("Schedule")
@@ -234,6 +247,8 @@ struct WeeklyScheduleView: View {
             return "Week of \(weekStart.formatted(date: .abbreviated, time: .omitted))"
         case .month:
             return selectedDate.formatted(.dateTime.month(.wide).year())
+        case .review:
+            return "Review fixed events"
         }
     }
 
@@ -245,6 +260,8 @@ struct WeeklyScheduleView: View {
             selectedDate = calendar.date(byAdding: .weekOfYear, value: delta, to: selectedDate) ?? selectedDate
         case .month:
             selectedDate = calendar.date(byAdding: .month, value: delta, to: selectedDate) ?? selectedDate
+        case .review:
+            break
         }
     }
 
@@ -429,8 +446,36 @@ struct WeeklyScheduleView: View {
                             .foregroundStyle(.tertiary)
                             .padding(.vertical, 4)
                     } else {
-                        ForEach(recommendation.items) { item in
+                        ForEach(
+                            orderStore.reorder(recommendation.items, id: \.id)
+                        ) { item in
                             recommendedRow(item)
+                                .opacity(draggingId == item.id ? 0.4 : 1)
+                                .overlay {
+                                    if draggingId == item.id {
+                                        recommendedRow(item)
+                                            .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                    }
+                                }
+                                .background(
+                                    GeometryReader { proxy in
+                                        Color.clear
+                                            .preference(
+                                                key: RowCenterKey.self,
+                                                value: [item.id: proxy.frame(in: .named("schedule")).midY]
+                                            )
+                                    }
+                                )
+                                .draggableReorder(
+                                    id: item.id,
+                                    draggingId: $draggingId,
+                                    dragStartCenter: $dragStartCenter,
+                                    rowCenters: $rowCenters,
+                                    onReorder: { orderStore.move($0, before: $1) }
+                                )
+                        }
+                        .onPreferenceChange(RowCenterKey.self) { changes in
+                            for change in changes { rowCenters[change.key] = change.value }
                         }
                     }
                 }
@@ -523,6 +568,147 @@ struct WeeklyScheduleView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Review fixed events
+
+    private var scheduledTasks: [TaskItem] {
+        taskService.tasks
+            .filter {
+                $0.startAt != nil && $0.status != .completed && !$0.isArchived
+            }
+            .sorted { ($0.startAt ?? .distantPast) < ($1.startAt ?? .distantPast) }
+    }
+
+    private var pendingReviews: [TaskItem] {
+        scheduledTasks.filter { !confirmedReviewKeys.contains(reviewStore.key(for: $0)) }
+    }
+
+    private var reviewContent: some View {
+        Group {
+            if pendingReviews.isEmpty {
+                ContentUnavailableView(
+                    "All caught up",
+                    systemImage: "checkmark.seal.fill",
+                    description: Text(
+                        "Fixed-event tasks you schedule will appear here so you can confirm the details before they sit in your calendar."
+                    )
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("\(pendingReviews.count) event\(pendingReviews.count == 1 ? "" : "s") to confirm")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 4)
+
+                    ForEach(orderStore.reorder(pendingReviews, id: \.id.uuidString)) { task in
+                        reviewRow(task)
+                            .opacity(draggingId == task.id.uuidString ? 0.4 : 1)
+                            .overlay {
+                                if draggingId == task.id.uuidString {
+                                    reviewRow(task)
+                                        .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                }
+                            }
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear
+                                        .preference(
+                                            key: RowCenterKey.self,
+                                            value: [task.id.uuidString: proxy.frame(in: .named("schedule")).midY]
+                                        )
+                                }
+                            )
+                            .draggableReorder(
+                                id: task.id.uuidString,
+                                draggingId: $draggingId,
+                                dragStartCenter: $dragStartCenter,
+                                rowCenters: $rowCenters,
+                                onReorder: { orderStore.move($0, before: $1) }
+                            )
+                    }
+                    .onPreferenceChange(RowCenterKey.self) { changes in
+                        for change in changes { rowCenters[change.key] = change.value }
+                    }
+                }
+            }
+        }
+        .task(id: viewMode) {
+            if viewMode == .review {
+                await taskService.loadTasks()
+                confirmedReviewKeys = Set(
+                    scheduledTasks
+                        .filter { reviewStore.isConfirmed($0) }
+                        .map { reviewStore.key(for: $0) }
+                )
+            }
+        }
+    }
+
+    private func reviewRow(_ task: TaskItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(priorityColor(task.priority))
+                    .frame(width: 4, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
+                    if let start = task.startAt, let end = task.endAt {
+                        Text("\(start.formatted(date: .abbreviated, time: .shortened)) – \(end.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if let start = task.startAt {
+                        Text(start.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button {
+                    confirmReview(task)
+                } label: {
+                    Label("Looks good", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+
+            HStack(spacing: 8) {
+                if let duration = reviewDuration(task) {
+                    Label(formatMinutes(duration), systemImage: "clock")
+                }
+                if let deadline = task.deadline {
+                    Label(deadline.formatted(date: .abbreviated, time: .omitted), systemImage: "flag")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func reviewDuration(_ task: TaskItem) -> Int? {
+        if let start = task.startAt, let end = task.endAt {
+            let minutes = Int(end.timeIntervalSince(start) / 60)
+            return minutes > 0 ? minutes : nil
+        }
+        return task.estimatedDuration
+    }
+
+    private func confirmReview(_ task: TaskItem) {
+        reviewStore.confirm(task)
+        confirmedReviewKeys.insert(reviewStore.key(for: task))
     }
 
     private func displayTitle(_ item: RecommendedPart) -> String {
@@ -713,4 +899,52 @@ struct WeeklyScheduleView: View {
         .environment(CalendarService())
         .environment(TaskService())
         .environment(RecommendationService())
+}
+
+struct RowCenterKey: PreferenceKey {
+    typealias Value = [String: CGFloat]
+    static var defaultValue: [String: CGFloat] { [:] }
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+extension View {
+    /// Long-press to "pick up" a row, then drag up/down to reorder. No visible
+    /// handle or drag affordance is shown.
+    func draggableReorder(
+        id: String,
+        draggingId: Binding<String?>,
+        dragStartCenter: Binding<CGFloat?>,
+        rowCenters: Binding<[String: CGFloat]>,
+        onReorder: @escaping (String, String) -> Void
+    ) -> some View {
+        self.gesture(
+            LongPressGesture(minimumDuration: 0.25)
+                .onEnded { _ in
+                    draggingId.wrappedValue = id
+                    dragStartCenter.wrappedValue = rowCenters.wrappedValue[id]
+                }
+                .sequenced(
+                    before: DragGesture(minimumDistance: 1)
+                        .onChanged { value in
+                            guard draggingId.wrappedValue == id,
+                                  let base = dragStartCenter.wrappedValue
+                            else { return }
+                            let currentY = base + value.translation.height
+                            if let target = rowCenters.wrappedValue
+                                .min(by: { abs($0.value - currentY) < abs($1.value - currentY) })?
+                                .key,
+                               target != id
+                            {
+                                onReorder(id, target)
+                            }
+                        }
+                        .onEnded { _ in
+                            draggingId.wrappedValue = nil
+                            dragStartCenter.wrappedValue = nil
+                        }
+                )
+        )
+    }
 }

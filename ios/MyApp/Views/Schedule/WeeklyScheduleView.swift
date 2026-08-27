@@ -35,9 +35,9 @@ struct WeeklyScheduleView: View {
     @State private var reviewStore = ScheduleReviewStore()
     @State private var confirmedReviewKeys: Set<String> = []
     @State private var orderStore = RecommendationOrderStore()
-    @State private var draggingId: UUID?
+    @State private var draggingId: String?
     @State private var dragStartCenter: CGFloat?
-    @State private var rowCenters: [UUID: CGFloat] = [:]
+    @State private var rowCenters: [String: CGFloat] = [:]
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -447,12 +447,12 @@ struct WeeklyScheduleView: View {
                             .padding(.vertical, 4)
                     } else {
                         ForEach(
-                            orderStore.reorder(recommendation.items, id: \.taskId)
+                            orderStore.reorder(recommendation.items, id: \.id)
                         ) { item in
                             recommendedRow(item)
-                                .opacity(draggingId == item.taskId ? 0.4 : 1)
+                                .opacity(draggingId == item.id ? 0.4 : 1)
                                 .overlay {
-                                    if draggingId == item.taskId {
+                                    if draggingId == item.id {
                                         recommendedRow(item)
                                             .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 8))
                                     }
@@ -462,12 +462,12 @@ struct WeeklyScheduleView: View {
                                         Color.clear
                                             .preference(
                                                 key: RowCenterKey.self,
-                                                value: [item.taskId: proxy.frame(in: .named("schedule")).midY]
+                                                value: [item.id: proxy.frame(in: .named("schedule")).midY]
                                             )
                                     }
                                 )
                                 .draggableReorder(
-                                    id: item.taskId,
+                                    id: item.id,
                                     draggingId: $draggingId,
                                     dragStartCenter: $dragStartCenter,
                                     rowCenters: $rowCenters,
@@ -603,11 +603,11 @@ struct WeeklyScheduleView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
 
-                    ForEach(orderStore.reorder(pendingReviews, id: \.id)) { task in
+                    ForEach(orderStore.reorder(pendingReviews, id: \.id.uuidString)) { task in
                         reviewRow(task)
-                            .opacity(draggingId == task.id ? 0.4 : 1)
+                            .opacity(draggingId == task.id.uuidString ? 0.4 : 1)
                             .overlay {
-                                if draggingId == task.id {
+                                if draggingId == task.id.uuidString {
                                     reviewRow(task)
                                         .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 12))
                                 }
@@ -617,12 +617,12 @@ struct WeeklyScheduleView: View {
                                     Color.clear
                                         .preference(
                                             key: RowCenterKey.self,
-                                            value: [task.id: proxy.frame(in: .named("schedule")).midY]
+                                            value: [task.id.uuidString: proxy.frame(in: .named("schedule")).midY]
                                         )
                                 }
                             )
                             .draggableReorder(
-                                id: task.id,
+                                id: task.id.uuidString,
                                 draggingId: $draggingId,
                                 dragStartCenter: $dragStartCenter,
                                 rowCenters: $rowCenters,
@@ -902,9 +902,9 @@ struct WeeklyScheduleView: View {
 }
 
 struct RowCenterKey: PreferenceKey {
-    typealias Value = [UUID: CGFloat]
-    static var defaultValue: [UUID: CGFloat] { [:] }
-    static func reduce(value: inout [UUID: CGFloat], nextValue: () -> [UUID: CGFloat]) {
+    typealias Value = [String: CGFloat]
+    static var defaultValue: [String: CGFloat] { [:] }
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
@@ -913,11 +913,11 @@ extension View {
     /// Long-press to "pick up" a row, then drag up/down to reorder. No visible
     /// handle or drag affordance is shown.
     func draggableReorder(
-        id: UUID,
-        draggingId: Binding<UUID?>,
+        id: String,
+        draggingId: Binding<String?>,
         dragStartCenter: Binding<CGFloat?>,
-        rowCenters: Binding<[UUID: CGFloat]>,
-        onReorder: @escaping (UUID, UUID) -> Void
+        rowCenters: Binding<[String: CGFloat]>,
+        onReorder: @escaping (String, String) -> Void
     ) -> some View {
         self.gesture(
             LongPressGesture(minimumDuration: 0.25)

@@ -1,8 +1,10 @@
 import Foundation
 
-/// Persists a manual ordering of task IDs so the user can drag to
-/// prioritize recommended/fixed-event items on the Schedule tab. Purely
-/// on-device (UserDefaults); the backend ordering is unaffected.
+/// Persists a manual ordering of item IDs so the user can drag to
+/// prioritize / interleave recommended parts and fixed-event tasks on the
+/// Schedule tab. Purely on-device (UserDefaults); the backend ordering is
+/// unaffected. IDs are strings so a single part of a multi-part task can be
+/// ordered independently from its siblings.
 struct RecommendationOrderStore {
     private let defaults: UserDefaults
     private static let storageKey = "recommendation_order_ids"
@@ -12,7 +14,7 @@ struct RecommendationOrderStore {
     }
 
     /// Move `dragged` to sit immediately before `target` in the saved order.
-    func move(_ dragged: UUID, before target: UUID) {
+    func move(_ dragged: String, before target: String) {
         var ids = self.ids
         ids.removeAll { $0 == dragged }
         if let index = ids.firstIndex(of: target) {
@@ -20,12 +22,12 @@ struct RecommendationOrderStore {
         } else {
             ids.append(dragged)
         }
-        defaults.set(ids.map(\.uuidString), forKey: Self.storageKey)
+        defaults.set(ids, forKey: Self.storageKey)
     }
 
     /// Sort `items` so manually-ordered IDs come first (in saved order),
     /// with everything else keeping its original position.
-    func reorder<T>(_ items: [T], id keyPath: KeyPath<T, UUID>) -> [T] {
+    func reorder<T>(_ items: [T], id keyPath: KeyPath<T, String>) -> [T] {
         let rank = Dictionary(
             uniqueKeysWithValues: ids.enumerated().map { ($0.element, $0.offset) }
         )
@@ -44,8 +46,7 @@ struct RecommendationOrderStore {
             .map { $0.element }
     }
 
-    private var ids: [UUID] {
-        (defaults.stringArray(forKey: Self.storageKey) ?? [])
-            .compactMap { UUID(uuidString: $0) }
+    private var ids: [String] {
+        defaults.stringArray(forKey: Self.storageKey) ?? []
     }
 }

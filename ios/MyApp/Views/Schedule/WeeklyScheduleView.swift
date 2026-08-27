@@ -34,6 +34,7 @@ struct WeeklyScheduleView: View {
     @State private var expandedSlots: Set<String> = []
     @State private var reviewStore = ScheduleReviewStore()
     @State private var confirmedReviewKeys: Set<String> = []
+    @State private var orderStore = RecommendationOrderStore()
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -441,8 +442,19 @@ struct WeeklyScheduleView: View {
                             .foregroundStyle(.tertiary)
                             .padding(.vertical, 4)
                     } else {
-                        ForEach(recommendation.items) { item in
+                        ForEach(
+                            orderStore.reorder(recommendation.items, id: \.taskId)
+                        ) { item in
                             recommendedRow(item)
+                                .draggable(item.taskId.uuidString)
+                                .dropDestination(for: String.self) { dropped, _ in
+                                    guard let dragged = dropped.first,
+                                          dragged != item.taskId.uuidString,
+                                          let id = UUID(uuidString: dragged)
+                                    else { return false }
+                                    orderStore.move(id, before: item.taskId)
+                                    return true
+                                }
                         }
                     }
                 }
@@ -570,8 +582,17 @@ struct WeeklyScheduleView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
 
-                    ForEach(pendingReviews) { task in
+                    ForEach(orderStore.reorder(pendingReviews, id: \.id)) { task in
                         reviewRow(task)
+                            .draggable(task.id.uuidString)
+                            .dropDestination(for: String.self) { dropped, _ in
+                                guard let dragged = dropped.first,
+                                      dragged != task.id.uuidString,
+                                      let id = UUID(uuidString: dragged)
+                                else { return false }
+                                orderStore.move(id, before: task.id)
+                                return true
+                            }
                     }
                 }
             }

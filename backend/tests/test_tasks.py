@@ -123,6 +123,27 @@ class TestCreateTask:
         response = _create(client, data["access_token"], repeat_weekdays=[7])
         assert response.status_code == 422
 
+    def test_creates_task_with_repeat_ends_on(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            repeat_weekdays=[1, 3],
+            repeat_ends_on=FUTURE.isoformat(),
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["repeat_weekdays"] == [1, 3]
+        assert datetime.fromisoformat(
+            body["repeat_ends_on"].replace("Z", "+00:00")
+        ) == FUTURE
+
+    def test_defaults_repeat_ends_on_to_none(self, client):
+        data = _login(client)
+        response = _create(client, data["access_token"])
+        assert response.status_code == 201
+        assert response.json()["repeat_ends_on"] is None
+
 
 class TestFixedEventTimes:
     def test_creates_task_with_fixed_event(self, client):
@@ -595,6 +616,21 @@ class TestUpdateTask:
         )
         assert response.status_code == 200
         assert response.json()["repeat_weekdays"] is None
+
+    def test_update_repeat_ends_on(self, client):
+        data = _login(client)
+        created = _create(client, data["access_token"]).json()
+        assert created["repeat_ends_on"] is None
+
+        response = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"repeat_ends_on": FUTURE.isoformat()},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        assert datetime.fromisoformat(
+            response.json()["repeat_ends_on"].replace("Z", "+00:00")
+        ) == FUTURE
 
 
 class TestDeleteTask:

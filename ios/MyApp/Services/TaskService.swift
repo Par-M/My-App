@@ -99,7 +99,8 @@ final class TaskService {
         notes: String?,
         repeatWeekdays: [Int]?,
         beforeTaskIds: [UUID]? = nil,
-        afterTaskIds: [UUID]? = nil
+        afterTaskIds: [UUID]? = nil,
+        repeatEndsOn: Date? = nil
     ) async throws -> TaskItem {
         let request = TaskCreateRequest(
             title: title,
@@ -114,7 +115,8 @@ final class TaskService {
             notes: notes,
             repeatWeekdays: repeatWeekdays,
             beforeTaskIds: beforeTaskIds,
-            afterTaskIds: afterTaskIds
+            afterTaskIds: afterTaskIds,
+            repeatEndsOn: repeatEndsOn
         )
 
         if !connectivity.isConnected, let store {
@@ -137,6 +139,7 @@ final class TaskService {
                 category: request.category,
                 notes: request.notes,
                 repeatWeekdays: request.repeatWeekdays,
+                repeatEndsOn: request.repeatEndsOn,
                 beforeTaskIds: request.beforeTaskIds,
                 afterTaskIds: request.afterTaskIds,
                 isArchived: false,

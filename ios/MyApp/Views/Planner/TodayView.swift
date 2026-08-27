@@ -298,7 +298,8 @@ struct TodayView: View {
                 estimatedDuration: nil,
                 category: nil,
                 notes: nil,
-                repeatWeekdays: nil
+                repeatWeekdays: nil,
+                repeatEndsOn: nil
             )
             quickTaskTitle = ""
             await taskService.loadOverdue()

@@ -140,6 +140,11 @@ class Task(Base):
         nullable=True,
     )
 
+    repeat_ends_on: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     before_task_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
         ARRAY(UUID(as_uuid=True)),
         nullable=True,

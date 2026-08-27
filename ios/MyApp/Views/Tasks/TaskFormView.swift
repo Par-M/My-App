@@ -28,6 +28,8 @@ struct TaskFormView: View {
     @State private var durationMinutesPart: Int
     @State private var hasRepeat: Bool
     @State private var repeatDays: Set<Int>
+    @State private var hasRepeatEnd: Bool
+    @State private var repeatEndDate: Date
     @State private var category: String
     @State private var notes: String
     @State private var beforeTaskIDs: Set<UUID>
@@ -55,6 +57,11 @@ struct TaskFormView: View {
             _durationMinutesPart = State(initialValue: 30)
             _hasRepeat = State(initialValue: false)
             _repeatDays = State(initialValue: [])
+            _hasRepeatEnd = State(initialValue: false)
+            _repeatEndDate = State(
+                initialValue: Self.roundedToQuarterHour(Date())
+                    .addingTimeInterval(30 * 24 * 3600)
+            )
             _category = State(initialValue: "")
             _notes = State(initialValue: "")
             _beforeTaskIDs = State(initialValue: [])
@@ -78,6 +85,12 @@ struct TaskFormView: View {
             _durationMinutesPart = State(initialValue: minutes % 60)
             _hasRepeat = State(initialValue: task.repeatWeekdays?.isEmpty == false)
             _repeatDays = State(initialValue: Set(task.repeatWeekdays ?? []))
+            _hasRepeatEnd = State(initialValue: task.repeatEndsOn != nil)
+            _repeatEndDate = State(
+                initialValue: task.repeatEndsOn
+                    ?? Self.roundedToQuarterHour(Date())
+                        .addingTimeInterval(30 * 24 * 3600)
+            )
             _category = State(initialValue: task.category ?? "")
             _notes = State(initialValue: task.notes ?? "")
             _beforeTaskIDs = State(initialValue: Set(task.beforeTaskIds ?? []))
@@ -139,6 +152,11 @@ struct TaskFormView: View {
 
     private var selectedWeekdaysValue: [Int]? {
         hasRepeat ? Array(repeatDays).sorted() : nil
+    }
+
+    private var repeatEndsOnValue: Date? {
+        guard hasRepeat, hasRepeatEnd else { return nil }
+        return repeatEndDate
     }
 
     private var selfTaskID: UUID? {
@@ -311,6 +329,16 @@ struct TaskFormView: View {
                                 }
                             }
                             .frame(maxWidth: .infinity)
+
+                            Toggle("End Repeat", isOn: $hasRepeatEnd)
+                            if hasRepeatEnd {
+                                DatePicker(
+                                    "Repeat Until",
+                                    selection: $repeatEndDate,
+                                    in: Date()...,
+                                    displayedComponents: .date
+                                )
+                            }
                         }
                     }
                 }
@@ -439,6 +467,7 @@ struct TaskFormView: View {
         let descriptionValue = detail.isEmpty ? nil : detail
         let notesValue = notes.isEmpty ? nil : notes
         let repeatWeekdaysValue = hasRepeat ? selectedWeekdaysValue : nil
+        let repeatEndsOnValue = repeatEndsOnValue
         let beforeTaskIdsValue = beforeTaskIDs.isEmpty ? nil : Array(beforeTaskIDs)
         let afterTaskIdsValue = afterTaskIDs.isEmpty ? nil : Array(afterTaskIDs)
 
@@ -458,7 +487,8 @@ struct TaskFormView: View {
                     notes: notesValue,
                     repeatWeekdays: repeatWeekdaysValue,
                     beforeTaskIds: beforeTaskIdsValue,
-                    afterTaskIds: afterTaskIdsValue
+                    afterTaskIds: afterTaskIdsValue,
+                    repeatEndsOn: repeatEndsOnValue
                 )
                 onSaved?(created)
             case .edit(let task):
@@ -474,6 +504,7 @@ struct TaskFormView: View {
                 updated.category = categoryValue
                 updated.notes = notesValue
                 updated.repeatWeekdays = repeatWeekdaysValue
+                updated.repeatEndsOn = repeatEndsOnValue
                 updated.beforeTaskIds = beforeTaskIdsValue
                 updated.afterTaskIds = afterTaskIdsValue
                 let saved = try await taskService.updateTask(updated)

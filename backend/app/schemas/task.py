@@ -38,6 +38,7 @@ class TaskCreate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     repeat_weekdays: list[int] | None = None
+    repeat_ends_on: datetime | None = None
     before_task_ids: list[uuid.UUID] | None = None
     after_task_ids: list[uuid.UUID] | None = None
 
@@ -78,6 +79,7 @@ class TaskUpdate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
     repeat_weekdays: list[int] | None = None
+    repeat_ends_on: datetime | None = None
     before_task_ids: list[uuid.UUID] | None = None
     after_task_ids: list[uuid.UUID] | None = None
 
@@ -132,6 +134,7 @@ class TaskResponse(BaseModel):
     notes: str | None
     progress_percent: int
     repeat_weekdays: list[int] | None
+    repeat_ends_on: datetime | None
     before_task_ids: list[uuid.UUID] | None
     after_task_ids: list[uuid.UUID] | None
     is_archived: bool

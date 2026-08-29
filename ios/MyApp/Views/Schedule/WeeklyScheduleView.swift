@@ -826,7 +826,7 @@ struct WeeklyScheduleView: View {
                 !task.isArchived,
                 task.status != .completed,
                 let start = task.startAt,
-                let end = task.endAt
+                task.endAt != nil
             else { return nil }
             if blockTaskIds.contains(task.id) { return nil }
             let weekdays = task.repeatWeekdays ?? []

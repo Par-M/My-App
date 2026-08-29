@@ -23,6 +23,11 @@ struct PreferencesView: View {
                     Stepper(value: $workEnd, in: 0...24, step: 0.5) {
                         Text("End: \(hourText(workEnd))")
                     }
+                    if !workHoursValid {
+                        Label("End must be after start", systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 Section("Scheduling") {
                     Stepper(value: $buffer, in: 0...120, step: 5) {
@@ -51,7 +56,7 @@ struct PreferencesView: View {
                     Button("Save Preferences") {
                         Task { await save() }
                     }
-                    .disabled(!isLoaded)
+                    .disabled(!isLoaded || !workHoursValid)
                 }
             }
             .navigationTitle("Preferences")
@@ -84,6 +89,10 @@ struct PreferencesView: View {
             return "24:00"
         }
         return String(format: "%d:%02d", hour, minutes)
+    }
+
+    private var workHoursValid: Bool {
+        workEnd > workStart
     }
 
     private func save() async {

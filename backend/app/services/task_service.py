@@ -291,6 +291,20 @@ class TaskService:
                 )
             ).all()
         }
+        # A task whose due date is still in the future is not overdue even if
+        # an older scheduled block already passed. Extending the deadline (or
+        # rescheduling) clears it from the overdue list.
+        future_deadline_ids = {
+            task.id
+            for task in self.db.scalars(
+                select(Task).where(
+                    Task.user_id == self.user_id,
+                    Task.deadline.is_not(None),
+                    Task.deadline >= now,
+                )
+            ).all()
+        }
+        block_behind_ids -= future_deadline_ids
         task_ids = deadline_ids | block_behind_ids
         if not task_ids:
             return []

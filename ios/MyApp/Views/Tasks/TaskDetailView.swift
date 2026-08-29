@@ -8,6 +8,7 @@ struct TaskDetailView: View {
     @State private var currentTask: TaskItem
     @State private var showEdit = false
     @State private var confirmDelete = false
+    @State private var confirmArchive = false
     @State private var errorMessage: String?
 
     init(task: TaskItem) {
@@ -75,7 +76,11 @@ struct TaskDetailView: View {
 
                 Menu {
                     Button(currentTask.isArchived ? "Restore" : "Archive", systemImage: "archivebox") {
-                        toggleArchive()
+                        if currentTask.isArchived {
+                            toggleArchive()
+                        } else {
+                            confirmArchive = true
+                        }
                     }
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         confirmDelete = true
@@ -101,6 +106,18 @@ struct TaskDetailView: View {
             }
         } message: {
             Text("This cannot be undone.")
+        }
+        .confirmationDialog(
+            "Archive this task?",
+            isPresented: $confirmArchive,
+            titleVisibility: .visible
+        ) {
+            Button("Archive", role: .destructive) {
+                toggleArchive()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Archived tasks are hidden from your lists but can be restored anytime.")
         }
         .alert("Something went wrong", isPresented: .init(
             get: { errorMessage != nil },

@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var showPreferences = false
     @State private var newCategory = ""
     @State private var syncedMessage = false
+    @State private var confirmSignOut = false
+    @State private var categoryToRemove: String?
 
     var body: some View {
         NavigationStack {
@@ -29,6 +31,26 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(
+                categoryToRemove == nil ? "" : "Remove \"\(categoryToRemove!)\"?",
+                isPresented: Binding(
+                    get: { categoryToRemove != nil },
+                    set: { if !$0 { categoryToRemove = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Remove", role: .destructive) {
+                    if let category = categoryToRemove {
+                        categoryStore.remove(category)
+                    }
+                    categoryToRemove = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    categoryToRemove = nil
+                }
+            } message: {
+                Text("Tasks in this category will keep their label but it won't be suggested as a category anymore.")
+            }
         }
     }
 
@@ -45,8 +67,20 @@ struct SettingsView: View {
                 }
             }
             Button("Sign Out", role: .destructive) {
+                confirmSignOut = true
+            }
+        }
+        .confirmationDialog(
+            "Sign out?",
+            isPresented: $confirmSignOut,
+            titleVisibility: .visible
+        ) {
+            Button("Sign Out", role: .destructive) {
                 authService.signOut()
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can sign back in anytime. Your data is synced to your account.")
         }
     }
 
@@ -177,7 +211,7 @@ struct SettingsView: View {
                     Text(category)
                     Spacer()
                     Button {
-                        categoryStore.remove(category)
+                        categoryToRemove = category
                     } label: {
                         Image(systemName: "minus.circle")
                             .foregroundStyle(.red)

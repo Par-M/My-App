@@ -29,15 +29,18 @@ struct WeeklyScheduleView: View {
     @State private var viewMode: ScheduleViewMode = .day
     @State private var selectedDate = Date()
     @State private var showPreferences = false
+    @State private var showProposal = false
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
     @State private var expandedSlots: Set<String> = []
+    @State private var editingBlock: CalendarBlock?
     @State private var reviewStore = ScheduleReviewStore()
     @State private var confirmedReviewKeys: Set<String> = []
     @State private var orderStore = RecommendationOrderStore()
     @State private var draggingId: String?
     @State private var dragStartCenter: CGFloat?
     @State private var rowCenters: [String: CGFloat] = [:]
+    @AppStorage("didSeeReorderTip") private var didSeeReorderTip = false
 
     private var dayStart: Date {
         calendar.startOfDay(for: selectedDate)
@@ -149,9 +152,23 @@ struct WeeklyScheduleView: View {
                 .coordinateSpace(name: "schedule")
                 .padding()
             }
+            .refreshable {
+                await loadData()
+            }
             .navigationTitle("Schedule")
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        Task { await generatePlan() }
+                    } label: {
+                        if scheduleService.isGenerating {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Generate plan", systemImage: "sparkles")
+                        }
+                    }
+                    .disabled(scheduleService.isGenerating)
+
                     Button {
                         showPreferences = true
                     } label: {
@@ -189,10 +206,32 @@ struct WeeklyScheduleView: View {
                     Task { await loadData() }
                 }
             }
+            .onChange(of: taskService.dataVersion) { _, _ in
+                Task { await loadData() }
+            }
             .sheet(isPresented: $showPreferences) {
                 PreferencesView()
             }
+            .sheet(isPresented: $showProposal) {
+                ScheduleProposalView()
+            }
+            .sheet(item: $editingBlock) { block in
+                BlockTimeEditorView(block: block)
+            }
         }
+    }
+
+    private func generatePlan() async {
+        errorDismissed = false
+        let busyTimes = busyEvents
+            .filter { !calendarService.isIgnored($0) }
+            .map { BusyTimeRequest(start: $0.start, end: $0.end) }
+        await scheduleService.generate(
+            startDate: visibleStart,
+            endDate: visibleEnd,
+            busyTimes: busyTimes
+        )
+        showProposal = true
     }
 
     private var activeErrorMessage: String? {
@@ -309,9 +348,7 @@ struct WeeklyScheduleView: View {
     }
 
     private func monthCell(_ day: Date) -> some View {
-        let hasEvents = busyEvents.contains {
-            calendar.isDate($0.start, inSameDayAs: day)
-        }
+        let hasEvents = !events(for: day).isEmpty
         let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
         let isToday = calendar.isDateInToday(day)
 
@@ -440,6 +477,18 @@ struct WeeklyScheduleView: View {
                     }
                     .padding(.top, 4)
 
+                    if !didSeeReorderTip && !recommendation.items.isEmpty {
+                        Label("Long-press and drag a task to reorder", systemImage: "hand.draw")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                            .onAppear {
+                                didSeeReorderTip = true
+                            }
+                    }
+
                     if recommendation.items.isEmpty {
                         Text("Nothing recommended — no free time or no open tasks.")
                             .font(.footnote)
@@ -516,6 +565,10 @@ struct WeeklyScheduleView: View {
             Text(formatMinutes(item.minutes))
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
+            Image(systemName: "line.3.horizontal")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .help("Drag to reorder")
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
@@ -591,7 +644,7 @@ struct WeeklyScheduleView: View {
                     "All caught up",
                     systemImage: "checkmark.seal.fill",
                     description: Text(
-                        "Fixed-event tasks you schedule will appear here so you can confirm the details before they sit in your calendar."
+                        "Fixed-event tasks you schedule appear here so you can confirm their times. Confirming just marks them as reviewed here on your device."
                     )
                 )
                 .frame(maxWidth: .infinity)
@@ -743,8 +796,81 @@ struct WeeklyScheduleView: View {
     // MARK: - Events
 
     private func events(for day: Date) -> [CalendarEventItem] {
-        busyEvents.filter { calendar.isDate($0.start, inSameDayAs: day) }
-            .sorted { $0.start < $1.start }
+        let external = busyEvents.filter { calendar.isDate($0.start, inSameDayAs: day) }
+        return (external + appEvents(for: day)).sorted { $0.start < $1.start }
+    }
+
+    /// Events that come from the app itself: scheduled blocks plus fixed and
+    /// repeating tasks expanded into one event per scheduled day.
+    private func appEvents(for day: Date) -> [CalendarEventItem] {
+        let dayStart = calendar.startOfDay(for: day)
+        let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? day
+
+        let dayBlocks = scheduleService.blocks.filter {
+            $0.startAt >= dayStart && $0.startAt < dayEnd
+        }
+        let blockItems = dayBlocks.map { block in
+            CalendarEventItem(
+                id: "app-block-\(block.id.uuidString)",
+                title: block.title,
+                start: block.startAt,
+                end: block.endAt,
+                isAllDay: false
+            )
+        }
+        let blockTaskIds = Set(dayBlocks.map(\.taskId))
+
+        let weekday = (calendar.component(.weekday, from: day) - 1 + 7) % 7
+        let taskItems = taskService.tasks.compactMap { task -> CalendarEventItem? in
+            guard
+                !task.isArchived,
+                task.status != .completed,
+                let start = task.startAt,
+                let end = task.endAt
+            else { return nil }
+            if blockTaskIds.contains(task.id) { return nil }
+            let weekdays = task.repeatWeekdays ?? []
+            if weekdays.isEmpty {
+                guard calendar.isDate(start, inSameDayAs: day) else { return nil }
+                return repeatingEvent(from: task, on: day)
+            }
+            guard weekdays.contains(weekday) else { return nil }
+            guard isWithinRepeat(task: task, day: day) else { return nil }
+            return repeatingEvent(from: task, on: day)
+        }
+
+        return blockItems + taskItems
+    }
+
+    private func repeatingEvent(from task: TaskItem, on day: Date) -> CalendarEventItem {
+        let start = task.startAt ?? day
+        let end = task.endAt ?? day.addingTimeInterval(30 * 60)
+        let startTime = calendar.dateComponents([.hour, .minute], from: start)
+        let endTime = calendar.dateComponents([.hour, .minute], from: end)
+        let s = calendar.date(bySettingHour: startTime.hour ?? 0, minute: startTime.minute ?? 0, second: 0, of: day) ?? day
+        let e = calendar.date(bySettingHour: endTime.hour ?? 0, minute: endTime.minute ?? 0, second: 0, of: day) ?? s
+        return CalendarEventItem(
+            id: "app-task-\(task.id.uuidString)-\(Int(s.timeIntervalSince1970))",
+            title: task.title,
+            start: s,
+            end: e,
+            isAllDay: false
+        )
+    }
+
+    private func isWithinRepeat(task: TaskItem, day: Date) -> Bool {
+        guard let start = task.startAt else { return false }
+        let dayStart = calendar.startOfDay(for: day)
+        let taskStart = calendar.startOfDay(for: start)
+        guard dayStart >= taskStart else { return false }
+        if let endsOn = task.repeatEndsOn {
+            guard dayStart <= calendar.startOfDay(for: endsOn) else { return false }
+        }
+        return true
+    }
+
+    private func isAppEvent(_ event: CalendarEventItem) -> Bool {
+        event.id.hasPrefix("app-block-") || event.id.hasPrefix("app-task-")
     }
 
     private func groupExactOverlap(_ items: [CalendarEventItem]) -> [[CalendarEventItem]] {
@@ -834,42 +960,81 @@ struct WeeklyScheduleView: View {
     }
 
     private func eventRow(_ event: CalendarEventItem) -> some View {
-        let ignored = calendarService.isIgnored(event)
-        return Button {
-            calendarService.toggleIgnored(event)
-        } label: {
-            HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(.gray)
-                    .frame(width: 4)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(event.title)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                        .strikethrough(ignored)
-                    Text("\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        let isAppBlock = event.id.hasPrefix("app-block-")
+        let isApp = isAppEvent(event)
+        let ignored = isApp ? false : calendarService.isIgnored(event)
+
+        let content = eventRowContent(event, ignored: ignored, isApp: isApp, isAppBlock: isAppBlock)
+
+        if isApp && !isAppBlock {
+            return AnyView(content)
+        } else {
+            return AnyView(
+                Button {
+                    if let block = block(for: event) {
+                        editingBlock = block
+                    } else if !isApp {
+                        calendarService.toggleIgnored(event)
+                    }
+                } label: {
+                    content
                 }
-                Spacer()
-                if ignored {
-                    Image(systemName: "nosign")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Ignore")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 8)
-            .background(
-                (ignored ? Color.secondary.opacity(0.12) : Color(UIColor.quaternarySystemFill)),
-                in: RoundedRectangle(cornerRadius: 8)
+                .buttonStyle(.plain)
             )
         }
-        .buttonStyle(.plain)
+    }
+
+    private func block(for event: CalendarEventItem) -> CalendarBlock? {
+        guard event.id.hasPrefix("app-block-") else { return nil }
+        let uuidString = String(event.id.dropFirst("app-block-".count))
+        guard let id = UUID(uuidString: uuidString) else { return nil }
+        return scheduleService.blocks.first { $0.id == id }
+    }
+
+    private func eventRowContent(
+        _ event: CalendarEventItem,
+        ignored: Bool,
+        isApp: Bool,
+        isAppBlock: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(isApp ? Color.accentColor : .gray)
+                .frame(width: 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .strikethrough(ignored)
+                Text("\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if ignored {
+                Image(systemName: "nosign")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if isAppBlock {
+                Image(systemName: "pencil")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if isApp {
+                Image(systemName: "checklist")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Ignore")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .background(
+            (ignored ? Color.secondary.opacity(0.12) : Color(UIColor.quaternarySystemFill)),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
     }
 
     // MARK: - Data loading
@@ -877,6 +1042,9 @@ struct WeeklyScheduleView: View {
     private func loadData() async {
         errorDismissed = false
         await scheduleService.loadPreferences()
+
+        await scheduleService.loadBlocks()
+        await taskService.loadTasks()
 
         guard await calendarService.requestPermission() == .granted else {
             busyEvents = []

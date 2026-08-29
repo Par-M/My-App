@@ -1,11 +1,14 @@
 import SwiftUI
+import UIKit
 
 struct HabitsView: View {
     @Environment(HabitService.self) private var habitService
+    @Environment(TaskService.self) private var taskService
 
     @State private var isAdding = false
     @State private var editingHabit: Habit?
     @State private var showingDashboard = false
+    @State private var habitPendingDelete: Habit?
 
     var body: some View {
         NavigationStack {
@@ -18,6 +21,12 @@ struct HabitsView: View {
                     )
                 } else {
                     List {
+                        if let errorMessage = habitService.errorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .listRowBackground(Color.orange.opacity(0.08))
+                        }
                         ForEach(habitService.habits) { stats in
                             HabitRow(stats: stats) {
                                 await log(stats)
@@ -25,12 +34,21 @@ struct HabitsView: View {
                             .onTapGesture {
                                 editingHabit = stats.habit
                             }
+                            .accessibilityHint("Double tap to edit")
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    Task { await habitService.deleteHabit(id: stats.habit.id) }
+                                    habitPendingDelete = stats.habit
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    editingHabit = stats.habit
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                .tint(.blue)
                             }
                         }
                     }
@@ -67,6 +85,29 @@ struct HabitsView: View {
             .task {
                 await habitService.loadDashboard()
             }
+            .onChange(of: taskService.dataVersion) { _, _ in
+                Task { await habitService.loadDashboard() }
+            }
+        }
+        .confirmationDialog(
+            habitPendingDelete == nil ? "" : "Delete \(habitPendingDelete!.title)?",
+            isPresented: Binding(
+                get: { habitPendingDelete != nil },
+                set: { if !$0 { habitPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let habit = habitPendingDelete {
+                    Task { await habitService.deleteHabit(id: habit.id) }
+                }
+                habitPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                habitPendingDelete = nil
+            }
+        } message: {
+            Text("This removes the habit and its history. This cannot be undone.")
         }
         .sheet(isPresented: $isAdding) {
             HabitFormView(mode: .add) { _ in
@@ -83,6 +124,7 @@ struct HabitsView: View {
 
     private func log(_ stats: HabitStats) async {
         await habitService.logHabit(id: stats.habit.id, count: 1)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }
 
@@ -176,5 +218,6 @@ private struct HabitRow: View {
 
     private func commit(_ value: Int) async {
         await habitService.setHabitDayCount(id: stats.habit.id, count: value)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

@@ -148,7 +148,10 @@ struct TaskFormView: View {
         return "= \(totalDurationMinutes / 60)h \(totalDurationMinutes % 60)m"
     }
 
-    private static let weekdayLetters = ["S", "M", "T", "W", "T", "F", "S"]
+    private static let weekdayLetters = ["S", "M", "Tu", "W", "Th", "F", "Sa"]
+    private static let weekdayFullNames = [
+        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    ]
 
     private var selectedWeekdaysValue: [Int]? {
         hasRepeat ? Array(repeatDays).sorted() : nil
@@ -189,8 +192,8 @@ struct TaskFormView: View {
             }
         } label: {
             Text(Self.weekdayLetters[day])
-                .font(.subheadline.weight(.semibold))
-                .frame(width: 38, height: 38)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .frame(width: 40, height: 40)
                 .background(
                     isSelected ? Color.accentColor : Color(.secondarySystemBackground),
                     in: Circle()
@@ -198,6 +201,7 @@ struct TaskFormView: View {
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Self.weekdayFullNames[day])
         .accessibilityIdentifier("repeatDay\(day)")
     }
 
@@ -320,25 +324,25 @@ struct TaskFormView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
 
-                        Toggle("Repeats", isOn: $hasRepeat)
-                        if hasRepeat {
-                            HStack(spacing: 8) {
-                                ForEach(0..<7, id: \.self) { day in
-                                    repeatDayButton(day)
-                                }
+                    Toggle("Repeats", isOn: $hasRepeat)
+                    if hasRepeat {
+                        HStack(spacing: 8) {
+                            ForEach(0..<7, id: \.self) { day in
+                                repeatDayButton(day)
                             }
-                            .frame(maxWidth: .infinity)
+                        }
+                        .frame(maxWidth: .infinity)
 
-                            Toggle("End Repeat", isOn: $hasRepeatEnd)
-                            if hasRepeatEnd {
-                                DatePicker(
-                                    "Repeat Until",
-                                    selection: $repeatEndDate,
-                                    in: Date()...,
-                                    displayedComponents: .date
-                                )
-                            }
+                        Toggle("End Repeat", isOn: $hasRepeatEnd)
+                        if hasRepeatEnd {
+                            DatePicker(
+                                "Repeat Until",
+                                selection: $repeatEndDate,
+                                in: Date()...,
+                                displayedComponents: .date
+                            )
                         }
                     }
                 }

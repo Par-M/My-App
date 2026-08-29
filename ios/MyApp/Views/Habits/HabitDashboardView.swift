@@ -9,6 +9,14 @@ struct HabitDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    if let errorMessage = habitService.errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                    }
                     if habitService.habits.isEmpty {
                         ContentUnavailableView(
                             "No data yet",

@@ -19,7 +19,10 @@ struct HabitFormView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
 
-    private static let weekdayLetters = ["S", "M", "T", "W", "T", "F", "S"]
+    private static let weekdayLetters = ["S", "M", "Tu", "W", "Th", "F", "Sa"]
+    private static let weekdayFullNames = [
+        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+    ]
 
     init(mode: Mode, onSaved: ((Habit) -> Void)? = nil) {
         self.mode = mode
@@ -56,8 +59,8 @@ struct HabitFormView: View {
             }
         } label: {
             Text(Self.weekdayLetters[day])
-                .font(.subheadline.weight(.semibold))
-                .frame(width: 38, height: 38)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .frame(width: 40, height: 40)
                 .background(
                     isSelected ? Color.accentColor : Color(.secondarySystemBackground),
                     in: Circle()
@@ -65,6 +68,7 @@ struct HabitFormView: View {
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Self.weekdayFullNames[day])
         .accessibilityIdentifier("repeatDay\(day)")
     }
 
@@ -175,6 +179,8 @@ struct HabitFormView: View {
             if created != nil {
                 onSaved?(created!)
                 dismiss()
+            } else {
+                errorMessage = habitService.errorMessage ?? "Couldn't save habit. Try again."
             }
         case .edit(let habit):
             let updated = await habitService.updateHabit(
@@ -186,6 +192,8 @@ struct HabitFormView: View {
             if updated != nil {
                 onSaved?(updated!)
                 dismiss()
+            } else {
+                errorMessage = habitService.errorMessage ?? "Couldn't save habit. Try again."
             }
         }
     }

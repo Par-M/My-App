@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TodayView: View {
     @Environment(PlannerService.self) private var planner
@@ -7,13 +8,16 @@ struct TodayView: View {
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
     @Environment(RecommendationService.self) private var recommendationService
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showSummary = false
     @State private var errorDismissed = false
     @State private var showSettings = false
     @State private var reschedulingTask: TaskItem?
+    @State private var focusingTask: ScheduledTask?
     @State private var quickTaskTitle = ""
     @State private var isAddingQuickTask = false
+    @State private var quickAddError: String?
 
     private var calendar: Calendar { Calendar.current }
 
@@ -35,6 +39,12 @@ struct TodayView: View {
                             quickAddField
                         }
 
+                        if let currentTask = today.currentTask {
+                            Section("Now") {
+                                focusRow(currentTask)
+                            }
+                        }
+
                         if !taskService.overdueTasks.isEmpty {
                             Section("Behind Schedule") {
                                 ForEach(taskService.overdueTasks) { task in
@@ -46,7 +56,7 @@ struct TodayView: View {
                         if !today.nextTasks.isEmpty {
                             Section("Up Next") {
                                 ForEach(today.nextTasks) { task in
-                                    nextTaskRow(task)
+                                    focusRow(task)
                                 }
                             }
                         }
@@ -67,11 +77,20 @@ struct TodayView: View {
                             syncStatusRow()
                         }
                     }
+                } else if planner.isLoading {
+                    ProgressView("Loading today's plan…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if planner.errorMessage != nil {
+                    ContentUnavailableView(
+                        "Couldn't load today's plan",
+                        systemImage: "wifi.exclamationmark",
+                        description: Text("Check your connection and try again.")
+                    )
                 } else {
                     ContentUnavailableView(
                         "No plan for today",
                         systemImage: "calendar.badge.clock",
-                        description: Text("Pull to refresh to build today's plan.")
+                        description: Text("Pull to refresh to check for updates.")
                     )
                 }
             }
@@ -90,6 +109,7 @@ struct TodayView: View {
                         Task { await planner.loadToday() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .accessibilityLabel("Refresh")
                     }
                     .disabled(planner.isLoading)
                 }
@@ -111,10 +131,29 @@ struct TodayView: View {
                     await loadRecommendations()
                 }
             }
+            .onChange(of: taskService.dataVersion) { _, _ in
+                Task {
+                    await planner.loadToday()
+                    await taskService.loadOverdue()
+                    await loadRecommendations()
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    Task {
+                        await planner.loadToday()
+                        await taskService.loadOverdue()
+                        await loadRecommendations()
+                    }
+                }
+            }
             .sheet(item: $reschedulingTask) { task in
                 RescheduleSheet(task: task) { minutes, reason in
                     Task { await reschedule(task, minutes: minutes, reason: reason) }
                 }
+            }
+            .sheet(item: $focusingTask) { task in
+                FocusView(task: task)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
@@ -266,25 +305,33 @@ struct TodayView: View {
     // MARK: - Quick add + recommendations
 
     private var quickAddField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.secondary)
-            TextField("Quick add a task…", text: $quickTaskTitle)
-                .submitLabel(.done)
-                .onSubmit {
-                    Task { await addQuickTask() }
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(.secondary)
+                TextField("Quick add a task…", text: $quickTaskTitle)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        Task { await addQuickTask() }
+                    }
+                if isAddingQuickTask {
+                    ProgressView()
                 }
-            if isAddingQuickTask {
-                ProgressView()
+            }
+            .padding(.vertical, 4)
+            if let quickAddError {
+                Label(quickAddError, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
         }
-        .padding(.vertical, 4)
     }
 
     private func addQuickTask() async {
         let title = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !isAddingQuickTask else { return }
         isAddingQuickTask = true
+        quickAddError = nil
         defer { isAddingQuickTask = false }
         do {
             _ = try await taskService.createTask(
@@ -302,11 +349,19 @@ struct TodayView: View {
                 repeatEndsOn: nil
             )
             quickTaskTitle = ""
+            compliantHaptic(.success)
             await taskService.loadOverdue()
             await loadRecommendations()
         } catch {
-            // TaskService records the error message for its own surfaces.
+            compliantHaptic(.error)
+            quickAddError = "Couldn't add task. Try again."
         }
+    }
+
+    private func compliantHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(type)
     }
 
     private func loadRecommendations() async {
@@ -364,22 +419,43 @@ struct TodayView: View {
         return mins == 0 ? "\(hours)h" : "\(hours)h \(mins)m"
     }
 
-    private func nextTaskRow(_ task: ScheduledTask) -> some View {        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(task.title)
-                        .font(.body.weight(.medium))
-                        .lineLimit(1)
+    private func focusRow(_ task: ScheduledTask) -> some View {
+        Button {
+            focusingTask = task
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "timer")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(task.title)
+                            .font(.body.weight(.medium))
+                            .lineLimit(1)
+                        if task.status != .pending {
+                            statusLabel(task.status)
+                        }
+                    }
+                    if let start = task.start {
+                        Text("Starts \(start.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                if let start = task.start {
-                    Text("Starts \(start.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Spacer()
+                Label("Focus", systemImage: "play.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
             }
-            Spacer()
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
+    }
+
+    private func statusLabel(_ status: TaskStatus) -> some View {
+        Text(status.label)
+            .font(.caption2.bold())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.15), in: Capsule())
     }
 
     private func summaryButton(_ today: TodayResponse) -> some View {

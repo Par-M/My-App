@@ -696,3 +696,60 @@ class TestArchiveRestore:
             headers=_auth(data["access_token"]),
         )
         assert response.status_code == 404
+
+
+class TestOverdue:
+    def _overdue_ids(self, client, token):
+        response = client.get("/api/v1/tasks/overdue", headers=_auth(token))
+        assert response.status_code == 200
+        return {t["id"] for t in response.json()["items"]}
+
+    def test_extending_deadline_clears_task_from_overdue(self, client):
+        data = _login(client)
+        token = data["access_token"]
+
+        created = _create(
+            client, token, deadline=(NOW - timedelta(hours=1)).isoformat()
+        ).json()
+
+        block = client.post(
+            "/api/v1/calendar/blocks",
+            json={
+                "task_id": created["id"],
+                "title": created["title"],
+                "start_at": (NOW - timedelta(hours=3)).isoformat(),
+                "end_at": (NOW - timedelta(hours=2)).isoformat(),
+                "calendar_event_id": "evt-overdue-1",
+            },
+            headers=_auth(token),
+        )
+        assert block.status_code == 201
+
+        assert created["id"] in self._overdue_ids(client, token)
+
+        updated = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"deadline": FUTURE.isoformat()},
+            headers=_auth(token),
+        )
+        assert updated.status_code == 200
+
+        assert created["id"] not in self._overdue_ids(client, token)
+
+    def test_extending_deadline_clears_deadline_based_overdue(self, client):
+        data = _login(client)
+        token = data["access_token"]
+
+        created = _create(
+            client, token, deadline=PAST.isoformat()
+        ).json()
+        assert created["id"] in self._overdue_ids(client, token)
+
+        updated = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"deadline": FUTURE.isoformat()},
+            headers=_auth(token),
+        )
+        assert updated.status_code == 200
+
+        assert created["id"] not in self._overdue_ids(client, token)

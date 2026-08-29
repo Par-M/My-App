@@ -38,11 +38,13 @@ struct LoginView: View {
             }
             .disabled(isLoading)
 
+            #if DEBUG
             Button("Development Sign In") {
                 Task { await signInDev() }
             }
             .font(.footnote)
             .disabled(isLoading)
+            #endif
 
             if isLoading {
                 ProgressView()

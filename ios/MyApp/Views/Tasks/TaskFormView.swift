@@ -170,7 +170,9 @@ struct TaskFormView: View {
     }
 
     private var candidateTasks: [TaskItem] {
-        taskService.tasks.filter { $0.id != selfTaskID }
+        taskService.tasks.filter {
+            $0.id != selfTaskID && $0.status != .completed
+        }
     }
 
     private var categorySuggestions: [String] {

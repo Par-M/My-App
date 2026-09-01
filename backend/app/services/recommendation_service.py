@@ -208,8 +208,15 @@ class RecommendationService:
 
         pending: list[tuple[Task, dict, int]] = []  # (task, part, part_count)
         for task in tasks:
-            duration = task.estimated_duration or 30
-            parts = split_task_into_parts(task.title, task.description, duration)
+            # "Amount left" = estimated duration minus time already completed
+            # (recorded via the task's actual_duration). Tasks with nothing left
+            # are fully done and are not recommended again.
+            estimated = task.estimated_duration or 30
+            completed = task.actual_duration or 0
+            amount_left = max(0, estimated - completed)
+            if amount_left <= 0:
+                continue
+            parts = split_task_into_parts(task.title, task.description, amount_left)
             for part in parts:
                 pending.append((task, part, len(parts)))
 

@@ -178,6 +178,62 @@ class TestDailyRecommendationsEndpoint:
         if "Soon deadline" in titles and "Late deadline" in titles:
             assert titles.index("Soon deadline") < titles.index("Late deadline")
 
+    def test_partially_completed_task_recommends_only_amount_left(self, client):
+        data = _login(client)
+        created = _create(
+            client,
+            data["access_token"],
+            title="Partly done",
+            estimated_duration=60,
+        )
+        client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"actual_duration": 30},
+            headers=_auth(data["access_token"]),
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        items = [
+            item
+            for day in response.json()["days"]
+            for item in day["items"]
+        ]
+        part_items = [i for i in items if i["task_title"] == "Partly done"]
+        assert part_items
+        assert sum(i["minutes"] for i in part_items) == 30
+
+    def test_fully_completed_task_not_recommended(self, client):
+        data = _login(client)
+        created = _create(
+            client,
+            data["access_token"],
+            title="All done",
+            estimated_duration=60,
+        )
+        client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"actual_duration": 60},
+            headers=_auth(data["access_token"]),
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        items = [
+            item
+            for day in response.json()["days"]
+            for item in day["items"]
+        ]
+        assert all(item["task_title"] != "All done" for item in items)
+
     def test_busy_time_defers_to_unscheduled(self, client):
         data = _login(client)
         _create(client, data["access_token"], estimated_duration=120)

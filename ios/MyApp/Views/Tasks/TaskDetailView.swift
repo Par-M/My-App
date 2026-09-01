@@ -29,16 +29,43 @@ struct TaskDetailView: View {
 
             if !currentTask.isArchived && currentTask.completedAt == nil {
                 Section("Progress") {
-                    HStack {
-                        Text("\(currentTask.progressPercent)%")
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
-                        Spacer()
-                        Text("Completed blocks")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    if let estimated = currentTask.estimatedDuration, estimated > 0 {
+                        CompletenessSlider(
+                            estimatedMinutes: estimated,
+                            completedMinutes: Binding(
+                                get: { currentTask.actualDuration ?? 0 },
+                                set: { currentTask.actualDuration = $0 }
+                            ),
+                            onCommit: { minutes in
+                                Task {
+                                    await saveCompletedMinutes(minutes)
+                                }
+                            }
+                        )
+                    } else {
+                        HStack {
+                            Text("\(currentTask.progressPercent)%")
+                                .font(.title3.weight(.semibold))
+                                .monospacedDigit()
+                            Spacer()
+                            Text("Completed blocks")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        ProgressView(value: Double(currentTask.progressPercent), total: 100)
                     }
-                    ProgressView(value: Double(currentTask.progressPercent), total: 100)
+
+                    if currentTask.status != .completed {
+                        Button {
+                            Task { await markComplete() }
+                        } label: {
+                            Label("Mark Complete", systemImage: "checkmark.circle.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .accessibilityIdentifier("completeTaskButton")
+                    }
                 }
             }
 
@@ -149,6 +176,31 @@ struct TaskDetailView: View {
             do {
                 try await taskService.deleteTask(currentTask)
                 dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveCompletedMinutes(_ minutes: Int) async {
+        do {
+            currentTask = try await taskService.setCompletedMinutes(
+                id: currentTask.id,
+                minutes: minutes
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func markComplete() {
+        Task {
+            do {
+                currentTask = try await taskService.completeTask(
+                    id: currentTask.id,
+                    minutes: nil,
+                    productivity: currentTask.productivity
+                )
             } catch {
                 errorMessage = error.localizedDescription
             }

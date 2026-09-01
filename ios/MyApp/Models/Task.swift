@@ -199,6 +199,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
     let priority: TaskPriority
     let status: TaskStatus
     let estimatedDuration: Int?
+    let actualDuration: Int?
     let category: String?
     let notes: String?
     let repeatWeekdays: [Int]?
@@ -215,6 +216,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         priority = task.priority
         status = task.status
         estimatedDuration = task.estimatedDuration
+        actualDuration = task.actualDuration
         category = task.category
         notes = task.notes
         repeatWeekdays = task.repeatWeekdays
@@ -232,6 +234,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         priority = TaskPriority(rawValue: local.priorityRaw) ?? .medium
         status = TaskStatus(rawValue: local.statusRaw) ?? .pending
         estimatedDuration = local.estimatedDuration
+        actualDuration = local.actualDuration
         category = local.category
         notes = local.notes
         repeatWeekdays = local.repeatWeekdays
@@ -250,6 +253,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         try container.encode(priority, forKey: .priority)
         try container.encode(status, forKey: .status)
         try container.encode(estimatedDuration, forKey: .estimatedDuration)
+        try container.encode(actualDuration, forKey: .actualDuration)
         try container.encode(category, forKey: .category)
         try container.encode(notes, forKey: .notes)
         try container.encode(repeatWeekdays, forKey: .repeatWeekdays)
@@ -267,6 +271,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case priority
         case status
         case estimatedDuration = "estimated_duration"
+        case actualDuration = "actual_duration"
         case category
         case notes
         case repeatWeekdays = "repeat_weekdays"

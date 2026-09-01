@@ -441,6 +441,15 @@ final class TaskService {
         }
     }
 
+    func setCompletedMinutes(id: UUID, minutes: Int) async throws -> TaskItem {
+        guard let current = tasks.first(where: { $0.id == id }) else {
+            throw NetworkError.httpStatus(404)
+        }
+        var updated = current
+        updated.actualDuration = max(0, minutes)
+        return try await updateTask(updated)
+    }
+
     func snoozeTask(_ task: TaskItem, minutes: Int) async throws -> SnoozeResponse {
         if !connectivity.isConnected, let store {
             var updated = task

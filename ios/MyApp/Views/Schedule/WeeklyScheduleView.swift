@@ -40,6 +40,7 @@ struct WeeklyScheduleView: View {
     @State private var draggingId: String?
     @State private var dragStartCenter: CGFloat?
     @State private var rowCenters: [String: CGFloat] = [:]
+    @State private var selectedTask: TaskItem?
     @AppStorage("didSeeReorderTip") private var didSeeReorderTip = false
 
     private var dayStart: Date {
@@ -217,6 +218,11 @@ struct WeeklyScheduleView: View {
             }
             .sheet(item: $editingBlock) { block in
                 BlockTimeEditorView(block: block)
+            }
+            .sheet(item: $selectedTask) { task in
+                NavigationStack {
+                    TaskDetailView(task: task)
+                }
             }
         }
     }
@@ -471,9 +477,15 @@ struct WeeklyScheduleView: View {
                         Text("Recommended")
                             .font(.subheadline.weight(.semibold))
                         Spacer()
-                        Text("\(formatMinutes(recommendation.availableMinutes)) free")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if calendar.isDateInToday(day) {
+                            Text("\(formatMinutes(remainingFreeMinutesToday())) left today")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(formatMinutes(recommendation.availableMinutes)) free")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.top, 4)
 
@@ -498,11 +510,11 @@ struct WeeklyScheduleView: View {
                         ForEach(
                             orderStore.reorder(recommendation.items, id: \.id)
                         ) { item in
-                            recommendedRow(item)
+                            recommendedRow(item, for: day)
                                 .opacity(draggingId == item.id ? 0.4 : 1)
                                 .overlay {
                                     if draggingId == item.id {
-                                        recommendedRow(item)
+                                        recommendedRow(item, for: day)
                                             .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 8))
                                     }
                                 }
@@ -541,39 +553,60 @@ struct WeeklyScheduleView: View {
         }
     }
 
-    private func recommendedRow(_ item: RecommendedPart) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(priorityColor(item.priority))
-                .frame(width: 4, height: 34)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(displayTitle(item))
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(2)
-                if !item.reason.isEmpty {
-                    Text(item.reason)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                if item.isOverdue {
-                    Label("Overdue", systemImage: "exclamationmark.circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red)
-                }
+    private func recommendedRow(_ item: RecommendedPart, for day: Date) -> some View {
+        let isToday = calendar.isDateInToday(day)
+        let remainingToday = remainingFreeMinutesToday()
+        let canCompleteToday = isToday && item.minutes <= remainingToday
+
+        return Button {
+            if let task = taskService.tasks.first(where: { $0.id == item.taskId }) {
+                selectedTask = task
             }
-            Spacer()
-            Text(formatMinutes(item.minutes))
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-            Image(systemName: "line.3.horizontal")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .help("Drag to reorder")
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(priorityColor(item.priority))
+                    .frame(width: 4, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayTitle(item))
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(2)
+                    if !item.reason.isEmpty {
+                        Text(item.reason)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if item.isOverdue {
+                        Label("Overdue", systemImage: "exclamationmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                }
+                Spacer()
+                if canCompleteToday {
+                    Label("Can finish", systemImage: "checkmark.circle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.green)
+                } else if isToday && remainingToday < item.minutes {
+                    Label(
+                        "Needs \(formatMinutes(item.minutes - remainingToday)) more free time",
+                        systemImage: "clock"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                Text(formatMinutes(item.minutes))
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
+        .buttonStyle(.plain)
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background(Color.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
     }
 
     private var unscheduledSection: some View {
@@ -791,6 +824,73 @@ struct WeeklyScheduleView: View {
         let hours = minutes / 60
         let mins = minutes % 60
         return mins == 0 ? "\(hours)h" : "\(hours)h \(mins)m"
+    }
+
+    // MARK: - Remaining free time (today)
+
+    /// End of today's working window (honoring work-hours preference).
+    private func workEndToday() -> Date? {
+        let cal = Calendar.current
+        let now = Date()
+        let hour = scheduleService.preference?.workHoursEnd ?? 17
+        let endHour = min(max(Int(hour), 0), 23)
+        var components = cal.dateComponents([.year, .month, .day], from: now)
+        components.hour = endHour
+        components.minute = 0
+        let end = cal.date(from: components) ?? now
+        return end > now ? end : nil
+    }
+
+    /// Busy intervals that haven't ended by now today, within the working window.
+    /// Combines external calendar events, app schedule blocks, and fixed tasks.
+    private func busyIntervalsToday() -> [(Date, Date)] {
+        let now = Date()
+        guard let workEnd = workEndToday() else { return [] }
+
+        var intervals: [(Date, Date)] = []
+
+        for event in busyEvents where !calendarService.isIgnored(event) && !event.isAllDay {
+            let start = max(event.start, now)
+            let end = min(event.end, workEnd)
+            if end > start { intervals.append((start, end)) }
+        }
+
+        for block in scheduleService.blocks {
+            let start = max(block.startAt, now)
+            let end = min(block.endAt, workEnd)
+            if end > start { intervals.append((start, end)) }
+        }
+
+        for task in taskService.tasks
+        where task.startAt != nil && task.endAt != nil
+            && task.status != .completed && !task.isArchived {
+            let start = max(task.startAt!, now)
+            let end = min(task.endAt!, workEnd)
+            if end > start { intervals.append((start, end)) }
+        }
+
+        intervals.sort { $0.0 < $1.0 }
+        var merged: [(Date, Date)] = []
+        for interval in intervals {
+            if let last = merged.last, interval.0 <= last.1 {
+                merged[merged.count - 1] = (last.0, max(last.1, interval.1))
+            } else {
+                merged.append(interval)
+            }
+        }
+        return merged
+    }
+
+    /// Free minutes remaining between now and the end of the work day, minus
+    /// calendar events that haven't ended yet. Used to decide which recommended
+    /// tasks can still be completed today.
+    private func remainingFreeMinutesToday() -> Int {
+        guard let workEnd = workEndToday() else { return 0 }
+        var free = Int(workEnd.timeIntervalSince(Date()) / 60)
+        for interval in busyIntervalsToday() {
+            free -= Int(interval.1.timeIntervalSince(interval.0) / 60)
+        }
+        return max(free, 0)
     }
 
     // MARK: - Events

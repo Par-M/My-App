@@ -77,6 +77,24 @@ class UserPreference(Base):
         default="medium",
     )
 
+    deadline_reminder_enabled: Mapped[bool] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    deadline_reminder_lead_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=24,
+    )
+
+    fifteen_minute_reminder_enabled: Mapped[bool] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

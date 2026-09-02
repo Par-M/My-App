@@ -33,7 +33,7 @@ final class NotificationService {
     @MainActor static let shared = NotificationService()
 
     private(set) var preference: NotificationPreference?
-    private(set) var authorizationStatus: AuthorizationStatus = .unknown
+    private(set) var authorizationStatus: AuthorizationStatus
     private(set) var deviceToken: String?
     private(set) var errorMessage: String?
     private(set) var lastDeepLink: Date?
@@ -133,47 +133,79 @@ final class NotificationService {
             return
         }
 
-        if let preference, preference.morningBriefingEnabled {
-            scheduleBriefing(preference.morningBriefingTime)
-        }
-
-        if let preference, preference.deadlineReminderEnabled {
-            let leadHours = max(preference.deadlineReminderLeadHours, 1)
-            let now = Date()
-            for task in tasks where !task.isArchived && task.status != .completed {
-                guard let deadline = task.deadline, deadline > now else { continue }
-
-                let leadDate = deadline.addingTimeInterval(-TimeInterval(leadHours) * 3600)
-                if leadDate > now {
-                    addAlert(
-                        identifier: "deadline-\(task.id)-lead",
-                        date: leadDate,
-                        title: "Deadline reminder",
-                        body: "“\(task.title)” is due in \(leadHours)h.",
-                        taskId: task.id
-                    )
-                }
-
-                if leadHours > 1 {
-                    let hourBefore = deadline.addingTimeInterval(-3600)
-                    if hourBefore > now {
+        if let preference {
+            // 15-minute before deadline reminder
+            if preference.fifteenMinuteReminder_enabled {
+                let now = Date()
+                for task in tasks where !task.isArchived && task.status != .completed && task.deadline != nil && task.deadline! > now {
+                    let leadDate = deadline!.addingTimeInterval(-15 * 60)
+                    if leadDate > now {
                         addAlert(
-                            identifier: "deadline-\(task.id)-1h",
-                            date: hourBefore,
-                            title: "Due soon",
-                            body: "“\(task.title)” is due in 1 hour.",
+                            identifier: "fifteen-min-f"fifteen-min-{task.id}"\",
+                            date: leadDate,
+                            title: "Deadline reminder",
+                            body: "“\(task.title)” is due in 15 minutes.",
                             taskId: task.id
                         )
                     }
                 }
+            }
 
-                addAlert(
-                    identifier: "overdue-\(task.id)",
-                    date: deadline,
-                    title: "Task overdue",
-                    body: "“\(task.title)” is due now.",
-                    taskId: task.id
-                )
+            // Lead hours before deadline reminder
+            if preference.deadline_reminder_enabled {
+                let leadHours = max(preference.deadline_reminder_lead_hours, 1)
+                let now = Date()
+                // Collect tasks needing lead-hour reminders into an array
+                var leadTasks: [TaskItem] = []
+                for task in tasks where !task.isArchived && task.status != .completed && task.deadline != nil && task.deadline! > now {
+                    leadTasks.append(task)
+                }
+                for task in leadTasks {
+                    let deadline = task.deadline!
+                    let leadHours = max(preference.deadline_reminder_lead_hours, 1)
+                    let leadDate = deadline.addingTimeInterval(-TimeInterval(leadHours) * 3600)
+                    if leadDate > now {
+                        addAlert(
+                            identifier: "deadline-f"fifteen-min-{task.id}"-lead",
+                            date: leadDate,
+                            title: "Deadline reminder",
+                            body: "“\(task.title)” is due in \(leadHours)h.",
+                            taskId: task.id
+                        )
+                    }
+
+                    if leadHours > 1 {
+                        let hourBefore = deadline.addingTimeInterval(-3600)
+                        if hourBefore > now {
+                            addAlert(
+                                identifier: "deadline-\(task.id)-1h",
+                                date: hourBefore,
+                                title: "Due soon",
+                                body: "“\(task.title)” is due in 1 hour.",
+                                taskId: task.id
+                            )
+                        }
+                    }
+                }
+
+                // Overdue reminder - use the task with the earliest deadline
+                var earliestTask: TaskItem?
+                var earliestDeadline: Date?
+                for task in tasks where !task.isArchived && task.status != .completed && task.deadline != nil {
+                    if earliestDeadline == nil || task.deadline! < earliestDeadline! {
+                        earliestTask = task
+                        earliestDeadline = task.deadline!
+                    }
+                }
+                if let task = earliestTask, let deadline = earliestDeadline {
+                    addAlert(
+                        identifier: "overdue-\(task.id)",
+                        date: deadline,
+                        title: "Task overdue",
+                        body: "“\(task.title)” is due now.",
+                        taskId: task.id
+                    )
+                }
             }
         }
     }
@@ -243,7 +275,6 @@ final class NotificationService {
             return .authorized
         @unknown default:
             return .unknown
-        #endif
         }
     }
 }

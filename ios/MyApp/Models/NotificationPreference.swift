@@ -6,6 +6,8 @@ struct NotificationPreference: Codable, Sendable {
     var deadlineReminderEnabled: Bool
     var deadlineReminderLeadHours: Int
     var overdueAlertsEnabled: Bool
+    var fifteenMinuteReminderEnabled: Bool
+    var fifteenMinuteReminderLeadMinutes: Int
     var rescheduleAlertsEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
@@ -15,6 +17,8 @@ struct NotificationPreference: Codable, Sendable {
         case deadlineReminderLeadHours = "deadline_reminder_lead_hours"
         case overdueAlertsEnabled = "overdue_alerts_enabled"
         case rescheduleAlertsEnabled = "reschedule_alerts_enabled"
+        case fifteenMinuteReminderEnabled = "fifteen_minute_reminder_enabled"
+        case fifteenMinuteReminderLeadMinutes = "fifteen_minute_reminder_lead_minutes"
     }
 }
 
@@ -23,7 +27,9 @@ struct NotificationPreferenceUpdate: Encodable, Sendable {
     var morningBriefingTime: String?
     var deadlineReminderEnabled: Bool?
     var deadlineReminderLeadHours: Int?
-    var overdueAlertsEnabled: Bool?
+    var overdueAlertsEnabled: Bool
+    var fifteenMinuteReminderEnabled: Bool
+    var fifteenMinuteReminderLeadMinutes: Int?
     var rescheduleAlertsEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -33,6 +39,8 @@ struct NotificationPreferenceUpdate: Encodable, Sendable {
         case deadlineReminderLeadHours = "deadline_reminder_lead_hours"
         case overdueAlertsEnabled = "overdue_alerts_enabled"
         case rescheduleAlertsEnabled = "reschedule_alerts_enabled"
+        case fifteenMinuteReminderEnabled = "fifteen_minute_reminder_enabled"
+        case fifteenMinuteReminderLeadMinutes = "fifteen_minute_reminder_lead_minutes"
     }
 }
 

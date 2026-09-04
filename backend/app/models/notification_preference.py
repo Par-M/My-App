@@ -73,6 +73,18 @@ class NotificationPreference(Base):
         default=True,
     )
 
+    fifteen_minute_reminder_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    fifteen_minute_reminder_lead_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=15,
+    )
+
     reschedule_alerts_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

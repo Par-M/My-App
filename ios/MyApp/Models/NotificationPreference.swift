@@ -27,8 +27,8 @@ struct NotificationPreferenceUpdate: Encodable, Sendable {
     var morningBriefingTime: String?
     var deadlineReminderEnabled: Bool?
     var deadlineReminderLeadHours: Int?
-    var overdueAlertsEnabled: Bool
-    var fifteenMinuteReminderEnabled: Bool
+    var overdueAlertsEnabled: Bool?
+    var fifteenMinuteReminderEnabled: Bool?
     var fifteenMinuteReminderLeadMinutes: Int?
     var rescheduleAlertsEnabled: Bool?
 

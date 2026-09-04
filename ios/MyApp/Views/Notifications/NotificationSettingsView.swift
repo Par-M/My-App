@@ -143,9 +143,9 @@ struct NotificationSettingsView: View {
             morningBriefingTime: TimeOfDay.string(from: briefingTime),
             deadlineReminderEnabled: deadlineEnabled,
             deadlineReminderLeadHours: leadHours,
+            overdueAlertsEnabled: overdueEnabled,
             fifteenMinuteReminderEnabled: fifteenMinuteReminderEnabled,
             fifteenMinuteReminderLeadMinutes: fifteenMinuteReminderLeadMinutes,
-            overdueAlertsEnabled: overdueEnabled,
             rescheduleAlertsEnabled: rescheduleEnabled
         )
         Task {

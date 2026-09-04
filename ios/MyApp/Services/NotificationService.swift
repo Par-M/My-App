@@ -33,7 +33,7 @@ final class NotificationService {
     @MainActor static let shared = NotificationService()
 
     private(set) var preference: NotificationPreference?
-    private(set) var authorizationStatus: AuthorizationStatus
+    private(set) var authorizationStatus: AuthorizationStatus = .unknown
     private(set) var deviceToken: String?
     private(set) var errorMessage: String?
     private(set) var lastDeepLink: Date?
@@ -154,7 +154,6 @@ final class NotificationService {
 
             // Lead hours before deadline reminder
             if preference.deadlineReminderEnabled {
-                let leadHours = max(preference.deadlineReminderLeadHours, 1)
                 let now = Date()
                 // Collect tasks needing lead-hour reminders into an array
                 var leadTasks: [TaskItem] = []
@@ -271,6 +270,8 @@ final class NotificationService {
             return .authorized
         case .provisional:
             return .provisional
+        case .ephemeral:
+            return .authorized
         @unknown default:
             return .unknown
         }

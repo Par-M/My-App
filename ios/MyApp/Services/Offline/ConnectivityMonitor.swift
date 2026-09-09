@@ -13,8 +13,9 @@ final class ConnectivityMonitor {
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
+            let owner = self
             Task { @MainActor in
-                self?.isConnected = isConnected
+                owner?.isConnected = isConnected
             }
         }
         monitor.start(queue: queue)

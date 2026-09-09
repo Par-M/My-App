@@ -175,6 +175,7 @@ struct TaskListView: View {
     @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
     @State private var isCompletedExpanded = false
+    @State private var confirmSignOut = false
 
     private struct LoadKey: Hashable {
         let search: String
@@ -222,15 +223,19 @@ struct TaskListView: View {
                 if taskService.isLoading && taskService.tasks.isEmpty {
                     ProgressView("Loading tasks…")
                 } else if taskService.tasks.isEmpty {
-                    ContentUnavailableView(
-                        taskService.showingArchived ? "No Archived Tasks" : "No Tasks Yet",
-                        systemImage: "checklist",
-                        description: Text(
-                            taskService.showingArchived
-                                ? "Tasks you archive will appear here."
-                                : "Tap + to create your first task."
+                    if !searchText.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                    } else {
+                        ContentUnavailableView(
+                            taskService.showingArchived ? "No Archived Tasks" : "No Tasks Yet",
+                            systemImage: "checklist",
+                            description: Text(
+                                taskService.showingArchived
+                                    ? "Tasks you archive will appear here."
+                                    : "Tap + to create your first task."
+                            )
                         )
-                    )
+                    }
                 } else {
                     List {
                         if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
@@ -314,7 +319,7 @@ struct TaskListView: View {
                             Label("Notifications", systemImage: "bell")
                         }
                         Button("Log Out", role: .destructive) {
-                            authService.signOut()
+                            confirmSignOut = true
                         }
                     } label: {
                         Image(systemName: "person.crop.circle")
@@ -417,6 +422,18 @@ struct TaskListView: View {
                 RescheduleSheet(task: task) { minutes, reason in
                     Task { await reschedule(task, minutes: minutes, reason: reason) }
                 }
+            }
+            .confirmationDialog(
+                "Log out?",
+                isPresented: $confirmSignOut,
+                titleVisibility: .visible
+            ) {
+                Button("Log Out", role: .destructive) {
+                    authService.signOut()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You can sign back in anytime. Your data is synced to your account.")
             }
             .task(id: loadKey) {
                 await taskService.loadTasks(

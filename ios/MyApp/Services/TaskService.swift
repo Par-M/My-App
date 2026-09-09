@@ -99,7 +99,8 @@ final class TaskService {
         notes: String?,
         repeatWeekdays: [Int]?,
         beforeTaskIds: [UUID]? = nil,
-        afterTaskIds: [UUID]? = nil
+        afterTaskIds: [UUID]? = nil,
+        repeatEndsOn: Date? = nil
     ) async throws -> TaskItem {
         let request = TaskCreateRequest(
             title: title,
@@ -114,7 +115,8 @@ final class TaskService {
             notes: notes,
             repeatWeekdays: repeatWeekdays,
             beforeTaskIds: beforeTaskIds,
-            afterTaskIds: afterTaskIds
+            afterTaskIds: afterTaskIds,
+            repeatEndsOn: repeatEndsOn
         )
 
         if !connectivity.isConnected, let store {
@@ -137,6 +139,7 @@ final class TaskService {
                 category: request.category,
                 notes: request.notes,
                 repeatWeekdays: request.repeatWeekdays,
+                repeatEndsOn: request.repeatEndsOn,
                 beforeTaskIds: request.beforeTaskIds,
                 afterTaskIds: request.afterTaskIds,
                 isArchived: false,
@@ -436,6 +439,15 @@ final class TaskService {
             }
             throw error
         }
+    }
+
+    func setCompletedMinutes(id: UUID, minutes: Int) async throws -> TaskItem {
+        guard let current = tasks.first(where: { $0.id == id }) else {
+            throw NetworkError.httpStatus(404)
+        }
+        var updated = current
+        updated.actualDuration = max(0, minutes)
+        return try await updateTask(updated)
     }
 
     func snoozeTask(_ task: TaskItem, minutes: Int) async throws -> SnoozeResponse {

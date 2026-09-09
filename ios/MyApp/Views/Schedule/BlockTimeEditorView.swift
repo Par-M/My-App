@@ -10,6 +10,7 @@ struct BlockTimeEditorView: View {
     @State private var end: Date
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var confirmDelete = false
 
     init(block: CalendarBlock) {
         self.block = block
@@ -33,8 +34,25 @@ struct BlockTimeEditorView: View {
                     }
                 }
                 Section {
+                    if block.completedAt != nil {
+                        Button {
+                            Task { await reopen() }
+                        } label: {
+                            Label("Reopen Block", systemImage: "arrow.uturn.backward.circle")
+                        }
+                        .disabled(isSaving)
+                    } else {
+                        Button {
+                            Task { await complete() }
+                        } label: {
+                            Label("Mark Complete", systemImage: "checkmark.circle")
+                        }
+                        .disabled(isSaving)
+                    }
+                }
+                Section {
                     Button(role: .destructive) {
-                        Task { await delete() }
+                        confirmDelete = true
                     } label: {
                         Text("Delete Block")
                     }
@@ -46,6 +64,18 @@ struct BlockTimeEditorView: View {
                             .foregroundStyle(.red)
                     }
                 }
+            }
+            .confirmationDialog(
+                "Delete this block?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    Task { await delete() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes \(block.title) from your schedule. This cannot be undone.")
             }
             .navigationTitle("Edit Block")
             .navigationBarTitleDisplayMode(.inline)
@@ -79,6 +109,28 @@ struct BlockTimeEditorView: View {
         defer { isSaving = false }
         do {
             try await scheduleService.deleteBlock(block)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func complete() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            _ = try await scheduleService.completeBlock(block, note: nil)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reopen() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            _ = try await scheduleService.reopenBlock(block)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

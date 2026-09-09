@@ -34,6 +34,8 @@ class NotificationPreferenceResponse(BaseModel):
     deadline_reminder_enabled: bool
     deadline_reminder_lead_hours: int
     overdue_alerts_enabled: bool
+    fifteen_minute_reminder_enabled: bool
+    fifteen_minute_reminder_lead_minutes: int
     reschedule_alerts_enabled: bool
 
 
@@ -43,4 +45,8 @@ class NotificationPreferenceUpdate(BaseModel):
     deadline_reminder_enabled: bool | None = None
     deadline_reminder_lead_hours: int | None = Field(default=None, ge=1, le=168)
     overdue_alerts_enabled: bool | None = None
+    fifteen_minute_reminder_enabled: bool | None = None
+    fifteen_minute_reminder_lead_minutes: int | None = Field(
+        default=None, ge=1, le=120
+    )
     reschedule_alerts_enabled: bool | None = None

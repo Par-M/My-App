@@ -11,6 +11,8 @@ struct NotificationSettingsView: View {
     @State private var leadHours = 24
     @State private var overdueEnabled = true
     @State private var rescheduleEnabled = true
+    @State private var fifteenMinuteReminderEnabled = true
+    @State private var fifteenMinuteReminderLeadMinutes = 15
     @State private var didLoad = false
     @State private var saved = false
     @State private var saveError: String?
@@ -142,6 +144,8 @@ struct NotificationSettingsView: View {
             deadlineReminderEnabled: deadlineEnabled,
             deadlineReminderLeadHours: leadHours,
             overdueAlertsEnabled: overdueEnabled,
+            fifteenMinuteReminderEnabled: fifteenMinuteReminderEnabled,
+            fifteenMinuteReminderLeadMinutes: fifteenMinuteReminderLeadMinutes,
             rescheduleAlertsEnabled: rescheduleEnabled
         )
         Task {

@@ -20,6 +20,32 @@ An AI-powered daily planner for iOS. It shows the events already in your Apple C
 - **Notifications** — local + push (APNs) reminders
 - **Offline-first iOS** — local store, connectivity monitoring, and a sync manager that reconciles changes when you're back online
 
+## Notifications
+
+### Local (iOS) reminders — no server required
+
+On-device notifications are scheduled whenever the task list refreshes or notification settings change, provided the user granted permission (onboarding or Settings → Notifications). Reminders whose trigger time has already passed are skipped.
+
+| When | Copy | Toggle |
+| --- | --- | --- |
+| 15 minutes before a task's deadline | "… is due in 15 minutes." | `fifteen_minute_reminder_enabled` |
+| `deadline_reminder_lead_hours` (default 24h) before the deadline | "… is due in N h." | `deadline_reminder_enabled` |
+| 1 hour before the deadline (only when lead > 1h) | "… is due in 1 hour." | `deadline_reminder_enabled` |
+| At the earliest task's deadline | "… is due now." | `deadline_reminder_enabled` |
+
+### Push (server → APNs)
+
+The backend can push reminders outside the app. Delivery requires APNs credentials (`APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_KEY_PATH`, `APNS_ENVIRONMENT`) and the `h2` + `PyJWT` packages; without them sends are logged, not delivered.
+
+| Job | When | Toggle |
+| --- | --- | --- |
+| Morning briefing | At the user's configured local time (default 07:30), summarizing today's tasks, high-priority count, scheduled focus time, and deadlines | `morning_briefing_enabled` |
+| Deadline reminder | When a task's deadline is within `deadline_reminder_lead_hours` (default 24h) | `deadline_reminder_enabled` |
+| Overdue alert | Within 24h of a task becoming overdue | `overdue_alerts_enabled` |
+| Reschedule alert | When a schedule generation can't fit all tasks | `reschedule_alerts_enabled` |
+
+> **Note:** the scheduled jobs (morning briefing, deadline reminders, overdue alerts) are exposed via `NotificationService.run_all_jobs()` for a cron trigger but are not invoked automatically by the deployed app yet. The reschedule alert fires inline from `POST /api/v1/schedule/generate`.
+
 ## Architecture
 
 ```

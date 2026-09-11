@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -26,7 +27,9 @@ final class TaskService {
     private(set) var overdueTasks: [TaskItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
-    private(set) var dataVersion = 0
+    private(set) var dataVersion = 0 {
+        didSet { refreshWidgetTasks() }
+    }
     private(set) var isOfflineMode = false
 
     var showingArchived = false
@@ -71,6 +74,7 @@ final class TaskService {
             tasks = response.items
             store?.upsertServerTasks(response.items)
             isOfflineMode = false
+            refreshWidgetTasks()
         } catch {
             if let store, isNetworkUnavailable(error) || !connectivity.isConnected {
                 tasks = store.tasks()
@@ -547,5 +551,24 @@ final class TaskService {
             return
         }
         tasks[index] = task
+    }
+
+    private func refreshWidgetTasks() {
+        let active = tasks.filter { $0.status != .completed && !$0.isArchived }
+        let rank: [TaskPriority: Int] = [.high: 0, .medium: 1, .low: 2]
+        let ranked = active.sorted {
+            (rank[$0.priority] ?? 1) < (rank[$1.priority] ?? 1)
+        }
+        let topTitles = Array(ranked.prefix(3).map(\.title))
+        let existing = WidgetDataStore.read()
+        WidgetDataStore.write(
+            currentTaskTitle: ranked.first?.title,
+            nextTaskTitle: ranked.dropFirst().first?.title,
+            tasksRemaining: active.count,
+            habitsRemaining: existing.habitsRemaining,
+            topTaskTitles: topTitles
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
     }
 }

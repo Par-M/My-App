@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -43,6 +44,7 @@ final class SyncManager {
             let now = Date()
             store.setLastSyncDate(now)
             lastSyncDate = now
+            refreshWidgetsAfterSync()
         } catch {
             lastSyncError = error.localizedDescription
         }
@@ -153,5 +155,24 @@ final class SyncManager {
         for block in store.blocks() where !blockSet.contains(block.id) {
             store.purgeBlock(id: block.id)
         }
+    }
+
+    private func refreshWidgetsAfterSync() {
+        let active = store.tasks().filter { $0.status != .completed && !$0.isArchived }
+        let rank: [TaskPriority: Int] = [.high: 0, .medium: 1, .low: 2]
+        let ranked = active.sorted {
+            (rank[$0.priority] ?? 1) < (rank[$1.priority] ?? 1)
+        }
+        let topTitles = Array(ranked.prefix(3).map(\.title))
+        let existing = WidgetDataStore.read()
+        WidgetDataStore.write(
+            currentTaskTitle: ranked.first?.title,
+            nextTaskTitle: ranked.dropFirst().first?.title,
+            tasksRemaining: active.count,
+            habitsRemaining: existing.habitsRemaining,
+            topTaskTitles: topTitles
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
     }
 }

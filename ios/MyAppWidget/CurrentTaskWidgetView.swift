@@ -63,7 +63,7 @@ struct TasksRemainingWidgetView: View {
                     .font(.system(size: 10))
                 Text("\(entry.habitsRemaining)")
                     .font(.system(size: 18, weight: .bold, design: .monospaced))
-                Text(entry.habitsRemaining == 1 ? "habit" : "habits")
+                Text(entry.habitsRemaining == 1 ? "habit left" : "habits left")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

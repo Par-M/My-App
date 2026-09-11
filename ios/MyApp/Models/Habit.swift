@@ -25,6 +25,14 @@ struct HabitListResponse: Codable, Sendable {
     let total: Int
 }
 
+struct HabitReorderRequest: Encodable, Sendable {
+    let habitIds: [UUID]
+
+    private enum CodingKeys: String, CodingKey {
+        case habitIds = "habit_ids"
+    }
+}
+
 struct HabitCreateRequest: Encodable, Sendable {
     let title: String
     let repeatWeekdays: [Int]?

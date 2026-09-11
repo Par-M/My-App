@@ -63,6 +63,7 @@ class HabitResponse(BaseModel):
     title: str
     repeat_weekdays: list[int] | None
     daily_goal: int
+    position: int
     created_at: datetime
     updated_at: datetime
 
@@ -70,6 +71,10 @@ class HabitResponse(BaseModel):
 class HabitListResponse(BaseModel):
     items: list[HabitResponse]
     total: int
+
+
+class HabitReorderRequest(BaseModel):
+    habit_ids: list[uuid.UUID] = Field(min_length=1)
 
 
 class HabitLogCreate(BaseModel):

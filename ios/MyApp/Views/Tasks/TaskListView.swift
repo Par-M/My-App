@@ -166,7 +166,7 @@ struct TaskListView: View {
     @State private var searchText = ""
     @State private var priorityFilter: TaskPriority?
     @State private var statusFilter: TaskStatus?
-    @State private var sortOption: TaskService.SortOption = .created
+    @State private var sortOption: TaskService.SortOption = .position
     @State private var sortAscending = false
     @State private var showAddTask = false
     @State private var showNotificationSettings = false
@@ -176,6 +176,7 @@ struct TaskListView: View {
     @State private var errorDismissed = false
     @State private var isCompletedExpanded = false
     @State private var confirmSignOut = false
+    @State private var isReordering = false
 
     private struct LoadKey: Hashable {
         let search: String
@@ -238,32 +239,62 @@ struct TaskListView: View {
                     }
                 } else {
                     List {
-                        if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
+                        if isReordering {
                             Section {
-                                ForEach(deferredTasks) { task in
+                                ForEach(activeTasks) { task in
                                     NavigationLink(value: task) {
-                                        DeferredTaskRow(task: task) { status in
-                                            Task {
-                                                try? await taskService.setStatus(status, for: task)
+                                        if deferredTasks.contains(where: { $0.id == task.id }) {
+                                            DeferredTaskRow(task: task) { status in
+                                                Task {
+                                                    try? await taskService.setStatus(status, for: task)
+                                                }
+                                            }
+                                        } else {
+                                            TaskRow(task: task) { status in
+                                                Task {
+                                                    try? await taskService.setStatus(status, for: task)
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                .onMove { from, to in
+                                    var ids = activeTasks.map(\.id)
+                                    ids.move(fromOffsets: from, toOffset: to)
+                                    Task { await taskService.reorderTasks(to: ids) }
+                                }
                             } header: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.orange)
-                                    Text("Behind Schedule")
-                                        .font(.caption.weight(.semibold))
+                                Text("Drag to set your order")
+                                    .font(.caption.weight(.semibold))
+                            }
+                        } else {
+                            if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
+                                Section {
+                                    ForEach(deferredTasks) { task in
+                                        NavigationLink(value: task) {
+                                            DeferredTaskRow(task: task) { status in
+                                                Task {
+                                                    try? await taskService.setStatus(status, for: task)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } header: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundStyle(.orange)
+                                        Text("Behind Schedule")
+                                            .font(.caption.weight(.semibold))
+                                    }
                                 }
                             }
-                        }
 
-                        ForEach(schedulableTasks) { task in
-                            NavigationLink(value: task) {
-                                TaskRow(task: task) { status in
-                                    Task {
-                                        try? await taskService.setStatus(status, for: task)
+                            ForEach(schedulableTasks) { task in
+                                NavigationLink(value: task) {
+                                    TaskRow(task: task) { status in
+                                        Task {
+                                            try? await taskService.setStatus(status, for: task)
+                                        }
                                     }
                                 }
                             }
@@ -281,6 +312,7 @@ struct TaskListView: View {
                                             }
                                         }
                                     }
+                                    .moveDisabled(true)
                                 } label: {
                                     HStack {
                                         Text("Completed")
@@ -294,6 +326,7 @@ struct TaskListView: View {
                             }
                         }
                     }
+                    .environment(\.editMode, .constant(isReordering ? .active : .inactive))
                     .searchable(text: $searchText, prompt: "Search tasks")
                 }
             }
@@ -349,7 +382,9 @@ struct TaskListView: View {
                         ForEach(TaskService.SortOption.allCases) { option in
                             Button {
                                 if sortOption == option {
-                                    sortAscending.toggle()
+                                    if option != .position {
+                                        sortAscending.toggle()
+                                    }
                                 } else {
                                     sortOption = option
                                     sortAscending = option != .deadline
@@ -396,6 +431,27 @@ struct TaskListView: View {
                         )
                     }
                     .accessibilityIdentifier("archiveToggleButton")
+
+                    Button {
+                        if isReordering {
+                            withAnimation { isReordering = false }
+                        } else {
+                            if sortOption != .position {
+                                sortOption = .position
+                                sortAscending = true
+                            }
+                            withAnimation { isReordering = true }
+                        }
+                    } label: {
+                        Label(
+                            isReordering ? "Done" : "Reorder",
+                            systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down"
+                        )
+                    }
+                    .disabled(
+                        taskService.showingArchived || statusFilter != nil || activeTasks.isEmpty
+                    )
+                    .accessibilityIdentifier("reorderTasksButton")
                 }
             }
             .navigationDestination(for: TaskItem.self) { task in

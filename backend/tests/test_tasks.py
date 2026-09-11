@@ -532,6 +532,102 @@ class TestSortTasks:
         assert response.status_code == 422
 
 
+class TestReorderTasks:
+    def test_requires_authentication(self, client):
+        response = client.post(
+            "/api/v1/tasks/reorder", json={"task_ids": [str(uuid.uuid4())]}
+        )
+        assert response.status_code == 401
+
+    def test_reorders_tasks(self, client):
+        data = _login(client)
+        first = _create(client, data["access_token"], title="A").json()
+        second = _create(client, data["access_token"], title="B").json()
+        third = _create(client, data["access_token"], title="C").json()
+
+        response = client.post(
+            "/api/v1/tasks/reorder",
+            json={
+                "task_ids": [
+                    third["id"],
+                    first["id"],
+                    second["id"],
+                ]
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [item["id"] for item in body["items"]] == [
+            third["id"],
+            first["id"],
+            second["id"],
+        ]
+
+        listing = client.get(
+            "/api/v1/tasks?sort=position",
+            headers=_auth(data["access_token"]),
+        ).json()
+        assert [item["id"] for item in listing["items"]] == [
+            third["id"],
+            first["id"],
+            second["id"],
+        ]
+
+    def test_new_tasks_append_after_existing_positions(self, client):
+        data = _login(client)
+        first = _create(client, data["access_token"], title="A").json()
+        second = _create(client, data["access_token"], title="B").json()
+
+        client.post(
+            "/api/v1/tasks/reorder",
+            json={"task_ids": [second["id"], first["id"]]},
+            headers=_auth(data["access_token"]),
+        )
+        new = _create(client, data["access_token"], title="C").json()
+
+        response = client.get(
+            "/api/v1/tasks?sort=position",
+            headers=_auth(data["access_token"]),
+        ).json()
+        assert [item["id"] for item in response["items"]] == [
+            second["id"],
+            first["id"],
+            new["id"],
+        ]
+
+    def test_reorder_only_affects_own_tasks(self, client):
+        data = _login(client)
+        other = _login(client, email="other@example.com", name="Other")
+        mine = _create(client, data["access_token"], title="Mine").json()
+        theirs = _create(client, other["access_token"], title="Theirs").json()
+
+        response = client.post(
+            "/api/v1/tasks/reorder",
+            json={"task_ids": [mine["id"], theirs["id"]]},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 404
+
+    def test_unknown_task_returns_404(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/tasks/reorder",
+            json={"task_ids": [str(uuid.uuid4())]},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 404
+
+    def test_rejects_empty_list(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/tasks/reorder",
+            json={"task_ids": []},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 422
+
+
 class TestUpdateTask:
     def test_partial_update(self, client):
         data = _login(client)

@@ -115,6 +115,21 @@ class TaskService:
             raise TaskNotFoundError("Task not found")
         return task
 
+    def reorder_tasks(self, task_ids: list[uuid.UUID]) -> list[Task]:
+        unique_ids = list(dict.fromkeys(task_ids))
+        owned = {
+            task.id
+            for task in task_repository.list_tasks(self.db, user_id=self.user_id)
+        }
+        missing = [task_id for task_id in unique_ids if task_id not in owned]
+        if missing:
+            raise TaskNotFoundError("Task not found")
+        ordered = task_repository.reorder_tasks(
+            self.db, user_id=self.user_id, task_ids=unique_ids
+        )
+        self.db.commit()
+        return ordered
+
     def create_task(self, data: TaskCreate) -> Task:
         task = task_repository.create_task(
             self.db, user_id=self.user_id, data=data

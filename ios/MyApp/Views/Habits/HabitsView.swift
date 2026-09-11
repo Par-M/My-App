@@ -9,6 +9,7 @@ struct HabitsView: View {
     @State private var editingHabit: Habit?
     @State private var showingDashboard = false
     @State private var habitPendingDelete: Habit?
+    @State private var isReordering = false
 
     var body: some View {
         NavigationStack {
@@ -51,7 +52,13 @@ struct HabitsView: View {
                                 .tint(.blue)
                             }
                         }
+                        .onMove { from, to in
+                            var ids = habitService.habits.map(\.id)
+                            ids.move(fromOffsets: from, toOffset: to)
+                            Task { await habitService.reorderHabits(ids) }
+                        }
                     }
+                    .environment(\.editMode, .constant(isReordering ? .active : .inactive))
                     .refreshable {
                         await habitService.loadDashboard()
                     }
@@ -75,6 +82,20 @@ struct HabitsView: View {
                         Label("Add Habit", systemImage: "plus")
                     }
                     .accessibilityIdentifier("addHabitButton")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        withAnimation {
+                            isReordering.toggle()
+                        }
+                    } label: {
+                        Label(
+                            isReordering ? "Done" : "Reorder",
+                            systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down"
+                        )
+                    }
+                    .disabled(habitService.habits.isEmpty)
+                    .accessibilityIdentifier("reorderHabitsButton")
                 }
             }
             .overlay {

@@ -1,10 +1,12 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
 final class TaskService {
     enum SortOption: String, CaseIterable, Identifiable {
+        case position = "position"
         case created = "created_at"
         case deadline = "deadline"
         case priority = "priority"
@@ -14,6 +16,7 @@ final class TaskService {
 
         var label: String {
             switch self {
+            case .position: "My Order"
             case .created: "Created Date"
             case .deadline: "Deadline"
             case .priority: "Priority"
@@ -26,7 +29,9 @@ final class TaskService {
     private(set) var overdueTasks: [TaskItem] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
-    private(set) var dataVersion = 0
+    private(set) var dataVersion = 0 {
+        didSet { refreshWidgetTasks() }
+    }
     private(set) var isOfflineMode = false
 
     var showingArchived = false
@@ -71,6 +76,7 @@ final class TaskService {
             tasks = response.items
             store?.upsertServerTasks(response.items)
             isOfflineMode = false
+            refreshWidgetTasks()
         } catch {
             if let store, isNetworkUnavailable(error) || !connectivity.isConnected {
                 tasks = store.tasks()
@@ -547,5 +553,48 @@ final class TaskService {
             return
         }
         tasks[index] = task
+    }
+
+    func reorderTasks(to taskIds: [UUID]) async {
+        let idSet = Set(taskIds)
+        let ordered = taskIds.compactMap { id in tasks.first { $0.id == id } }
+        guard ordered.count == taskIds.count else { return }
+        tasks = ordered + tasks.filter { !idSet.contains($0.id) }
+
+        if !connectivity.isConnected {
+            isOfflineMode = true
+            return
+        }
+
+        do {
+            _ = try await client.request(TaskEndpoint.reorder(taskIds: taskIds)) as TaskListResponse
+            isOfflineMode = false
+            dataVersion += 1
+        } catch {
+            if let store, isNetworkUnavailable(error) {
+                isOfflineMode = true
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func refreshWidgetTasks() {
+        let active = tasks.filter { $0.status != .completed && !$0.isArchived }
+        let rank: [TaskPriority: Int] = [.high: 0, .medium: 1, .low: 2]
+        let ranked = active.sorted {
+            (rank[$0.priority] ?? 1) < (rank[$1.priority] ?? 1)
+        }
+        let topTitles = Array(ranked.prefix(3).map(\.title))
+        let existing = WidgetDataStore.read()
+        WidgetDataStore.write(
+            currentTaskTitle: ranked.first?.title,
+            nextTaskTitle: ranked.dropFirst().first?.title,
+            tasksRemaining: active.count,
+            habitsRemaining: existing.habitsRemaining,
+            topTaskTitles: topTitles
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")
     }
 }

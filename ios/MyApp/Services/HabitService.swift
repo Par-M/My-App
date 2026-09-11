@@ -88,6 +88,26 @@ final class HabitService {
         }
     }
 
+    func reorderHabits(_ habitIds: [UUID]) async {
+        if let existing = dashboard {
+            let byId = Dictionary(uniqueKeysWithValues: existing.habits.map { ($0.id, $0) })
+            let reordered = habitIds.compactMap { byId[$0] }
+            if reordered.count == existing.habits.count {
+                dashboard = HabitDashboard(habits: reordered)
+            }
+        }
+
+        do {
+            let _: HabitListResponse = try await client.request(
+                HabitEndpoint.reorder(habitIds: habitIds)
+            )
+            updateWidgetHabits()
+        } catch {
+            errorMessage = error.localizedDescription
+            await loadDashboard()
+        }
+    }
+
     func logHabit(id: UUID, count: Int, date: Date? = nil) async {
         do {
             let _: HabitLog = try await client.request(

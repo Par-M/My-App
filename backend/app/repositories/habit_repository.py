@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Select
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,8 +16,15 @@ def _base_query(user_id: uuid.UUID) -> Select:
     return select(Habit).where(Habit.user_id == user_id)
 
 
+def _for_next_position(db: Session, user_id: uuid.UUID) -> int:
+    max_position = db.scalar(
+        select(func.max(Habit.position)).where(Habit.user_id == user_id)
+    )
+    return (max_position or -1) + 1
+
+
 def create_habit(db: Session, *, user_id: uuid.UUID, data: HabitCreate) -> Habit:
-    habit = Habit(user_id=user_id, **data.model_dump())
+    habit = Habit(user_id=user_id, position=_for_next_position(db, user_id), **data.model_dump())
     db.add(habit)
     db.flush()
     db.refresh(habit)
@@ -32,9 +40,36 @@ def get_habit(
 def list_habits(db: Session, *, user_id: uuid.UUID) -> list[Habit]:
     return list(
         db.scalars(
-            _base_query(user_id).order_by(Habit.created_at, Habit.title)
+            _base_query(user_id).order_by(
+                Habit.position, Habit.created_at, Habit.title
+            )
         ).all()
     )
+
+
+def reorder_habits(
+    db: Session, *, user_id: uuid.UUID, habit_ids: list[uuid.UUID]
+) -> list[Habit]:
+    """Assign ascending positions to the given habits (in order) and return them.
+
+    Only the provided habits are touched. Any habit id that does not belong to
+    the user is simply skipped.
+    """
+    habits = {
+        habit.id: habit
+        for habit in db.scalars(
+            _base_query(user_id).where(Habit.id.in_(habit_ids))
+        ).all()
+    }
+    ordered: list[Habit] = []
+    for index, habit_id in enumerate(habit_ids):
+        habit = habits.get(habit_id)
+        if habit is None:
+            continue
+        habit.position = index
+        ordered.append(habit)
+    db.flush()
+    return ordered
 
 
 def update_habit(db: Session, habit: Habit, data: HabitUpdate) -> Habit:

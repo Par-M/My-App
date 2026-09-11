@@ -144,7 +144,11 @@ struct HabitsView: View {
     }
 
     private func log(_ stats: HabitStats) async {
-        await habitService.logHabit(id: stats.habit.id, count: 1)
+        if stats.isDoneToday {
+            await habitService.setHabitDayCount(id: stats.habit.id, count: 0)
+        } else {
+            await habitService.logHabit(id: stats.habit.id, count: 1)
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }
@@ -189,7 +193,6 @@ private struct HabitRow: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .disabled(stats.isDoneToday)
                     .accessibilityIdentifier("logHabitButton")
                 }
 

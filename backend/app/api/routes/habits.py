@@ -19,6 +19,7 @@ from app.schemas.habit import HabitDaySetResponse
 from app.schemas.habit import HabitListResponse
 from app.schemas.habit import HabitLogCreate
 from app.schemas.habit import HabitLogResponse
+from app.schemas.habit import HabitReorderRequest
 from app.schemas.habit import HabitResponse
 from app.schemas.habit import HabitUpdate
 from app.services.habit_service import HabitNotFoundError
@@ -73,6 +74,18 @@ def list_habits(
     service: HabitService = Depends(_service),
 ) -> HabitListResponse:
     habits = service.list_habits()
+    return HabitListResponse(items=habits, total=len(habits))
+
+
+@router.post("/reorder", response_model=HabitListResponse)
+def reorder_habits(
+    payload: HabitReorderRequest,
+    service: HabitService = Depends(_service),
+) -> HabitListResponse:
+    try:
+        habits = service.reorder_habits(payload.habit_ids)
+    except HabitNotFoundError as exc:
+        _handle_not_found(exc)
     return HabitListResponse(items=habits, total=len(habits))
 
 

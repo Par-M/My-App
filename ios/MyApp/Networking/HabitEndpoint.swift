@@ -8,6 +8,7 @@ enum HabitEndpoint: Endpoint {
     case log(id: UUID, count: Int, date: Date?)
     case setDay(id: UUID, count: Int, date: Date?)
     case dashboard
+    case reorder(habitIds: [UUID])
 
     var path: String {
         switch self {
@@ -23,6 +24,8 @@ enum HabitEndpoint: Endpoint {
             return "/api/v1/habits/\(id.uuidString.lowercased())/logs/day"
         case .dashboard:
             return "/api/v1/habits/dashboard"
+        case .reorder:
+            return "/api/v1/habits/reorder"
         }
     }
 
@@ -30,7 +33,7 @@ enum HabitEndpoint: Endpoint {
         switch self {
         case .list, .dashboard:
             return .get
-        case .create, .log:
+        case .create, .log, .reorder:
             return .post
         case .setDay:
             return .put
@@ -51,6 +54,8 @@ enum HabitEndpoint: Endpoint {
             return HabitLogCreateRequest(count: count, date: date)
         case .setDay(_, let count, let date):
             return HabitDaySetRequest(count: count, date: date)
+        case .reorder(let habitIds):
+            return HabitReorderRequest(habitIds: habitIds)
         default:
             return nil
         }

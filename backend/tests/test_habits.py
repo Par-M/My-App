@@ -147,6 +147,89 @@ class TestListHabits:
         assert {h["title"] for h in body["items"]} == {"Read", "Run"}
 
 
+class TestReorderHabits:
+    def test_requires_authentication(self, client):
+        response = client.post(
+            "/api/v1/habits/reorder", json={"habit_ids": [str(uuid.uuid4())]}
+        )
+        assert response.status_code == 401
+
+    def test_reorders_habits(self, client):
+        data = _login(client)
+        first = _create_habit(client, data["access_token"], title="A")
+        second = _create_habit(client, data["access_token"], title="B")
+        third = _create_habit(client, data["access_token"], title="C")
+
+        response = client.post(
+            "/api/v1/habits/reorder",
+            json={
+                "habit_ids": [
+                    third["id"],
+                    first["id"],
+                    second["id"],
+                ]
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [item["id"] for item in body["items"]] == [
+            third["id"],
+            first["id"],
+            second["id"],
+        ]
+
+        dashboard = client.get(
+            "/api/v1/habits/dashboard",
+            headers=_auth(data["access_token"]),
+        ).json()
+        assert [s["habit"]["id"] for s in dashboard["habits"]] == [
+            third["id"],
+            first["id"],
+            second["id"],
+        ]
+
+    def test_new_habits_append_after_existing_positions(self, client):
+        data = _login(client)
+        first = _create_habit(client, data["access_token"], title="A")
+        second = _create_habit(client, data["access_token"], title="B")
+
+        client.post(
+            "/api/v1/habits/reorder",
+            json={"habit_ids": [second["id"], first["id"]]},
+            headers=_auth(data["access_token"]),
+        )
+        new = _create_habit(client, data["access_token"], title="C")
+
+        response = client.get(
+            "/api/v1/habits/dashboard",
+            headers=_auth(data["access_token"]),
+        ).json()
+        assert [s["habit"]["id"] for s in response["habits"]] == [
+            second["id"],
+            first["id"],
+            new["id"],
+        ]
+
+    def test_unknown_habit_returns_404(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/habits/reorder",
+            json={"habit_ids": [str(uuid.uuid4())]},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 404
+
+    def test_rejects_empty_list(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/habits/reorder",
+            json={"habit_ids": []},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 422
+
+
 class TestUpdateHabit:
     def test_updates_habit(self, client):
         data = _login(client)

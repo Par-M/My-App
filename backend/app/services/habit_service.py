@@ -97,6 +97,18 @@ class HabitService:
     def list_habits(self) -> list[Habit]:
         return habit_repository.list_habits(self.db, user_id=self.user_id)
 
+    def reorder_habits(self, habit_ids: list[uuid.UUID]) -> list[Habit]:
+        unique_ids = list(dict.fromkeys(habit_ids))
+        owned = {habit.id for habit in self.list_habits()}
+        missing = [habit_id for habit_id in unique_ids if habit_id not in owned]
+        if missing:
+            raise HabitNotFoundError("Habit not found")
+        ordered = habit_repository.reorder_habits(
+            self.db, user_id=self.user_id, habit_ids=unique_ids
+        )
+        self.db.commit()
+        return ordered
+
     def update_habit(self, habit_id: uuid.UUID, data: HabitUpdate) -> Habit:
         habit = self._get(habit_id)
         habit = habit_repository.update_habit(self.db, habit, data)
@@ -234,10 +246,10 @@ class HabitService:
 
         stats.sort(
             key=lambda s: (
-                s.completion_rate_30d,
-                s.current_streak,
+                s.habit.position,
+                -s.completion_rate_30d,
+                -s.current_streak,
                 s.habit.created_at,
-            ),
-            reverse=True,
+            )
         )
         return stats

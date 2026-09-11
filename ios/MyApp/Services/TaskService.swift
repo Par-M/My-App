@@ -6,7 +6,6 @@ import WidgetKit
 @Observable
 final class TaskService {
     enum SortOption: String, CaseIterable, Identifiable {
-        case position = "position"
         case created = "created_at"
         case deadline = "deadline"
         case priority = "priority"
@@ -16,7 +15,6 @@ final class TaskService {
 
         var label: String {
             switch self {
-            case .position: "My Order"
             case .created: "Created Date"
             case .deadline: "Deadline"
             case .priority: "Priority"
@@ -553,30 +551,6 @@ final class TaskService {
             return
         }
         tasks[index] = task
-    }
-
-    func reorderTasks(to taskIds: [UUID]) async {
-        let idSet = Set(taskIds)
-        let ordered = taskIds.compactMap { id in tasks.first { $0.id == id } }
-        guard ordered.count == taskIds.count else { return }
-        tasks = ordered + tasks.filter { !idSet.contains($0.id) }
-
-        if !connectivity.isConnected {
-            isOfflineMode = true
-            return
-        }
-
-        do {
-            _ = try await client.request(TaskEndpoint.reorder(taskIds: taskIds)) as TaskListResponse
-            isOfflineMode = false
-            dataVersion += 1
-        } catch {
-            if let store, isNetworkUnavailable(error) {
-                isOfflineMode = true
-            } else {
-                errorMessage = error.localizedDescription
-            }
-        }
     }
 
     private func refreshWidgetTasks() {

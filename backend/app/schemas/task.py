@@ -138,7 +138,6 @@ class TaskResponse(BaseModel):
     before_task_ids: list[uuid.UUID] | None
     after_task_ids: list[uuid.UUID] | None
     is_archived: bool
-    position: int
     created_at: datetime
     updated_at: datetime
 
@@ -146,10 +145,6 @@ class TaskResponse(BaseModel):
 class TaskListResponse(BaseModel):
     items: list[TaskResponse]
     total: int
-
-
-class TaskReorderRequest(BaseModel):
-    task_ids: list[uuid.UUID] = Field(min_length=1)
 
 
 class CompleteTaskRequest(BaseModel):

@@ -22,7 +22,6 @@ enum TaskEndpoint: Endpoint {
     case recordTime(id: UUID, minutes: Int)
     case snooze(id: UUID, minutes: Int, timezone: String)
     case overdue
-    case reorder(taskIds: [UUID])
     case reschedule(id: UUID, minutes: Int, reason: String?, timezone: String)
 
     var path: String {
@@ -51,8 +50,6 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/\(id.uuidString.lowercased())/snooze"
         case .overdue:
             return "/api/v1/tasks/overdue"
-        case .reorder:
-            return "/api/v1/tasks/reorder"
         case .reschedule(let id, _, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/reschedule"
         }
@@ -62,7 +59,7 @@ enum TaskEndpoint: Endpoint {
         switch self {
         case .list, .get, .overdue:
             return .get
-        case .create, .reorder:
+        case .create:
             return .post
         case .update, .recordTime:
             return .patch
@@ -91,8 +88,6 @@ enum TaskEndpoint: Endpoint {
                 reason: reason,
                 timezone: timezone
             )
-        case .reorder(let taskIds):
-            return TaskReorderRequest(taskIds: taskIds)
         default:
             return nil
         }

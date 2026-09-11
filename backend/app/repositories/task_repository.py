@@ -3,7 +3,6 @@ from datetime import datetime
 
 from sqlalchemy import Select
 from sqlalchemy import case
-from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,9 +37,6 @@ SORT_FIELDS = {
     "updated_at": lambda order: Task.updated_at.asc()
     if order == "asc"
     else Task.updated_at.desc(),
-    "position": lambda order: Task.position.asc()
-    if order == "asc"
-    else Task.position.desc(),
 }
 
 
@@ -48,15 +44,8 @@ def _base_query(user_id: uuid.UUID) -> Select:
     return select(Task).where(Task.user_id == user_id)
 
 
-def _for_next_position(db: Session, user_id: uuid.UUID) -> int:
-    max_position = db.scalar(
-        select(func.max(Task.position)).where(Task.user_id == user_id)
-    )
-    return (max_position or -1) + 1
-
-
 def create_task(db: Session, *, user_id: uuid.UUID, data: TaskCreate) -> Task:
-    task = Task(user_id=user_id, position=_for_next_position(db, user_id), **data.model_dump())
+    task = Task(user_id=user_id, **data.model_dump())
     db.add(task)
     db.flush()
     db.refresh(task)
@@ -157,31 +146,6 @@ def set_archived(db: Session, task: Task, archived: bool) -> Task:
     db.flush()
     db.refresh(task)
     return task
-
-
-def reorder_tasks(
-    db: Session, *, user_id: uuid.UUID, task_ids: list[uuid.UUID]
-) -> list[Task]:
-    """Assign ascending positions to the given tasks (in order) and return them.
-
-    Only the provided tasks are touched. Any task id that does not belong to the
-    user is simply skipped.
-    """
-    tasks = {
-        task.id: task
-        for task in db.scalars(
-            _base_query(user_id).where(Task.id.in_(task_ids))
-        ).all()
-    }
-    ordered: list[Task] = []
-    for index, task_id in enumerate(task_ids):
-        task = tasks.get(task_id)
-        if task is None:
-            continue
-        task.position = index
-        ordered.append(task)
-    db.flush()
-    return ordered
 
 
 def delete_task(db: Session, task: Task) -> None:

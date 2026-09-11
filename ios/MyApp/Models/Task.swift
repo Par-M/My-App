@@ -107,14 +107,6 @@ struct TaskListResponse: Codable, Sendable {
     let total: Int
 }
 
-struct TaskReorderRequest: Encodable, Sendable {
-    let taskIds: [UUID]
-
-    private enum CodingKeys: String, CodingKey {
-        case taskIds = "task_ids"
-    }
-}
-
 struct TaskCreateRequest: Codable, Sendable {
     let title: String
     let description: String?

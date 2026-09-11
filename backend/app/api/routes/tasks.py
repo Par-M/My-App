@@ -20,7 +20,6 @@ from app.schemas.task import SnoozeRequest
 from app.schemas.task import SnoozeResponse
 from app.schemas.task import TaskCreate
 from app.schemas.task import TaskListResponse
-from app.schemas.task import TaskReorderRequest
 from app.schemas.task import TaskResponse
 from app.schemas.task import TaskUpdate
 from app.services.task_service import InvalidSortError
@@ -102,18 +101,6 @@ def list_overdue(
     service: TaskService = Depends(_service),
 ) -> TaskListResponse:
     tasks = service.list_overdue()
-    return TaskListResponse(items=tasks, total=len(tasks))
-
-
-@router.post("/reorder", response_model=TaskListResponse)
-def reorder_tasks(
-    payload: TaskReorderRequest,
-    service: TaskService = Depends(_service),
-) -> TaskListResponse:
-    try:
-        tasks = service.reorder_tasks(payload.task_ids)
-    except TaskNotFoundError as exc:
-        _handle_service_errors(exc)
     return TaskListResponse(items=tasks, total=len(tasks))
 
 

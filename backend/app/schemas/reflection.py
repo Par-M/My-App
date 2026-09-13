@@ -46,8 +46,8 @@ class FocusSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: uuid.UUID
-    date_started: datetime
-    date_ended: datetime
+    date_started: datetime | None = None
+    date_ended: datetime | None = None
     total_duration_seconds: int
     session_count: int
     task_id: uuid.UUID | None

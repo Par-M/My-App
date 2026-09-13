@@ -109,7 +109,7 @@ final class FocusService {
 
     private func loadSummary() async {
         do {
-            let response: FocusSummary = try await client.request(FocusEndpoint.summary(nil, nil))
+            let response: FocusSummary = try await client.request(FocusEndpoint.summary(after: nil, before: nil))
             summary = response
             dataVersion += 1
         } catch {

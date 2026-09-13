@@ -22,6 +22,11 @@ struct DashboardView: View {
                 .tabItem {
                     Label("Habits", systemImage: "checkmark.circle")
                 }
+
+            FocusDashboardView()
+                .tabItem {
+                    Label("Focus", systemImage: "timer")
+                }
         }
     }
 }

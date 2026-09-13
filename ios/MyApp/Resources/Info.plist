@@ -18,6 +18,14 @@
 				<string>com.googleusercontent.apps.695624050703-7mh0hq8629aur857u01v0lg4iudi1i23</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

@@ -9,12 +9,18 @@ struct FocusDashboardView: View {
     @Environment(FocusService.self) private var focus
 
     private enum RangeOption: String, CaseIterable, Identifiable {
+        case day = "1D"
+        case threeDays = "3D"
+        case fiveDays = "5D"
         case week = "1W"
         case twoWeeks = "2W"
         case month = "4W"
         var id: String { rawValue }
         var days: Int {
             switch self {
+            case .day: return 1
+            case .threeDays: return 3
+            case .fiveDays: return 5
             case .week: return 7
             case .twoWeeks: return 14
             case .month: return 28
@@ -25,6 +31,9 @@ struct FocusDashboardView: View {
         }
         var periodLabel: String {
             switch self {
+            case .day: return "today"
+            case .threeDays: return "past 3 days"
+            case .fiveDays: return "past 5 days"
             case .week: return "this week (7 days)"
             case .twoWeeks: return "past 14 days"
             case .month: return "past 4 weeks"
@@ -200,7 +209,7 @@ struct FocusDashboardView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 150)
+                .frame(width: 260)
             }
 
             let days = dailyTotals(from: focus.dailySessions, days: range.days)

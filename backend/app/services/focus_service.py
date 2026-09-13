@@ -65,7 +65,7 @@ class FocusService:
         )
         if session is None:
             raise FocusSessionNotFoundError("Focus session not found")
-        focus_session_repository.delete_focus_session(self.db, session)
+        focus_session_repository.delete_focus_session(self.db, session=session)
         self.db.commit()
 
     def focus_summary(

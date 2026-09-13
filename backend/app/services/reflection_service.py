@@ -41,7 +41,7 @@ class ReflectionService:
         return ReflectionResponse.model_validate(reflection)
 
     def get_reflection(self, reflection_id: uuid.UUID) -> ReflectionResponse:
-        reflection = reflection_repository.get_reflection(
+        reflection = reflection_repository.get_reflection_by_id(
             self.db,
             user_id=self.user_id,
             reflection_id=reflection_id,
@@ -65,7 +65,7 @@ class ReflectionService:
         return [ReflectionResponse.model_validate(r) for r in reflections]
 
     def analyze_reflection(self, reflection_id: uuid.UUID) -> ReflectionAnalysisResponse:
-        reflection = reflection_repository.get_reflection(
+        reflection = reflection_repository.get_reflection_by_id(
             self.db,
             user_id=self.user_id,
             reflection_id=reflection_id,
@@ -82,7 +82,7 @@ class ReflectionService:
         )
 
     def delete_reflection(self, reflection_id: uuid.UUID) -> None:
-        reflection = reflection_repository.get_reflection(
+        reflection = reflection_repository.get_reflection_by_id(
             self.db,
             user_id=self.user_id,
             reflection_id=reflection_id,

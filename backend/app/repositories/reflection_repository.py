@@ -13,6 +13,10 @@ def _base_query(user_id: uuid.UUID) -> Select:
     return select(Reflection).where(Reflection.user_id == user_id)
 
 
+def _where_id(query: Select, reflection_id: uuid.UUID) -> Select:
+    return query.where(Reflection.id == reflection_id)
+
+
 def create_reflection(
     db: Session, *, user_id: uuid.UUID, data: ReflectionCreate
 ) -> Reflection:
@@ -33,6 +37,12 @@ def get_reflection(
     return db.scalar(
         _base_query(user_id).where(Reflection.date == date_value)
     )
+
+
+def get_reflection_by_id(
+    db: Session, *, user_id: uuid.UUID, reflection_id: uuid.UUID
+) -> Reflection | None:
+    return db.scalar(_where_id(_base_query(user_id), reflection_id))
 
 
 def list_reflections(

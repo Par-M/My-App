@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 
 from fastapi.testclient import TestClient
@@ -12,10 +13,10 @@ def _auth_headers(
     email: str = "reflect@test.dev",
 ) -> dict[str, str]:
     resp = client.post(
-        "/api/v1/auth/signup",
-        json={"email": email, "password": "test-pass-123"},
+        "/api/v1/auth/dev",
+        json={"name": "Reflection Tester", "email": email},
     )
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 200, resp.text
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -90,7 +91,7 @@ def test_reflection_analysis(client: TestClient) -> None:
 def test_list_reflections(client: TestClient) -> None:
     headers = _auth_headers(client, email="listme@test.dev")
     for day_offset in range(3):
-        d = date.fromisocalendar(2026, 1, 8 - day_offset * 20)
+        d = date(2026, 1, 1) + timedelta(days=day_offset)
         _create(client, headers, on=d)
 
     listed = client.get("/api/v1/reflections", headers=headers)

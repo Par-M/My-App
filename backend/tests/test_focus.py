@@ -8,10 +8,10 @@ from fastapi.testclient import TestClient
 
 def _auth_headers(client: TestClient, *, email: str = "focus@test.dev") -> dict[str, str]:
     resp = client.post(
-        "/api/v1/auth/signup",
-        json={"email": email, "password": "test-pass-123"},
+        "/api/v1/auth/dev",
+        json={"name": "Focus Tester", "email": email},
     )
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 200, resp.text
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 

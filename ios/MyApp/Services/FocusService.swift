@@ -17,11 +17,11 @@ final class FocusService {
         self.client = client ?? APIClient()
     }
 
-    func loadFocus() async {
+    func loadFocus(after: Date? = nil, before: Date? = nil) async {
         isLoading = true
         defer { isLoading = false }
-        async let sessions = loadSessions()
-        async let summary = loadSummary()
+        async let sessions = loadSessions(after: after, before: before)
+        async let summary = loadSummary(after: after, before: before)
         async let reflections = loadReflections()
         _ = await (sessions, summary, reflections)
     }
@@ -97,7 +97,7 @@ final class FocusService {
         }
     }
 
-    private func loadSessions() async {
+    private func loadSessions(after: Date? = nil, before: Date? = nil) async {
         do {
             let response: [FocusSession] = try await client.request(FocusEndpoint.sessions)
             dailySessions = response
@@ -107,9 +107,11 @@ final class FocusService {
         }
     }
 
-    private func loadSummary() async {
+    private func loadSummary(after: Date? = nil, before: Date? = nil) async {
         do {
-            let response: FocusSummary = try await client.request(FocusEndpoint.summary(after: nil, before: nil))
+            let response: FocusSummary = try await client.request(
+                FocusEndpoint.summary(after: after, before: before)
+            )
             summary = response
             dataVersion += 1
         } catch {

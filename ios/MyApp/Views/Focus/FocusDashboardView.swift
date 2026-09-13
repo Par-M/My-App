@@ -23,10 +23,22 @@ struct FocusDashboardView: View {
         var dateStart: Date {
             Calendar.current.date(byAdding: .day, value: -(days - 1), to: .now) ?? .now
         }
+        var periodLabel: String {
+            switch self {
+            case .week: return "this week (7 days)"
+            case .twoWeeks: return "past 14 days"
+            case .month: return "past 4 weeks"
+            }
+        }
     }
 
     @State private var range: RangeOption = .week
     @State private var showingReflection = false
+    @State private var timerStartedAt: Date?
+    @State private var elapsedSeconds = 0
+    @State private var timer: Timer?
+
+    private var isTimerRunning: Bool { timerStartedAt != nil }
 
     var body: some View {
         NavigationStack {
@@ -40,6 +52,8 @@ struct FocusDashboardView: View {
                             .padding()
                             .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
                     }
+
+                    timerCard
 
                     summaryCard
 
@@ -60,7 +74,7 @@ struct FocusDashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        Task { await focus.loadFocus() }
+                        Task { await focus.loadFocus(after: range.dateStart, before: .now) }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
@@ -71,11 +85,82 @@ struct FocusDashboardView: View {
                 ReflectionSheetView()
             }
             .task {
-                await focus.loadFocus()
+                await focus.loadFocus(after: range.dateStart, before: .now)
+            }
+            .onChange(of: range) {
+                Task { await focus.loadFocus(after: range.dateStart, before: .now) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openReflection)) { _ in
                 showingReflection = true
             }
+        }
+    }
+
+    private var timerCard: some View {
+        let minutes = Int(elapsedSeconds / 60)
+        let seconds = elapsedSeconds % 60
+        return VStack(spacing: 12) {
+            if isTimerRunning {
+                Text(String(format: "%02d:%02d", minutes, seconds))
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .accessibilityIdentifier("focusTimerLabel")
+
+                Button(role: .destructive) {
+                    stopTimer()
+                } label: {
+                    Label("Stop & log session", systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            } else {
+                Text("Start a focus timer")
+                    .font(.headline)
+                Text("Track a deep-work block — it will appear in your chart and count toward the summary.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    startTimer()
+                } label: {
+                    Label("Start focus session", systemImage: "timer")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("startFocusTimerButton")
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .onDisappear {
+            timer?.invalidate()
+        }
+    }
+
+    private func startTimer() {
+        timerStartedAt = .now
+        elapsedSeconds = 0
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in
+                elapsedSeconds += 1
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+        guard let started = timerStartedAt else { return }
+        let ended = Date()
+        Task {
+            await focus.createSession(taskID: nil, startedAt: started, endedAt: ended)
+            timerStartedAt = nil
+            await focus.loadFocus(after: range.dateStart, before: .now)
         }
     }
 
@@ -86,7 +171,7 @@ struct FocusDashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(minutes)")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
-                Text("minutes focused this period")
+                Text("minutes focused \(range.periodLabel)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

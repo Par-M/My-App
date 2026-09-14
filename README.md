@@ -17,6 +17,8 @@ An AI-powered daily planner for iOS. It shows the events already in your Apple C
 - **Missed-deadline recovery** — detects overdue tasks, lets you reschedule them into the remaining time, records why you missed them, and surfaces patterns in "Why did I miss tasks?"
 - **Daily summary** — hours worked, schedule adherence, tasks completed/remaining/rescheduled, and what was missed today
 - **Habits** — build and track daily habits
+- **Focus** — start/stop a focus timer (wall-clock based, so it survives app backgrounding and relaunches), then review your sessions as a chart across **1D / 3D / 5D / 1W / 2W / 4W** ranges
+- **Reflections** — write a short daily reflection and get an AI-powered analysis of your focus trends
 - **Notifications** — local + push (APNs) reminders
 - **Offline-first iOS** — local store, connectivity monitoring, and a sync manager that reconciles changes when you're back online
 
@@ -90,6 +92,8 @@ All endpoints are under `/api/v1`:
 | `/planner` | Today view, daily summary (incl. `missed_today`), `missed-reasons` |
 | `/devices`, `/notifications` | Push notification device tokens + preferences |
 | `/habits` | Habit tracking |
+| `/focus` | Focus timer sessions + range-aware summary stats |
+| `/reflections` | Daily reflections + AI analysis |
 
 Interactive docs are available at `/docs` when running locally.
 
@@ -100,6 +104,8 @@ PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. In addition to the co
 - `task_breakdowns` — stores description-derived subtask parts per task
 - `daily_task_recommendations` — persisted daily recommendation rows (per user/date/task/subtask)
 - `tasks.is_broken_down` — flag marking tasks whose description has been analyzed into parts
+- `focus_sessions` — focus timer sessions (start/end, billed minutes)
+- `reflections` — daily reflections plus AI-generated analysis
 
 ## Getting Started
 

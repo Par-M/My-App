@@ -224,20 +224,6 @@ final class NotificationService {
 
     // MARK: - Private
 
-    private func scheduleBriefing(_ timeString: String) {
-        guard let time = TimeOfDay.date(from: timeString) else { return }
-        let components = Calendar.current.dateComponents([.hour, .minute], from: time)
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-        let content = UNMutableNotificationContent()
-        content.title = "Good morning"
-        content.body = "Your plan for the day is ready. Open the app to see today's focus."
-        content.sound = .default
-        content.userInfo = ["url": "app://today"]
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: "morning-briefing", content: content, trigger: trigger)
-        )
-    }
-
     private func addAlert(
         identifier: String,
         date: Date,

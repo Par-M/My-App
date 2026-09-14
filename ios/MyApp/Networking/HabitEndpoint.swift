@@ -1,7 +1,6 @@
 import Foundation
 
 enum HabitEndpoint: Endpoint {
-    case list
     case create(HabitCreateRequest)
     case update(id: UUID, request: HabitUpdateRequest)
     case delete(UUID)
@@ -12,7 +11,7 @@ enum HabitEndpoint: Endpoint {
 
     var path: String {
         switch self {
-        case .list, .create:
+        case .create:
             return "/api/v1/habits"
         case .update(let id, _):
             return "/api/v1/habits/\(id.uuidString.lowercased())"
@@ -31,7 +30,7 @@ enum HabitEndpoint: Endpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .list, .dashboard:
+        case .dashboard:
             return .get
         case .create, .log, .reorder:
             return .post

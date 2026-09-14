@@ -31,14 +31,6 @@ def create_reflection(
     return reflection
 
 
-def get_reflection(
-    db: Session, *, user_id: uuid.UUID, date_value: date
-) -> Reflection | None:
-    return db.scalar(
-        _base_query(user_id).where(Reflection.date == date_value)
-    )
-
-
 def get_reflection_by_id(
     db: Session, *, user_id: uuid.UUID, reflection_id: uuid.UUID
 ) -> Reflection | None:

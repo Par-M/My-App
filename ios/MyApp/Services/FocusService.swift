@@ -50,16 +50,6 @@ final class FocusService {
         }
     }
 
-    func deleteSession(id: UUID) async {
-        do {
-            _ = try await client.request(FocusEndpoint.deleteSession(id)) as MessageResponse
-            dataVersion += 1
-            await loadFocus()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     @discardableResult
     func createReflection(date: Date, text: String) async -> Reflection? {
         let payload = ReflectionCreate(date: date, text: text)
@@ -84,16 +74,6 @@ final class FocusService {
         } catch {
             errorMessage = error.localizedDescription
             return nil
-        }
-    }
-
-    func deleteReflection(id: UUID) async {
-        do {
-            _ = try await client.request(FocusEndpoint.deleteReflection(id)) as MessageResponse
-            dataVersion += 1
-            await loadReflections()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

@@ -23,8 +23,6 @@ struct ScheduleGenerateRequest: Encodable, Sendable {
 
 enum ScheduleEndpoint: Endpoint {
     case generate(ScheduleGenerateRequest)
-    case replan(ScheduleGenerateRequest)
-    case listRecommendations(status: RecommendationStatus?)
     case accept(UUID)
     case reject(UUID)
     case acceptItem(recommendationID: UUID, itemIndex: Int)
@@ -34,10 +32,6 @@ enum ScheduleEndpoint: Endpoint {
         switch self {
         case .generate:
             return "/api/v1/schedule/generate"
-        case .replan:
-            return "/api/v1/schedule/replan"
-        case .listRecommendations:
-            return "/api/v1/schedule/recommendations"
         case .accept(let id):
             return "/api/v1/schedule/recommendations/\(id.uuidString.lowercased())/accept"
         case .reject(let id):
@@ -51,29 +45,15 @@ enum ScheduleEndpoint: Endpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .listRecommendations:
-            return .get
-        case .generate, .replan, .accept, .reject, .acceptItem, .redoItem:
+        case .generate, .accept, .reject, .acceptItem, .redoItem:
             return .post
         }
     }
 
     var body: (any Encodable)? {
         switch self {
-        case .generate(let request), .replan(let request):
+        case .generate(let request):
             return request
-        default:
-            return nil
-        }
-    }
-
-    var queryItems: [URLQueryItem]? {
-        switch self {
-        case .listRecommendations(let status):
-            if let status {
-                return [URLQueryItem(name: "status", value: status.rawValue)]
-            }
-            return nil
         default:
             return nil
         }

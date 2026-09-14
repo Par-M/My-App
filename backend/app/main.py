@@ -5,10 +5,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.calendar import router as calendar_router
 from app.api.routes.devices import router as devices_router
 from app.api.routes.focus import router as focus_router
-from app.api.routes.focus import router as focus_router
 from app.api.routes.habits import router as habits_router
-from app.api.routes.reflections import router as reflections_router
-from app.api.routes.reflections import router as reflections_router
 from app.api.routes.reflections import router as reflections_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.planner import router as planner_router

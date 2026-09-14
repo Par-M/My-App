@@ -34,12 +34,6 @@ final class LocalStore {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    func task(id: UUID) -> TaskItem? {
-        let predicate = #Predicate<LocalTask> { $0.id == id && !$0.isDeleted }
-        let all = (try? context.fetch(FetchDescriptor<LocalTask>(predicate: predicate))) ?? []
-        return all.first?.taskItem
-    }
-
     func upsert(_ task: TaskItem, dirty: Bool = false, deleted: Bool = false, syncedAt: Date? = nil) {
         if let existing = fetchTask(id: task.id) {
             existing.id = task.id
@@ -83,12 +77,6 @@ final class LocalStore {
             }
             upsert(server, syncedAt: Date())
         }
-        save()
-    }
-
-    func markDirty(taskId: UUID) {
-        guard let existing = fetchTask(id: taskId) else { return }
-        existing.isDirty = true
         save()
     }
 
@@ -163,12 +151,6 @@ final class LocalStore {
             }
             upsert(server, syncedAt: Date())
         }
-        save()
-    }
-
-    func markDirty(blockId: UUID) {
-        guard let existing = fetchBlock(id: blockId) else { return }
-        existing.isDirty = true
         save()
     }
 

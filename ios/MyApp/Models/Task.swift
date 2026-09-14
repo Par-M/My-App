@@ -305,16 +305,6 @@ struct RecordTimeRequest: Encodable, Sendable {
     }
 }
 
-struct SnoozeRequest: Encodable, Sendable {
-    let minutes: Int
-    let timezone: String
-}
-
-struct SnoozeResponse: Codable, Sendable {
-    let task: TaskItem
-    let blocks: [CalendarBlock]
-}
-
 struct RescheduleRequest: Encodable, Sendable {
     let minutesRemaining: Int
     let reason: String?

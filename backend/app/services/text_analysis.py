@@ -1,7 +1,7 @@
 """Text-analysis providers for focus sessions and end-of-day reflections.
 
 Mirrors the same structure as the scheduling providers: a Gemini REST
-implementation that is used when an API key is configuredchen, and a
+implementation that is used when an API key is configured, and a
 deterministic heuristic fallback so the feature works offline (and in tests
 when no key is available).
 """
@@ -114,9 +114,6 @@ class GeminiTextAnalysisProvider:
             raise TextAnalysisError(f"Gemini request failed: {exc}") from exc
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise TextAnalysisError(f"Could not parse Gemini response: {exc}") from exc
-
-    def _fallback(self) -> AnalysisResult:
-        return HeuristicTextAnalysisProvider().analyze_text("")
 
 
 class HeuristicTextAnalysisProvider:

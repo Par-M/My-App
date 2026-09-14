@@ -59,11 +59,6 @@ final class RecommendationService {
         }
     }
 
-    func clear() {
-        days = []
-        unscheduled = []
-    }
-
     func recommendations(for day: Date) -> DayRecommendation? {
         let calendar = Calendar.current
         return days.first { calendar.isDate($0.date, inSameDayAs: day) }

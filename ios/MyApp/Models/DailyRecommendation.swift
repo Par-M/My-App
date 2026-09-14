@@ -132,25 +132,3 @@ struct DailyRecommendationsRequest: Encodable, Sendable {
         try container.encode(busyTimes, forKey: .busyTimes)
     }
 }
-
-struct BreakdownPartItem: Codable, Identifiable, Hashable, Sendable {
-    let index: Int
-    let title: String
-    let minutes: Int
-
-    var id: Int { index }
-}
-
-struct BreakdownResponse: Codable, Sendable {
-    let taskId: UUID
-    let taskTitle: String
-    let parts: [BreakdownPartItem]
-    let source: String
-
-    enum CodingKeys: String, CodingKey {
-        case taskId = "task_id"
-        case taskTitle = "task_title"
-        case parts
-        case source
-    }
-}

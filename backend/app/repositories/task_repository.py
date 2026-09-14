@@ -58,20 +58,6 @@ def get_task(db: Session, *, user_id: uuid.UUID, task_id: uuid.UUID) -> Task | N
     )
 
 
-def search_tasks(
-    db: Session, *, user_id: uuid.UUID, query: str
-) -> Select:
-    pattern = f"%{query.strip()}%"
-    return _base_query(user_id).where(
-        or_(
-            Task.title.ilike(pattern),
-            Task.description.ilike(pattern),
-            Task.notes.ilike(pattern),
-            Task.category.ilike(pattern),
-        )
-    )
-
-
 def filter_tasks(
     db: Session,
     *,

@@ -103,13 +103,3 @@ def add_log(
     db.flush()
     db.refresh(log)
     return log
-
-
-def list_logs(db: Session, *, habit_id: uuid.UUID) -> list[HabitLog]:
-    return list(
-        db.scalars(
-            select(HabitLog)
-            .where(HabitLog.habit_id == habit_id)
-            .order_by(HabitLog.completed_at)
-        ).all()
-    )

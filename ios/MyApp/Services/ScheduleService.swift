@@ -84,27 +84,6 @@ final class ScheduleService {
         }
     }
 
-    func replan(startDate: Date, endDate: Date, busyTimes: [BusyTimeRequest] = []) async {
-        isGenerating = true
-        errorMessage = nil
-        defer { isGenerating = false }
-
-        do {
-            let request = ScheduleGenerateRequest(
-                startDate: startDate,
-                endDate: endDate,
-                timezone: TimeZone.current.identifier,
-                busyTimes: busyTimes
-            )
-            let response: ScheduleProposal = try await client.request(
-                ScheduleEndpoint.replan(request)
-            )
-            proposal = response
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     func accept(_ target: ScheduleProposal) async throws {
         guard !isAccepting else { return }
         isAccepting = true

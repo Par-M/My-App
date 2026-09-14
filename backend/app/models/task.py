@@ -193,6 +193,11 @@ class Task(Base):
         cascade="all, delete-orphan",
     )
 
+    focus_sessions: Mapped[list["FocusSession"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
     breakdowns: Mapped[list["TaskBreakdown"]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",

@@ -17,6 +17,7 @@ struct MyAppApp: App {
     @State private var categoryStore = CategoryStore()
     @State private var appearance = AppearanceSettings()
     @State private var habitService = HabitService()
+    @State private var focusService = FocusService()
 
     init() {
         let store = LocalStore()
@@ -60,9 +61,14 @@ struct MyAppApp: App {
                 .environment(categoryStore)
                 .environment(appearance)
                 .environment(habitService)
+                .environment(focusService)
                 .preferredColorScheme(appearance.theme.colorScheme)
                 .task {
                     await authService.restoreSession()
+                }
+                .onOpenURL { url in
+                    guard url.scheme == "app", url.host == "reflect" else { return }
+                    NotificationCenter.default.post(name: .openReflection, object: nil)
                 }
         }
         .modelContainer(localStore.container)

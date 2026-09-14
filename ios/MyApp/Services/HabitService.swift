@@ -131,7 +131,8 @@ final class HabitService {
     }
 
     private func updateWidgetHabits() {
-        let cal = Calendar.current
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
         let today = cal.startOfDay(for: Date())
 
         var remaining = 0

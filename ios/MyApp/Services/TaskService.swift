@@ -454,51 +454,6 @@ final class TaskService {
         return try await updateTask(updated)
     }
 
-    func snoozeTask(_ task: TaskItem, minutes: Int) async throws -> SnoozeResponse {
-        if !connectivity.isConnected, let store {
-            var updated = task
-            if let deadline = task.deadline {
-                updated.deadline = deadline.addingTimeInterval(TimeInterval(minutes * 60))
-            }
-            let local = bump(updated)
-            store.upsert(local, dirty: true)
-            replace(local)
-            isOfflineMode = true
-            dataVersion += 1
-            return SnoozeResponse(task: local, blocks: [])
-        }
-
-        do {
-            let response: SnoozeResponse = try await client.request(
-                TaskEndpoint.snooze(
-                    id: task.id,
-                    minutes: minutes,
-                    timezone: TimeZone.current.identifier
-                )
-            )
-            store?.upsert(response.task)
-            replace(response.task)
-            store?.upsertServerBlocks(response.blocks)
-            isOfflineMode = false
-            dataVersion += 1
-            return response
-        } catch {
-            if let store, isNetworkUnavailable(error) {
-                var updated = task
-                if let deadline = task.deadline {
-                    updated.deadline = deadline.addingTimeInterval(TimeInterval(minutes * 60))
-                }
-                let local = bump(updated)
-                store.upsert(local, dirty: true)
-                replace(local)
-                isOfflineMode = true
-                dataVersion += 1
-                return SnoozeResponse(task: local, blocks: [])
-            }
-            throw error
-        }
-    }
-
     func presentError(_ message: String) {
         errorMessage = message
     }

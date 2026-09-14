@@ -132,8 +132,3 @@ struct AcceptResponse: Codable, Sendable {
     let recommendation: RecommendationResponse
     let blocks: [CalendarBlock]
 }
-
-struct RecommendationListResponse: Codable, Sendable {
-    let items: [RecommendationResponse]
-    let total: Int
-}

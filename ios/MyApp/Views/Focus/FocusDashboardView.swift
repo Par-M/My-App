@@ -43,11 +43,14 @@ struct FocusDashboardView: View {
 
     @State private var range: RangeOption = .week
     @State private var showingReflection = false
-    @State private var timerStartedAt: Date?
+    @AppStorage("focusTimerStartedAt") private var timerStartedAtRef = 0.0
     @State private var elapsedSeconds = 0
     @State private var timer: Timer?
 
-    private var isTimerRunning: Bool { timerStartedAt != nil }
+    private var isTimerRunning: Bool { timerStartedAtRef > 0 }
+    private var timerStartedAt: Date? {
+        timerStartedAtRef > 0 ? Date(timeIntervalSince1970: timerStartedAtRef) : nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -146,19 +149,33 @@ struct FocusDashboardView: View {
         .padding()
         .frame(maxWidth: .infinity)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .onAppear {
+            resumeTickerIfRunning()
+        }
         .onDisappear {
             timer?.invalidate()
         }
     }
 
-    private func startTimer() {
-        timerStartedAt = .now
-        elapsedSeconds = 0
+    private func resumeTickerIfRunning() {
+        guard isTimerRunning, let started = timerStartedAt else { return }
+        elapsedSeconds = Int(Date().timeIntervalSince(started))
+        startTicker()
+    }
+
+    private func startTicker() {
+        timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             Task { @MainActor in
-                elapsedSeconds += 1
+                self.elapsedSeconds = Int(Date().timeIntervalSince(self.timerStartedAt ?? .now))
             }
         }
+    }
+
+    private func startTimer() {
+        timerStartedAtRef = Date().timeIntervalSince1970
+        elapsedSeconds = 0
+        startTicker()
     }
 
     private func stopTimer() {
@@ -166,9 +183,9 @@ struct FocusDashboardView: View {
         timer = nil
         guard let started = timerStartedAt else { return }
         let ended = Date()
+        timerStartedAtRef = 0
         Task {
             await focus.createSession(taskID: nil, startedAt: started, endedAt: ended)
-            timerStartedAt = nil
             await focus.loadFocus(after: range.dateStart, before: .now)
         }
     }

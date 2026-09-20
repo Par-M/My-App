@@ -571,7 +571,11 @@ struct WeeklyScheduleView: View {
                     Text(displayTitle(item))
                         .font(.subheadline.weight(.medium))
                         .lineLimit(2)
-                    if !item.reason.isEmpty {
+                    if let block = item.timeBlockText {
+                        Label(block, systemImage: "clock")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if !item.reason.isEmpty {
                         Text(item.reason)
                             .font(.caption2)
                             .foregroundStyle(.secondary)

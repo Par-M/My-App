@@ -11,6 +11,11 @@ struct TaskDetailView: View {
     @State private var confirmArchive = false
     @State private var errorMessage: String?
 
+    @State private var notesDraft = ""
+    @State private var checklistDraft: [ChecklistItem] = []
+    @State private var didLoadDrafts = false
+    @State private var saveWorkItem: DispatchWorkItem?
+
     init(task: TaskItem) {
         self.task = task
         _currentTask = State(initialValue: task)
@@ -86,14 +91,24 @@ struct TaskDetailView: View {
                 }
             }
 
-            if let notes = currentTask.notes, !notes.isEmpty {
-                Section("Notes") {
-                    Text(notes)
-                }
+            Section("Notes & Checklist") {
+                TextEditor(text: $notesDraft)
+                    .frame(minHeight: 100)
+                    .onChange(of: notesDraft) { _, _ in
+                        scheduleSave()
+                    }
+                TaskChecklistEditor(items: $checklistDraft, onSave: scheduleSave)
             }
         }
         .navigationTitle(currentTask.title)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if !didLoadDrafts {
+                notesDraft = currentTask.notes ?? ""
+                checklistDraft = currentTask.checklist ?? []
+                didLoadDrafts = true
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Edit") {
@@ -203,6 +218,35 @@ struct TaskDetailView: View {
                 )
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func scheduleSave() {
+        saveWorkItem?.cancel()
+        let workItem = DispatchWorkItem { saveNotesAndChecklist() }
+        saveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
+    }
+
+    private func saveNotesAndChecklist() {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        var updated = currentTask
+        let notes = notesDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.notes = notes.isEmpty ? nil : notes
+        updated.checklist = checklistDraft.isEmpty ? nil : checklistDraft
+        let previous = currentTask
+        currentTask = updated
+        Task {
+            do {
+                let saved = try await taskService.updateTask(updated)
+                await MainActor.run { currentTask = saved }
+            } catch {
+                await MainActor.run {
+                    currentTask = previous
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }

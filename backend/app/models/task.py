@@ -11,6 +11,7 @@ from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -127,6 +128,13 @@ class Task(Base):
     notes: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # JSON list of {"text": str, "done": bool} items for the task checklist.
+    checklist: Mapped[list[dict] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=list,
     )
 
     progress_percent: Mapped[int] = mapped_column(

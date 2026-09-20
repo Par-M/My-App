@@ -127,12 +127,40 @@ final class NotificationService {
     }
 
     func scheduleLocalNotifications(tasks: [TaskItem]) {
+        scheduleAll(
+            tasks: tasks,
+            events: [],
+            blocks: [],
+            workHoursStart: 9,
+            workHoursEnd: 17,
+            hasReflectionToday: false,
+            hasOngoingFocus: false
+        )
+    }
+
+    func scheduleAll(
+        tasks: [TaskItem],
+        events: [CalendarEventItem],
+        blocks: [CalendarBlock],
+        workHoursStart: Double,
+        workHoursEnd: Double,
+        hasReflectionToday: Bool,
+        hasOngoingFocus: Bool
+    ) {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         guard authorizationStatus == .authorized || authorizationStatus == .provisional else {
             return
         }
 
+        scheduleTaskReminders(tasks: tasks)
+        scheduleReflectionReminder(workHoursEnd: workHoursEnd, hasReflectionToday: hasReflectionToday)
+        scheduleEventReminders(events: events)
+        scheduleFocusNudges(blocks: blocks, hasOngoingFocus: hasOngoingFocus)
+        scheduleHourlyNudges(workHoursStart: workHoursStart, workHoursEnd: workHoursEnd)
+    }
+
+    private func scheduleTaskReminders(tasks: [TaskItem]) {
         if let preference {
             // 15-minute before deadline reminder
             if preference.fifteenMinuteReminderEnabled {
@@ -210,6 +238,81 @@ final class NotificationService {
         }
     }
 
+    private func scheduleReflectionReminder(workHoursEnd: Double, hasReflectionToday: Bool) {
+        guard !hasReflectionToday else { return }
+        let calendar = Calendar.current
+        let now = Date()
+        let wholeHours = Int(workHoursEnd)
+        let minutes = Int((workHoursEnd - Double(wholeHours)) * 60)
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = min(max(wholeHours, 0), 23)
+        components.minute = minutes
+        guard let workEnd = calendar.date(from: components) else { return }
+        let fireAt = workEnd.addingTimeInterval(-30 * 60)
+        guard fireAt > now else { return }
+        addAlert(
+            identifier: "end-of-day-reflection",
+            date: fireAt,
+            title: "Daily reflection",
+            body: "The day is wrapping up — take a minute to reflect on how you focused.",
+            taskId: nil,
+            url: "app://today"
+        )
+    }
+
+    private func scheduleEventReminders(events: [CalendarEventItem]) {
+        let now = Date()
+        let horizon = now.addingTimeInterval(48 * 3600)
+        for event in events where !event.isAllDay && event.start > now && event.start <= horizon {
+            let fireAt = event.start.addingTimeInterval(-30 * 60)
+            guard fireAt > now else { continue }
+            addAlert(
+                identifier: "event-\(event.id)",
+                date: fireAt,
+                title: "Upcoming event",
+                body: "\"\(event.title)\" starts \(event.start.formatted(date: .omitted, time: .shortened)).",
+                taskId: nil,
+                url: "app://today"
+            )
+        }
+    }
+
+    private func scheduleFocusNudges(blocks: [CalendarBlock], hasOngoingFocus: Bool) {
+        guard !hasOngoingFocus else { return }
+        let now = Date()
+        let horizon = now.addingTimeInterval(12 * 3600)
+        for block in blocks where block.completedAt == nil && block.startAt > now && block.startAt <= horizon {
+            addAlert(
+                identifier: "focus-nudge-\(block.id)",
+                date: block.startAt,
+                title: "Time to focus",
+                body: "\"\(block.title)\" is starting now — start your focus timer or mark it done.",
+                taskId: block.taskId,
+                url: "app://today"
+            )
+        }
+    }
+
+    private func scheduleHourlyNudges(workHoursStart: Double, workHoursEnd: Double) {
+        var startHour = min(max(Int(workHoursStart), 0), 23)
+        var endHour = min(max(Int(workHoursEnd), startHour + 1), 24)
+        guard endHour > startHour else { return }
+        for hour in startHour..<min(endHour, 24) {
+            var components = DateComponents()
+            components.hour = hour
+            components.minute = 0
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let content = UNMutableNotificationContent()
+            content.title = "To-do check-in"
+            content.body = "How's your to-do list? Make progress on something now."
+            content.sound = .default
+            content.userInfo = ["url": "app://today"]
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: "hourly-nudge-\(hour)", content: content, trigger: trigger)
+            )
+        }
+    }
+
     func handle(_ response: UNNotificationResponse) {
         if response.notification.request.content.userInfo["url"] as? String == "app://today" {
             lastDeepLink = Date()
@@ -229,7 +332,8 @@ final class NotificationService {
         date: Date,
         title: String,
         body: String,
-        taskId: UUID
+        taskId: UUID? = nil,
+        url: String = "app://today"
     ) {
         let components = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
@@ -240,7 +344,7 @@ final class NotificationService {
         content.title = title
         content.body = body
         content.sound = .default
-        content.userInfo = ["url": "app://today", "task_id": taskId.uuidString]
+        content.userInfo = ["url": url, "task_id": taskId?.uuidString ?? ""]
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         )

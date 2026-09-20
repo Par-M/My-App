@@ -8,11 +8,14 @@ struct TodayView: View {
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
     @Environment(RecommendationService.self) private var recommendationService
+    @Environment(CalendarService.self) private var calendarService
+    @Environment(FocusService.self) private var focusService
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showSummary = false
-    @State private var errorDismissed = false
+    @AppStorage("focusTimerStartedAt") private var focusTimerStartedAt = 0.0
+
     @State private var showSettings = false
+    @State private var errorDismissed = false
     @State private var reschedulingTask: TaskItem?
     @State private var focusingTask: ScheduledTask?
     @State private var quickTaskTitle = ""
@@ -21,6 +24,18 @@ struct TodayView: View {
 
     private var calendar: Calendar { Calendar.current }
 
+    private var refreshTrigger: Int {
+        var hasher = Hasher()
+        hasher.combine(taskService.dataVersion)
+        hasher.combine(scheduleService.blocks.count)
+        hasher.combine(scheduleService.blocks.filter { $0.completedAt != nil }.count)
+        hasher.combine(scheduleService.preference?.workHoursStart ?? 0)
+        hasher.combine(scheduleService.preference?.workHoursEnd ?? 0)
+        hasher.combine(notificationService.lastDeepLink?.timeIntervalSinceReferenceDate ?? 0)
+        hasher.combine(scenePhase == .active)
+        return hasher.finalize()
+    }
+
     private var recommendationsForToday: [RecommendedPart] {
         let today = calendar.startOfDay(for: Date())
         return recommendationService.recommendations(for: today)?.items ?? []
@@ -28,73 +43,8 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let today = planner.today {
-                    List {
-                        Section {
-                            header(today)
-                        }
-
-                        Section {
-                            quickAddField
-                        }
-
-                        if let currentTask = today.currentTask {
-                            Section("Now") {
-                                focusRow(currentTask)
-                            }
-                        }
-
-                        if !taskService.overdueTasks.isEmpty {
-                            Section("Behind Schedule") {
-                                ForEach(taskService.overdueTasks) { task in
-                                    overdueRow(task)
-                                }
-                            }
-                        }
-
-                        if !today.nextTasks.isEmpty {
-                            Section("Up Next") {
-                                ForEach(today.nextTasks) { task in
-                                    focusRow(task)
-                                }
-                            }
-                        }
-
-                        if !recommendationsForToday.isEmpty {
-                            Section("Recommended Today") {
-                                ForEach(recommendationsForToday) { item in
-                                    recommendedRow(item)
-                                }
-                            }
-                        }
-
-                        Section {
-                            summaryButton(today)
-                        }
-
-                        Section {
-                            syncStatusRow()
-                        }
-                    }
-                } else if planner.isLoading {
-                    ProgressView("Loading today's plan…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if planner.errorMessage != nil {
-                    ContentUnavailableView(
-                        "Couldn't load today's plan",
-                        systemImage: "wifi.exclamationmark",
-                        description: Text("Check your connection and try again.")
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "No plan for today",
-                        systemImage: "calendar.badge.clock",
-                        description: Text("Pull to refresh to check for updates.")
-                    )
-                }
-            }
-            .navigationTitle("Today")
+            todayContent
+                .navigationTitle("Today")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -114,38 +64,11 @@ struct TodayView: View {
                     .disabled(planner.isLoading)
                 }
             }
-            .task {
-                await planner.loadToday()
-                await taskService.loadOverdue()
-                await loadRecommendations()
+            .task(id: refreshTrigger) {
+                await refreshPlan()
             }
             .refreshable {
-                await planner.loadToday()
-                await taskService.loadOverdue()
-                await loadRecommendations()
-            }
-            .onChange(of: notificationService.lastDeepLink) { _, _ in
-                Task {
-                    await planner.loadToday()
-                    await taskService.loadOverdue()
-                    await loadRecommendations()
-                }
-            }
-            .onChange(of: taskService.dataVersion) { _, _ in
-                Task {
-                    await planner.loadToday()
-                    await taskService.loadOverdue()
-                    await loadRecommendations()
-                }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active {
-                    Task {
-                        await planner.loadToday()
-                        await taskService.loadOverdue()
-                        await loadRecommendations()
-                    }
-                }
+                await refreshPlan()
             }
             .sheet(item: $reschedulingTask) { task in
                 RescheduleSheet(task: task) { minutes, reason in
@@ -158,9 +81,6 @@ struct TodayView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .navigationDestination(isPresented: $showSummary) {
-                DailySummaryView()
-            }
             .alert(
                 "Something went wrong",
                 isPresented: Binding(
@@ -172,6 +92,64 @@ struct TodayView: View {
             } message: {
                 Text(planner.errorMessage ?? "")
             }
+        }
+    }
+
+    @ViewBuilder
+    private var todayContent: some View {
+        if let today = planner.today {
+            List {
+                Section {
+                    header(today)
+                }
+
+                Section {
+                    quickAddField
+                }
+
+                if !taskService.overdueTasks.isEmpty {
+                    Section("Behind Schedule") {
+                        ForEach(taskService.overdueTasks) { task in
+                            overdueRow(task)
+                        }
+                    }
+                }
+
+                if !today.nextTasks.isEmpty {
+                    Section("Up Next") {
+                        ForEach(today.nextTasks) { task in
+                            focusRow(task)
+                        }
+                    }
+                }
+
+                if !recommendationsForToday.isEmpty {
+                    Section("Recommended Today") {
+                        ForEach(recommendationsForToday) { item in
+                            recommendedRow(item)
+                        }
+                    }
+                }
+
+                Section {
+                    syncStatusRow()
+                }
+            }
+        } else if planner.isLoading {
+            ProgressView("Loading today's plan…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if planner.errorMessage != nil {
+            ContentUnavailableView(
+                "Couldn't load today's plan",
+                systemImage: "wifi.exclamationmark",
+                description: Text("Check your connection and try again.")
+            )
+        } else {
+            ContentUnavailableView(
+                "No plan for today",
+                systemImage: "calendar.badge.clock",
+                description: Text("Pull to refresh to check for updates.")
+            )
         }
     }
 
@@ -334,20 +312,7 @@ struct TodayView: View {
         quickAddError = nil
         defer { isAddingQuickTask = false }
         do {
-            _ = try await taskService.createTask(
-                title: title,
-                description: nil,
-                deadline: nil,
-                startAt: nil,
-                endAt: nil,
-                priority: .medium,
-                status: .pending,
-                estimatedDuration: nil,
-                category: nil,
-                notes: nil,
-                repeatWeekdays: nil,
-                repeatEndsOn: nil
-            )
+            _ = try await taskService.quickAdd(text: title)
             quickTaskTitle = ""
             compliantHaptic(.success)
             await taskService.loadOverdue()
@@ -370,6 +335,38 @@ struct TodayView: View {
         await recommendationService.load(from: today, to: end)
     }
 
+    private func refreshPlan() async {
+        await planner.loadToday()
+        await taskService.loadOverdue()
+        await loadRecommendations()
+        await refreshNotifications()
+    }
+
+    private func refreshNotifications() async {
+        if focusService.reflections.isEmpty {
+            await focusService.loadFocus()
+        }
+        let now = Date()
+        let start = calendar.startOfDay(for: now)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? now
+        let events = calendarService.permission == .granted
+            ? calendarService.fetchEvents(from: start, to: now.addingTimeInterval(48 * 3600))
+            : []
+        let hasReflectionToday = focusService.reflections.contains {
+            calendar.isDate($0.date, inSameDayAs: now)
+        }
+        let preference = scheduleService.preference
+        notificationService.scheduleAll(
+            tasks: taskService.tasks,
+            events: events,
+            blocks: scheduleService.blocks,
+            workHoursStart: preference?.workHoursStart ?? 9,
+            workHoursEnd: preference?.workHoursEnd ?? 17,
+            hasReflectionToday: hasReflectionToday,
+            hasOngoingFocus: focusTimerStartedAt > 0
+        )
+    }
+
     private func recommendedRow(_ item: RecommendedPart) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
@@ -379,7 +376,11 @@ struct TodayView: View {
                 Text(displayTitle(item))
                     .font(.subheadline.weight(.medium))
                     .lineLimit(2)
-                if !item.reason.isEmpty {
+                if let block = item.timeBlockText {
+                    Label(block, systemImage: "clock")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if !item.reason.isEmpty {
                     Text(item.reason)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -456,26 +457,6 @@ struct TodayView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.accentColor.opacity(0.15), in: Capsule())
-    }
-
-    private func summaryButton(_ today: TodayResponse) -> some View {
-        Button {
-            showSummary = true
-        } label: {
-            HStack {
-                Label("View Daily Summary", systemImage: "chart.bar")
-                    .font(.body.weight(.medium))
-                Spacer()
-                if today.tasksRemainingForSummary > 0 {
-                    Text("\(today.tasksRemainingForSummary) left")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func syncStatusRow() -> some View {

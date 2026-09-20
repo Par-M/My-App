@@ -19,6 +19,7 @@ final class LocalTask {
     var completedAt: Date?
     var category: String?
     var notes: String?
+    var checklist: [ChecklistItem]?
     var repeatWeekdays: [Int]?
     var repeatEndsOn: Date?
     var beforeTaskIds: [UUID]?
@@ -47,6 +48,7 @@ final class LocalTask {
         completedAt: Date? = nil,
         category: String? = nil,
         notes: String? = nil,
+        checklist: [ChecklistItem]? = nil,
         repeatWeekdays: [Int]? = nil,
         beforeTaskIds: [UUID]? = nil,
         afterTaskIds: [UUID]? = nil,
@@ -74,6 +76,7 @@ final class LocalTask {
         self.completedAt = completedAt
         self.category = category
         self.notes = notes
+        self.checklist = checklist
         self.repeatWeekdays = repeatWeekdays
         self.beforeTaskIds = beforeTaskIds
         self.afterTaskIds = afterTaskIds
@@ -104,6 +107,7 @@ final class LocalTask {
             completedAt: task.completedAt,
             category: task.category,
             notes: task.notes,
+            checklist: task.checklist,
             repeatWeekdays: task.repeatWeekdays,
             beforeTaskIds: task.beforeTaskIds,
             afterTaskIds: task.afterTaskIds,
@@ -135,6 +139,7 @@ final class LocalTask {
             completedAt: completedAt,
             category: category,
             notes: notes,
+            checklist: checklist,
             repeatWeekdays: repeatWeekdays,
             repeatEndsOn: repeatEndsOn,
             beforeTaskIds: beforeTaskIds,

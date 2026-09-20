@@ -24,6 +24,11 @@ def _normalize_weekdays(value: list[int] | None) -> list[int] | None:
     return sorted(set(value))
 
 
+class ChecklistItem(BaseModel):
+    text: str = Field(min_length=0, max_length=500)
+    done: bool = False
+
+
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
@@ -37,6 +42,7 @@ class TaskCreate(BaseModel):
     productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+    checklist: list[ChecklistItem] | None = None
     repeat_weekdays: list[int] | None = None
     repeat_ends_on: datetime | None = None
     before_task_ids: list[uuid.UUID] | None = None
@@ -78,6 +84,7 @@ class TaskUpdate(BaseModel):
     productivity: TaskProductivity | None = None
     category: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+    checklist: list[ChecklistItem] | None = None
     repeat_weekdays: list[int] | None = None
     repeat_ends_on: datetime | None = None
     before_task_ids: list[uuid.UUID] | None = None
@@ -132,6 +139,7 @@ class TaskResponse(BaseModel):
     completed_at: datetime | None
     category: str | None
     notes: str | None
+    checklist: list[ChecklistItem] | None
     progress_percent: int
     repeat_weekdays: list[int] | None
     repeat_ends_on: datetime | None
@@ -171,3 +179,20 @@ class RescheduleRequest(BaseModel):
 class RescheduleResponse(BaseModel):
     task: TaskResponse
     blocks: list[CalendarBlockResponse]
+
+
+class TaskParseRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    timezone: str = "UTC"
+
+
+class TaskParseResponse(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    deadline: datetime | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    priority: TaskPriority | None = None
+    estimated_duration: int | None = Field(default=None, ge=1, le=525600)
+    category: str | None = None
+    notes: str | None = None

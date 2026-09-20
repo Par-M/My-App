@@ -29,6 +29,8 @@ class RecommendedPart(BaseModel):
     deadline: datetime | None = None
     is_overdue: bool = False
     reason: str = ""
+    start_at: datetime | None = None
+    end_at: datetime | None = None
 
 
 class UnscheduledPart(BaseModel):

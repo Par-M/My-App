@@ -49,6 +49,7 @@ final class LocalStore {
             existing.completedAt = task.completedAt
             existing.category = task.category
             existing.notes = task.notes
+            existing.checklist = task.checklist
             existing.repeatWeekdays = task.repeatWeekdays
             existing.repeatEndsOn = task.repeatEndsOn
             existing.beforeTaskIds = task.beforeTaskIds

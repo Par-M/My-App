@@ -48,6 +48,16 @@ enum TaskProductivity: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+struct ChecklistItem: Codable, Hashable, Sendable {
+    var text: String
+    var done: Bool
+
+    init(text: String, done: Bool = false) {
+        self.text = text
+        self.done = done
+    }
+}
+
 struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userId: UUID
@@ -65,6 +75,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var completedAt: Date?
     var category: String?
     var notes: String?
+    var checklist: [ChecklistItem]?
     var repeatWeekdays: [Int]?
     var repeatEndsOn: Date?
     var beforeTaskIds: [UUID]?
@@ -91,6 +102,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case completedAt = "completed_at"
         case category
         case notes
+        case checklist
         case repeatWeekdays = "repeat_weekdays"
         case repeatEndsOn = "repeat_ends_on"
         case beforeTaskIds = "before_task_ids"
@@ -107,6 +119,11 @@ struct TaskListResponse: Codable, Sendable {
     let total: Int
 }
 
+struct TaskParseRequest: Encodable, Sendable {
+    let text: String
+    let timezone: String
+}
+
 struct TaskCreateRequest: Codable, Sendable {
     let title: String
     let description: String?
@@ -118,6 +135,7 @@ struct TaskCreateRequest: Codable, Sendable {
     let estimatedDuration: Int?
     let category: String?
     let notes: String?
+    let checklist: [ChecklistItem]?
     let repeatWeekdays: [Int]?
     let repeatEndsOn: Date?
     let beforeTaskIds: [UUID]?
@@ -137,7 +155,8 @@ struct TaskCreateRequest: Codable, Sendable {
         repeatWeekdays: [Int]?,
         beforeTaskIds: [UUID]? = nil,
         afterTaskIds: [UUID]? = nil,
-        repeatEndsOn: Date? = nil
+        repeatEndsOn: Date? = nil,
+        checklist: [ChecklistItem]? = nil
     ) {
         self.title = title
         self.description = description
@@ -149,6 +168,7 @@ struct TaskCreateRequest: Codable, Sendable {
         self.estimatedDuration = estimatedDuration
         self.category = category
         self.notes = notes
+        self.checklist = checklist
         self.repeatWeekdays = repeatWeekdays
         self.beforeTaskIds = beforeTaskIds
         self.afterTaskIds = afterTaskIds
@@ -166,6 +186,7 @@ struct TaskCreateRequest: Codable, Sendable {
         estimatedDuration = local.estimatedDuration
         category = local.category
         notes = local.notes
+        checklist = local.checklist
         repeatWeekdays = local.repeatWeekdays
         beforeTaskIds = local.beforeTaskIds
         afterTaskIds = local.afterTaskIds
@@ -183,6 +204,7 @@ struct TaskCreateRequest: Codable, Sendable {
         case estimatedDuration = "estimated_duration"
         case category
         case notes
+        case checklist
         case repeatWeekdays = "repeat_weekdays"
         case repeatEndsOn = "repeat_ends_on"
         case beforeTaskIds = "before_task_ids"
@@ -202,6 +224,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
     let actualDuration: Int?
     let category: String?
     let notes: String?
+    let checklist: [ChecklistItem]?
     let repeatWeekdays: [Int]?
     let repeatEndsOn: Date?
     let beforeTaskIds: [UUID]?
@@ -219,6 +242,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         actualDuration = task.actualDuration
         category = task.category
         notes = task.notes
+        checklist = task.checklist
         repeatWeekdays = task.repeatWeekdays
         repeatEndsOn = task.repeatEndsOn
         beforeTaskIds = task.beforeTaskIds
@@ -237,6 +261,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         actualDuration = local.actualDuration
         category = local.category
         notes = local.notes
+        checklist = local.checklist
         repeatWeekdays = local.repeatWeekdays
         repeatEndsOn = local.repeatEndsOn
         beforeTaskIds = local.beforeTaskIds
@@ -256,6 +281,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         try container.encode(actualDuration, forKey: .actualDuration)
         try container.encode(category, forKey: .category)
         try container.encode(notes, forKey: .notes)
+        try container.encode(checklist, forKey: .checklist)
         try container.encode(repeatWeekdays, forKey: .repeatWeekdays)
         try container.encode(repeatEndsOn, forKey: .repeatEndsOn)
         try container.encodeIfPresent(beforeTaskIds, forKey: .beforeTaskIds)
@@ -274,6 +300,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case actualDuration = "actual_duration"
         case category
         case notes
+        case checklist
         case repeatWeekdays = "repeat_weekdays"
         case repeatEndsOn = "repeat_ends_on"
         case beforeTaskIds = "before_task_ids"

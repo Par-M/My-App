@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.calendar_block import CalendarBlock
 from app.models.task import Task
+from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.task_miss import TaskMiss
 from app.repositories import task_repository
@@ -131,6 +132,28 @@ class TaskService:
             except Exception:
                 pass
         return task
+
+    def parse_task(self, text: str, timezone: str = "UTC") -> Task:
+        """Parse a natural-language note and create the described task."""
+        from app.services.text_analysis import ParsedTask
+        from app.services.text_analysis import TextAnalysisError
+        from app.services.text_analysis import default_task_parser
+
+        parser = default_task_parser()
+        try:
+            parsed = parser.parse_task(text, timezone)
+        except TextAnalysisError:
+            parsed = ParsedTask(title=text)
+        data = TaskCreate(
+            title=parsed.title,
+            description=parsed.description,
+            deadline=parsed.deadline,
+            estimated_duration=parsed.estimated_duration,
+            priority=parsed.priority or TaskPriority.medium,
+            category=parsed.category,
+            notes=parsed.notes,
+        )
+        return self.create_task(data)
 
     def update_task(self, task_id: uuid.UUID, data: TaskUpdate) -> Task:
         task = self.get_task(task_id)

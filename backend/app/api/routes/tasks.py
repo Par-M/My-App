@@ -18,6 +18,7 @@ from app.schemas.task import RescheduleRequest
 from app.schemas.task import RescheduleResponse
 from app.schemas.task import SnoozeRequest
 from app.schemas.task import SnoozeResponse
+from app.schemas.task import TaskParseRequest
 from app.schemas.task import TaskCreate
 from app.schemas.task import TaskListResponse
 from app.schemas.task import TaskResponse
@@ -66,6 +67,18 @@ def create_task(
     service: TaskService = Depends(_service),
 ) -> TaskResponse:
     return service.create_task(payload)
+
+
+@router.post(
+    "/parse",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def parse_and_create_task(
+    payload: TaskParseRequest,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    return service.parse_task(payload.text, payload.timezone)
 
 
 @router.get("", response_model=TaskListResponse)

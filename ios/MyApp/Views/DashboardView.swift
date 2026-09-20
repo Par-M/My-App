@@ -3,11 +3,6 @@ import SwiftUI
 struct DashboardView: View {
     var body: some View {
         TabView {
-            TodayView()
-                .tabItem {
-                    Label("Today", systemImage: "sun.max")
-                }
-
             WeeklyScheduleView()
                 .tabItem {
                     Label("Schedule", systemImage: "calendar")

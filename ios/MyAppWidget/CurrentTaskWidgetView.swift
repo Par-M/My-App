@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 
 struct CurrentTaskWidgetView: View {
     let entry: CurrentTaskEntry
@@ -22,9 +23,25 @@ struct CurrentTaskWidgetView: View {
             } else {
                 ForEach(Array(entry.topTaskTitles.enumerated()), id: \.offset) { index, title in
                     HStack(spacing: 5) {
-                        Circle()
-                            .fill(index == 0 ? Color.orange : Color.secondary.opacity(0.4))
-                            .frame(width: index == 0 ? 6 : 5, height: index == 0 ? 6 : 5)
+                        if index == 0 {
+                            if #available(iOS 17.0, *) {
+                                Button(intent: CompleteTopTaskIntent()) {
+                                    Image(systemName: "circle")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.orange)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Circle()
+                                    .fill(Color.orange)
+                                    .frame(width: 6, height: 6)
+                            }
+                        } else {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.4))
+                                .frame(width: 5, height: 5)
+                        }
+
                         Text(title)
                             .font(.system(size: index == 0 ? 13 : 11, weight: index == 0 ? .semibold : .regular))
                             .lineLimit(1)

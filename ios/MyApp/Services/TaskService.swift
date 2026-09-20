@@ -206,15 +206,22 @@ final class TaskService {
         }
     }
 
-    /// Parse a natural-language note via the backend (Gemini) and create the task.
+    /// Parse a natural-language text string locally and create the task.
     func quickAdd(text: String) async throws -> TaskItem {
-        let request = TaskParseRequest(text: text, timezone: TimeZone.current.identifier)
-        let created: TaskItem = try await client.request(TaskEndpoint.parse(request))
-        store?.upsert(created)
-        tasks.insert(created, at: 0)
-        isOfflineMode = false
-        dataVersion += 1
-        return created
+        let parsed = TaskNaturalLanguageParser.parse(text)
+        return try await createTask(
+            title: parsed.title,
+            description: nil,
+            deadline: parsed.deadline,
+            startAt: nil,
+            endAt: nil,
+            priority: parsed.priority,
+            status: .pending,
+            estimatedDuration: parsed.estimatedDuration,
+            category: parsed.category,
+            notes: nil,
+            repeatWeekdays: nil
+        )
     }
 
     func updateTask(_ task: TaskItem) async throws -> TaskItem {

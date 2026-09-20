@@ -294,8 +294,8 @@ final class NotificationService {
     }
 
     private func scheduleHourlyNudges(workHoursStart: Double, workHoursEnd: Double) {
-        var startHour = min(max(Int(workHoursStart), 0), 23)
-        var endHour = min(max(Int(workHoursEnd), startHour + 1), 24)
+        let startHour = min(max(Int(workHoursStart), 0), 23)
+        let endHour = min(max(Int(workHoursEnd), startHour + 1), 24)
         guard endHour > startHour else { return }
         for hour in startHour..<min(endHour, 24) {
             var components = DateComponents()

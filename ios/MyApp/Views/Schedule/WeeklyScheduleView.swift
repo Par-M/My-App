@@ -5,6 +5,11 @@ struct WeeklyScheduleView: View {
     @Environment(CalendarService.self) private var calendarService
     @Environment(RecommendationService.self) private var recommendationService
     @Environment(TaskService.self) private var taskService
+    @Environment(NotificationService.self) private var notificationService
+    @Environment(FocusService.self) private var focusService
+    @Environment(\.scenePhase) private var scenePhase
+
+    @AppStorage("focusTimerStartedAt") private var focusTimerStartedAt: Double = 0
 
     private enum ScheduleViewMode: String, CaseIterable, Identifiable {
         case day
@@ -29,6 +34,7 @@ struct WeeklyScheduleView: View {
     @State private var viewMode: ScheduleViewMode = .day
     @State private var selectedDate = Date()
     @State private var showPreferences = false
+    @State private var showSettings = false
     @State private var showProposal = false
     @State private var busyEvents: [CalendarEventItem] = []
     @State private var errorDismissed = false
@@ -177,6 +183,12 @@ struct WeeklyScheduleView: View {
                     }
 
                     Button {
+                        showSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "slider.horizontal.3")
+                    }
+
+                    Button {
                         Task { await loadData() }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
@@ -212,6 +224,9 @@ struct WeeklyScheduleView: View {
             }
             .sheet(isPresented: $showPreferences) {
                 PreferencesView()
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
             .sheet(isPresented: $showProposal) {
                 ScheduleProposalView()
@@ -558,12 +573,23 @@ struct WeeklyScheduleView: View {
         let remainingToday = remainingFreeMinutesToday()
         let canCompleteToday = isToday && item.minutes <= remainingToday
 
-        return Button {
-            if let task = taskService.tasks.first(where: { $0.id == item.taskId }) {
-                selectedTask = task
+        return HStack(spacing: 6) {
+            Button {
+                startRecommendedFocus(item)
+            } label: {
+                Image(systemName: "play.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.tint)
             }
-        } label: {
-            HStack(spacing: 10) {
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Start focus on \(displayTitle(item))")
+
+            Button {
+                if let task = taskService.tasks.first(where: { $0.id == item.taskId }) {
+                    selectedTask = task
+                }
+            } label: {
+                HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(priorityColor(item.priority))
                     .frame(width: 4, height: 34)
@@ -606,8 +632,9 @@ struct WeeklyScheduleView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .background(Color.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -1157,11 +1184,21 @@ struct WeeklyScheduleView: View {
 
         busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
 
-        await recommendationService.load(
-            from: visibleStart,
-            to: visibleEnd,
-            excluding: Set(busyEvents.filter { calendarService.isIgnored($0) }.map(\.id))
-        )
+        let focusTimerRunning = focusTimerStartedAt > 0
+        if !focusTimerRunning {
+            await recommendationService.load(
+                from: visibleStart,
+                to: visibleEnd,
+                excluding: Set(busyEvents.filter { calendarService.isIgnored($0) }.map(\.id))
+            )
+        }
+    }
+
+    private func startRecommendedFocus(_ item: RecommendedPart) {
+        focusTimerStartedAt = Date().timeIntervalSince1970
+        if #available(iOS 16.1, *) {
+            FocusLiveActivityManager.startLiveActivity()
+        }
     }
 }
 

@@ -172,6 +172,9 @@ struct TaskListView: View {
     @State private var showNotificationSettings = false
     @State private var showSettings = false
     @State private var showOverdue = false
+    @State private var quickTaskTitle = ""
+    @State private var isAddingQuickTask = false
+    @State private var quickAddError: String?
     @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
     @State private var isCompletedExpanded = false
@@ -197,6 +200,63 @@ struct TaskListView: View {
             order: sortAscending ? "asc" : "desc",
             dataVersion: taskService.dataVersion
         )
+    }
+
+    private var quickAddSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("New task title", text: $quickTaskTitle)
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.done)
+                    .onSubmit { addQuickTask() }
+                HStack {
+                    Button("Cancel") {
+                        isAddingQuickTask = false
+                        quickTaskTitle = ""
+                        quickAddError = nil
+                    }
+                    Spacer()
+                    Button("Add") { addQuickTask() }
+                }
+                .font(.subheadline)
+                if let quickAddError {
+                    Text(quickAddError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func addQuickTask() {
+        let title = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            quickAddError = "Enter a task title."
+            return
+        }
+        Task {
+            do {
+                try await taskService.createTask(
+                    title: title,
+                    description: nil,
+                    deadline: nil,
+                    startAt: nil,
+                    endAt: nil,
+                    priority: .medium,
+                    status: .pending,
+                    estimatedDuration: nil,
+                    category: nil,
+                    notes: nil,
+                    repeatWeekdays: nil
+                )
+                quickTaskTitle = ""
+                quickAddError = nil
+                isAddingQuickTask = false
+            } catch {
+                quickAddError = error.localizedDescription
+            }
+        }
     }
 
     private var activeTasks: [TaskItem] {
@@ -238,6 +298,7 @@ struct TaskListView: View {
                     }
                 } else {
                     List {
+                        quickAddSection
                         if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
                             Section {
                                 ForEach(deferredTasks) { task in
@@ -337,6 +398,17 @@ struct TaskListView: View {
                         }
                         .accessibilityIdentifier("overdueBadgeButton")
                     }
+
+                    Button {
+                        isAddingQuickTask.toggle()
+                        if !isAddingQuickTask {
+                            quickTaskTitle = ""
+                            quickAddError = nil
+                        }
+                    } label: {
+                        Label("Quick Add", systemImage: "bolt.circle")
+                    }
+                    .accessibilityIdentifier("quickAddButton")
 
                     Button {
                         showAddTask = true

@@ -62,7 +62,7 @@ struct TaskDetailView: View {
 
                     if currentTask.status != .completed {
                         Button {
-                            Task { await markComplete() }
+                            markComplete()
                         } label: {
                             Label("Mark Complete", systemImage: "checkmark.circle.fill")
                                 .frame(maxWidth: .infinity)

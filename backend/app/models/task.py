@@ -153,6 +153,13 @@ class Task(Base):
         nullable=True,
     )
 
+    # Per-occurrence overrides for a repeating task, keyed by local date:
+    # {"YYYY-MM-DD": {"start_at": <iso datetime>, "end_at": <iso datetime>}}.
+    repeat_overrides: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
     before_task_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
         ARRAY(UUID(as_uuid=True)),
         nullable=True,

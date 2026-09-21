@@ -52,6 +52,9 @@ final class LocalStore {
             existing.checklist = task.checklist
             existing.repeatWeekdays = task.repeatWeekdays
             existing.repeatEndsOn = task.repeatEndsOn
+            existing.repeatOverridesData = task.repeatOverrides.flatMap {
+                try? JSONCoding.encoder.encode($0)
+            }
             existing.beforeTaskIds = task.beforeTaskIds
             existing.afterTaskIds = task.afterTaskIds
             existing.isArchived = task.isArchived

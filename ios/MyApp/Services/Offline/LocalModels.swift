@@ -22,6 +22,7 @@ final class LocalTask {
     var checklist: [ChecklistItem]?
     var repeatWeekdays: [Int]?
     var repeatEndsOn: Date?
+    var repeatOverridesData: Data?
     var beforeTaskIds: [UUID]?
     var afterTaskIds: [UUID]?
     var isArchived: Bool
@@ -50,6 +51,7 @@ final class LocalTask {
         notes: String? = nil,
         checklist: [ChecklistItem]? = nil,
         repeatWeekdays: [Int]? = nil,
+        repeatOverridesData: Data? = nil,
         beforeTaskIds: [UUID]? = nil,
         afterTaskIds: [UUID]? = nil,
         repeatEndsOn: Date? = nil,
@@ -78,6 +80,7 @@ final class LocalTask {
         self.notes = notes
         self.checklist = checklist
         self.repeatWeekdays = repeatWeekdays
+        self.repeatOverridesData = repeatOverridesData
         self.beforeTaskIds = beforeTaskIds
         self.afterTaskIds = afterTaskIds
         self.repeatEndsOn = repeatEndsOn
@@ -109,6 +112,9 @@ final class LocalTask {
             notes: task.notes,
             checklist: task.checklist,
             repeatWeekdays: task.repeatWeekdays,
+            repeatOverridesData: task.repeatOverrides.flatMap {
+                try? JSONCoding.encoder.encode($0)
+            },
             beforeTaskIds: task.beforeTaskIds,
             afterTaskIds: task.afterTaskIds,
             repeatEndsOn: task.repeatEndsOn,
@@ -142,6 +148,12 @@ final class LocalTask {
             checklist: checklist,
             repeatWeekdays: repeatWeekdays,
             repeatEndsOn: repeatEndsOn,
+            repeatOverrides: repeatOverridesData.flatMap {
+                try? JSONCoding.decoder.decode(
+                    [String: RepeatOverride].self,
+                    from: $0
+                )
+            },
             beforeTaskIds: beforeTaskIds,
             afterTaskIds: afterTaskIds,
             isArchived: isArchived,

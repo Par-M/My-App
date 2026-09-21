@@ -58,6 +58,39 @@ struct ChecklistItem: Codable, Hashable, Sendable {
     }
 }
 
+/// A time override for a single occurrence of a repeating task.
+struct RepeatOverride: Codable, Hashable, Sendable {
+    var startAt: Date
+    var endAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case startAt = "start_at"
+        case endAt = "end_at"
+    }
+}
+
+enum OccurrenceScope: String, Sendable {
+    case thisEventOnly = "this_event_only"
+    case fromNowOnwards = "from_now_onwards"
+}
+
+/// Formats dates into the `yyyy-MM-dd` keys used by the backend's
+/// `repeat_overrides` map. Uses the device's calendar day so an override lines
+/// up with the occurrence the user tapped, regardless of UTC offset.
+enum OccurrenceDateKey {
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    static func key(for date: Date) -> String {
+        formatter.string(from: date)
+    }
+}
+
 struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let userId: UUID
@@ -78,6 +111,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
     var checklist: [ChecklistItem]?
     var repeatWeekdays: [Int]?
     var repeatEndsOn: Date?
+    var repeatOverrides: [String: RepeatOverride]? = nil
     var beforeTaskIds: [UUID]?
     var afterTaskIds: [UUID]?
     var isArchived: Bool
@@ -105,6 +139,7 @@ struct TaskItem: Codable, Identifiable, Hashable, Sendable {
         case checklist
         case repeatWeekdays = "repeat_weekdays"
         case repeatEndsOn = "repeat_ends_on"
+        case repeatOverrides = "repeat_overrides"
         case beforeTaskIds = "before_task_ids"
         case afterTaskIds = "after_task_ids"
         case isArchived = "is_archived"
@@ -357,4 +392,30 @@ struct RescheduleRequest: Encodable, Sendable {
 struct RescheduleResponse: Codable, Sendable {
     let task: TaskItem
     let blocks: [CalendarBlock]
+}
+
+struct OccurrenceUpdateRequest: Encodable, Sendable {
+    let date: String
+    let scope: String
+    let startAt: Date
+    let endAt: Date
+    let timezone: String
+
+    private enum CodingKeys: String, CodingKey {
+        case date
+        case scope
+        case startAt = "start_at"
+        case endAt = "end_at"
+        case timezone
+    }
+}
+
+struct OccurrenceUpdateResponse: Codable, Sendable {
+    let task: TaskItem
+    let newTask: TaskItem?
+
+    private enum CodingKeys: String, CodingKey {
+        case task
+        case newTask = "new_task"
+    }
 }

@@ -1,6 +1,7 @@
 import importlib
 import uuid
 from datetime import datetime
+from datetime import time
 from datetime import timedelta
 from datetime import timezone
 
@@ -738,6 +739,214 @@ class TestReschedule:
         )
         assert block_start == _now()
         assert block_end == _now() + timedelta(minutes=30)
+
+
+class TestOccurrenceEditing:
+    def _repeating_task(self, client, token, **overrides):
+        first = _now().replace(hour=12, minute=0, second=0, microsecond=0)
+        payload = {
+            "title": "Lunch",
+            "start_at": first.isoformat(),
+            "end_at": (first + timedelta(hours=1)).isoformat(),
+            "repeat_weekdays": [0, 1, 2, 3, 4, 5, 6],
+            "repeat_ends_on": (first + timedelta(days=60)).isoformat(),
+        }
+        payload.update(overrides)
+        return _create_task(client, token, **payload)
+
+    def _edit(self, client, token, task_id, date, start, end, scope):
+        return client.patch(
+            f"/api/v1/tasks/{task_id}/occurrence",
+            json={
+                "date": date.isoformat(),
+                "scope": scope,
+                "start_at": start.isoformat(),
+                "end_at": end.isoformat(),
+            },
+            headers=_auth(token),
+        )
+
+    def test_this_event_only_records_override(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = datetime.fromisoformat(
+            task["start_at"].replace("Z", "+00:00")
+        )
+        date = first.date()
+        new_start = datetime.combine(date, time(14, 0), tzinfo=timezone.utc)
+        new_end = new_start + timedelta(minutes=45)
+
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            date,
+            new_start,
+            new_end,
+            "this_event_only",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["new_task"] is None
+        override = body["task"]["repeat_overrides"][date.isoformat()]
+        assert datetime.fromisoformat(
+            override["start_at"].replace("Z", "+00:00")
+        ) == new_start
+        # The underlying series is untouched.
+        assert body["task"]["start_at"] == task["start_at"]
+        assert datetime.fromisoformat(
+            body["task"]["repeat_ends_on"].replace("Z", "+00:00")
+        ) == datetime.fromisoformat(
+            task["repeat_ends_on"].replace("Z", "+00:00")
+        )
+
+    def test_from_now_onwards_splits_series(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = datetime.fromisoformat(
+            task["start_at"].replace("Z", "+00:00")
+        )
+        edited_date = (first + timedelta(days=7)).date()
+        new_start = datetime.combine(
+            edited_date, time(13, 30), tzinfo=timezone.utc
+        )
+        new_end = new_start + timedelta(minutes=30)
+
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            edited_date,
+            new_start,
+            new_end,
+            "from_now_onwards",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        new_task = body["new_task"]
+        assert new_task is not None
+        assert new_task["id"] != body["task"]["id"]
+        assert new_task["title"] == "Lunch"
+        assert new_task["repeat_weekdays"] == task["repeat_weekdays"]
+        assert datetime.fromisoformat(
+            new_task["start_at"].replace("Z", "+00:00")
+        ) == new_start
+        assert datetime.fromisoformat(
+            new_task["repeat_ends_on"].replace("Z", "+00:00")
+        ) == datetime.fromisoformat(
+            task["repeat_ends_on"].replace("Z", "+00:00")
+        )
+        old_end = datetime.fromisoformat(
+            body["task"]["repeat_ends_on"].replace("Z", "+00:00")
+        )
+        assert old_end.date() == edited_date - timedelta(days=1)
+
+    def test_from_now_onwards_on_first_occurrence_updates_series(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = datetime.fromisoformat(
+            task["start_at"].replace("Z", "+00:00")
+        )
+        new_start = datetime.combine(
+            first.date(), time(14, 0), tzinfo=timezone.utc
+        )
+        new_end = new_start + timedelta(hours=1)
+
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            first.date(),
+            new_start,
+            new_end,
+            "from_now_onwards",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["new_task"] is None
+        assert datetime.fromisoformat(
+            body["task"]["start_at"].replace("Z", "+00:00")
+        ) == new_start
+
+    def test_non_repeating_task_updates_times(self, client):
+        data = _login(client)
+        first = _now().replace(hour=12, minute=0, second=0, microsecond=0)
+        task = _create_task(
+            client,
+            data["access_token"],
+            title="One-off",
+            start_at=first.isoformat(),
+            end_at=(first + timedelta(hours=1)).isoformat(),
+        )
+        new_start = first + timedelta(hours=2)
+        new_end = new_start + timedelta(minutes=30)
+
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            first.date(),
+            new_start,
+            new_end,
+            "from_now_onwards",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["new_task"] is None
+        assert datetime.fromisoformat(
+            body["task"]["start_at"].replace("Z", "+00:00")
+        ) == new_start
+
+    def test_completed_task_conflicts(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = datetime.fromisoformat(
+            task["start_at"].replace("Z", "+00:00")
+        )
+        client.post(
+            f"/api/v1/tasks/{task['id']}/complete",
+            json={},
+            headers=_auth(data["access_token"]),
+        )
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            first.date(),
+            first + timedelta(hours=1),
+            first + timedelta(hours=2),
+            "this_event_only",
+        )
+        assert response.status_code == 409
+
+    def test_rejects_invalid_range(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = datetime.fromisoformat(
+            task["start_at"].replace("Z", "+00:00")
+        )
+        response = self._edit(
+            client,
+            data["access_token"],
+            task["id"],
+            first.date(),
+            first + timedelta(hours=2),
+            first + timedelta(hours=1),
+            "this_event_only",
+        )
+        assert response.status_code == 422
+
+    def test_requires_authentication(self, client):
+        response = client.patch(
+            f"/api/v1/tasks/{uuid.uuid4()}/occurrence",
+            json={
+                "date": "2026-09-21",
+                "scope": "this_event_only",
+                "start_at": "2026-09-21T12:00:00+00:00",
+                "end_at": "2026-09-21T13:00:00+00:00",
+            },
+        )
+        assert response.status_code == 401
 
 
 class TestMissedReasons:

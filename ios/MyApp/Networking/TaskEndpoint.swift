@@ -22,6 +22,7 @@ enum TaskEndpoint: Endpoint {
     case recordTime(id: UUID, minutes: Int)
     case overdue
     case reschedule(id: UUID, minutes: Int, reason: String?, timezone: String, deadline: Date?)
+    case occurrence(id: UUID, request: OccurrenceUpdateRequest)
 
     var path: String {
         switch self {
@@ -49,6 +50,8 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/overdue"
         case .reschedule(let id, _, _, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/reschedule"
+        case .occurrence(let id, _):
+            return "/api/v1/tasks/\(id.uuidString.lowercased())/occurrence"
         }
     }
 
@@ -60,7 +63,7 @@ enum TaskEndpoint: Endpoint {
             return .post
         case .parse:
             return .post
-        case .update, .recordTime:
+        case .update, .recordTime, .occurrence:
             return .patch
         case .delete:
             return .delete
@@ -88,6 +91,8 @@ enum TaskEndpoint: Endpoint {
                 timezone: timezone,
                 deadline: deadline
             )
+        case .occurrence(_, let request):
+            return request
         default:
             return nil
         }

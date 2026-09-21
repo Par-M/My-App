@@ -14,6 +14,8 @@ from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.user import User
 from app.schemas.task import CompleteTaskRequest
+from app.schemas.task import OccurrenceUpdateRequest
+from app.schemas.task import OccurrenceUpdateResponse
 from app.schemas.task import RescheduleRequest
 from app.schemas.task import RescheduleResponse
 from app.schemas.task import SnoozeRequest
@@ -138,6 +140,26 @@ def update_task(
         return service.update_task(task_id, payload)
     except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
         _handle_service_errors(exc)
+
+
+@router.patch("/{task_id}/occurrence", response_model=OccurrenceUpdateResponse)
+def update_occurrence(
+    task_id: uuid.UUID,
+    payload: OccurrenceUpdateRequest,
+    service: TaskService = Depends(_service),
+) -> OccurrenceUpdateResponse:
+    try:
+        task, new_task = service.update_occurrence(
+            task_id,
+            occurrence_date=payload.date,
+            scope=payload.scope,
+            start_at=payload.start_at,
+            end_at=payload.end_at,
+            timezone_name=payload.timezone,
+        )
+    except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
+        _handle_service_errors(exc)
+    return OccurrenceUpdateResponse(task=task, new_task=new_task)
 
 
 @router.delete("/{task_id}")

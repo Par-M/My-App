@@ -104,7 +104,8 @@ final class TaskService {
         repeatWeekdays: [Int]?,
         beforeTaskIds: [UUID]? = nil,
         afterTaskIds: [UUID]? = nil,
-        repeatEndsOn: Date? = nil
+        repeatEndsOn: Date? = nil,
+        checklist: [ChecklistItem]? = nil
     ) async throws -> TaskItem {
         let request = TaskCreateRequest(
             title: title,
@@ -120,7 +121,8 @@ final class TaskService {
             repeatWeekdays: repeatWeekdays,
             beforeTaskIds: beforeTaskIds,
             afterTaskIds: afterTaskIds,
-            repeatEndsOn: repeatEndsOn
+            repeatEndsOn: repeatEndsOn,
+            checklist: checklist
         )
 
         if !connectivity.isConnected, let store {
@@ -142,6 +144,7 @@ final class TaskService {
                 completedAt: nil,
                 category: request.category,
                 notes: request.notes,
+                checklist: request.checklist,
                 repeatWeekdays: request.repeatWeekdays,
                 repeatEndsOn: request.repeatEndsOn,
                 beforeTaskIds: request.beforeTaskIds,
@@ -201,6 +204,24 @@ final class TaskService {
             }
             throw error
         }
+    }
+
+    /// Parse a natural-language text string locally and create the task.
+    func quickAdd(text: String) async throws -> TaskItem {
+        let parsed = TaskNaturalLanguageParser.parse(text)
+        return try await createTask(
+            title: parsed.title,
+            description: nil,
+            deadline: parsed.deadline,
+            startAt: nil,
+            endAt: nil,
+            priority: parsed.priority,
+            status: .pending,
+            estimatedDuration: parsed.estimatedDuration,
+            category: parsed.category,
+            notes: nil,
+            repeatWeekdays: nil
+        )
     }
 
     func updateTask(_ task: TaskItem) async throws -> TaskItem {
@@ -475,6 +496,7 @@ final class TaskService {
     func rescheduleTask(
         _ task: TaskItem,
         minutesRemaining: Int,
+        deadline: Date?,
         reason: String?
     ) async throws -> RescheduleResponse {
         let response: RescheduleResponse = try await client.request(
@@ -482,7 +504,8 @@ final class TaskService {
                 id: task.id,
                 minutes: minutesRemaining,
                 reason: reason,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                deadline: deadline
             )
         )
         store?.upsert(response.task)

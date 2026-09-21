@@ -11,6 +11,8 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
     let deadline: Date?
     let isOverdue: Bool
     let reason: String
+    let startAt: Date?
+    let endAt: Date?
 
     var id: String {
         "\(taskId.uuidString)-\(partIndex)"
@@ -27,6 +29,14 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
         case deadline
         case isOverdue = "is_overdue"
         case reason
+        case startAt = "start_at"
+        case endAt = "end_at"
+    }
+
+    var timeBlockText: String? {
+        guard let startAt, let endAt else { return nil }
+        return "\(startAt.formatted(date: .omitted, time: .shortened)) – "
+            + endAt.formatted(date: .omitted, time: .shortened)
     }
 }
 

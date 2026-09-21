@@ -8,12 +8,13 @@ An AI-powered daily planner for iOS. It shows the events already in your Apple C
 ## Features
 
 - **Calendar view** — displays only the Apple Calendars you've selected (Settings → Calendars), with day / week / month modes
-- **Daily recommendations** — below each day's calendar events, see the tasks you should be able to complete that day, computed from free time between events, working hours, estimated duration, priority, and deadlines
+- **Daily recommendations** — below each day's calendar events, see the tasks you should be able to complete that day, computed from free time between events, working hours, estimated duration, priority, and deadlines, with the recommended time block shown when one fits
+- **Quick add** — type a natural-language task ("catch up on lectures by tomorrow 9pm, should take an hour") on the Today screen; Gemini parses the deadline, duration, and priority and creates the task (`POST /api/v1/tasks/parse`, with a heuristic offline fallback)
 - **Description-aware breakdown** — tasks with structured descriptions ("1. … 2. …" or sentences) are automatically split into named parts; long tasks are chunked into ≤90-minute pieces spread across days
 - **Overload detection** — anything that doesn't fit the selected window is surfaced in a separate "Doesn't fit this window" section
-- **Tasks** — titles, notes, priorities, statuses, deadlines, categories, repeating weekday schedules, estimated durations
+- **Tasks** — titles, notes, priorities, statuses, deadlines, categories, repeating weekday schedules, estimated durations, plus a per-task checklist (inline-editable from the task detail screen, persisted as JSON)
 - **Task progress** — percent complete computed from checked-off blocks
-- **Today planner** — shows your current task, today's priority, what's up next, a focus timer, and day progress
+- **Today planner** — shows today's priorities, what's up next, a quick-add field, and day progress
 - **Missed-deadline recovery** — detects overdue tasks, lets you reschedule them into the remaining time, records why you missed them, and surfaces patterns in "Why did I miss tasks?"
 - **Daily summary** — hours worked, schedule adherence, tasks completed/remaining/rescheduled, and what was missed today
 - **Habits** — build and track daily habits
@@ -34,6 +35,10 @@ On-device notifications are scheduled whenever the task list refreshes or notifi
 | `deadline_reminder_lead_hours` (default 24h) before the deadline | "… is due in N h." | `deadline_reminder_enabled` |
 | 1 hour before the deadline (only when lead > 1h) | "… is due in 1 hour." | `deadline_reminder_enabled` |
 | At the earliest task's deadline | "… is due now." | `deadline_reminder_enabled` |
+| 30 minutes before the end of your configured work hours (skipped if you already reflected today) | "The day is wrapping up — take a minute to reflect…" | always on |
+| 30 minutes before any selected Apple Calendar event (next 48h, all-day events skipped) | "… starts at …." | always on |
+| At the start of an accepted schedule block with no focus timer running | "… is starting now — start your focus timer…" | always on (auto-off during a focus session) |
+| Top of every hour during work hours | "How's your to-do list? Make progress…" | always on |
 
 ### Push (server → APNs)
 
@@ -84,7 +89,7 @@ All endpoints are under `/api/v1`:
 | Prefix | Description |
 | --- | --- |
 | `/auth` | Google sign-in, dev login, token refresh, `/me` |
-| `/tasks` | CRUD, overdue list, snooze, reschedule |
+| `/tasks` | CRUD, overdue list, snooze, reschedule, `POST /parse` (Gemini natural-language quick add) |
 | `/calendar` | Time blocks, block completion (`/blocks/{id}/complete`, `/reopen`) |
 | `/schedule` | AI schedule generation + per-item accept/reject/redo (legacy flow) |
 | `/recommendations` | **New:** `POST /daily` per-day task recommendations from free time/priority/deadlines; `POST /breakdown/{task_id}` splits a task description into parts |
@@ -104,6 +109,7 @@ PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. In addition to the co
 - `task_breakdowns` — stores description-derived subtask parts per task
 - `daily_task_recommendations` — persisted daily recommendation rows (per user/date/task/subtask)
 - `tasks.is_broken_down` — flag marking tasks whose description has been analyzed into parts
+- `tasks.checklist` — JSON list of `{"text", "done"}` items per task (inline-edited in the app)
 - `focus_sessions` — focus timer sessions (start/end, billed minutes)
 - `reflections` — daily reflections plus AI-generated analysis
 

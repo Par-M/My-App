@@ -79,9 +79,18 @@ def find_free_slots(
     """Compute free time inside working hours, excluding busy intervals."""
     merged = merge_intervals(busy)
     slots: list[TimeSlot] = []
-    for window in working_windows(
+    for raw_window in working_windows(
         dates, start_hour=start_hour, end_hour=end_hour, timezone=timezone
     ):
+        # Never treat already-elapsed time as free: the current day's window
+        # is clamped to "now", so recommendations/schedules never place work
+        # into a block that has already passed.
+        now = datetime.now(raw_window.start.tzinfo)
+        window = (
+            TimeSlot(now, raw_window.end)
+            if now > raw_window.start and now < raw_window.end
+            else raw_window
+        )
         cursor = window.start
         for busy_slot in merged:
             if busy_slot.end <= window.start or busy_slot.start >= window.end:

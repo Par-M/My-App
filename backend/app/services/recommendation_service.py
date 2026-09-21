@@ -166,6 +166,34 @@ class RecommendationService:
             reasons.append(f"part {part_index + 1} of {part_count}")
         return ", ".join(reasons) if reasons else "fits your free time"
 
+    @staticmethod
+    def _allocate_window(
+        slots: list[TimeSlot],
+        used_by_slot: list[int],
+        minutes: int,
+    ) -> tuple[datetime | None, datetime | None]:
+        """Assign a concrete start/end window for a recommended part by filling
+        the day's free slots in chronological order."""
+        remaining = minutes
+        start: datetime | None = None
+        end: datetime | None = None
+
+        for index, slot in enumerate(slots):
+            slot_free = slot.duration_minutes - used_by_slot[index]
+            if slot_free <= 0:
+                continue
+            cursor = slot.start + timedelta(minutes=used_by_slot[index])
+            take = min(remaining, slot_free)
+            if start is None:
+                start = cursor
+            end = cursor + timedelta(minutes=take)
+            used_by_slot[index] += take
+            remaining -= take
+            if remaining <= 0:
+                break
+
+        return start, end
+
     def daily_recommendations(
         self,
         *,
@@ -224,14 +252,21 @@ class RecommendationService:
         unscheduled: list[dict] = []
 
         for day in dates:
-            day_slots = slots_by_day.get(day, [])
+            day_slots = sorted(
+                slots_by_day.get(day, []),
+                key=lambda slot: (slot.start, slot.end),
+            )
             capacity = sum(slot.duration_minutes for slot in day_slots)
+            used_by_slot = [0] * len(day_slots)
             items: list[dict] = []
 
             while pending and capacity > 0:
                 task, part, part_count = pending[0]
                 minutes = part["minutes"]
                 if minutes <= capacity:
+                    block_start, block_end = self._allocate_window(
+                        day_slots, used_by_slot, minutes
+                    )
                     items.append(
                         {
                             "task_id": str(task.id),
@@ -249,6 +284,12 @@ class RecommendationService:
                             ),
                             "reason": self._reason(
                                 task, part["index"], part_count, tz
+                            ),
+                            "start_at": (
+                                block_start.isoformat() if block_start else None
+                            ),
+                            "end_at": (
+                                block_end.isoformat() if block_end else None
                             ),
                         }
                     )

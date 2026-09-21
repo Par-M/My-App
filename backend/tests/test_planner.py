@@ -659,6 +659,86 @@ class TestReschedule:
         )
         assert response.status_code == 422
 
+    def test_reschedule_accepts_explicit_deadline(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(hours=3)).isoformat(),
+        )
+        chosen_deadline = _now() + timedelta(days=2)
+
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={
+                "minutes_remaining": 45,
+                "timezone": "UTC",
+                "deadline": chosen_deadline.isoformat(),
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        new_deadline = datetime.fromisoformat(
+            body["task"]["deadline"].replace("Z", "+00:00")
+        )
+        assert new_deadline == chosen_deadline
+        assert body["task"]["estimated_duration"] == 45
+
+    def test_reschedule_rejects_past_deadline(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(days=1)).isoformat(),
+        )
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={
+                "minutes_remaining": 30,
+                "timezone": "UTC",
+                "deadline": (_now() - timedelta(hours=1)).isoformat(),
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 409
+
+    def test_reschedule_explicit_deadline_caps_blocks(self, client):
+        data = _login(client)
+        task = _create_task(
+            client,
+            data["access_token"],
+            deadline=(_now() - timedelta(hours=3)).isoformat(),
+        )
+        start = _now() - timedelta(hours=2)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            start,
+            start + timedelta(minutes=60),
+        )
+
+        response = client.post(
+            f"/api/v1/tasks/{task['id']}/reschedule",
+            json={
+                "minutes_remaining": 120,
+                "timezone": "UTC",
+                "deadline": (_now() + timedelta(minutes=30)).isoformat(),
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        block_start = datetime.fromisoformat(
+            body["blocks"][0]["start_at"].replace("Z", "+00:00")
+        )
+        block_end = datetime.fromisoformat(
+            body["blocks"][0]["end_at"].replace("Z", "+00:00")
+        )
+        assert block_start == _now()
+        assert block_end == _now() + timedelta(minutes=30)
+
 
 class TestMissedReasons:
     def _reschedule(self, client, token, title, category):

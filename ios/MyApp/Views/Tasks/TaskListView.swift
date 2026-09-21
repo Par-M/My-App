@@ -164,14 +164,15 @@ struct TaskListView: View {
     @Environment(NotificationService.self) private var notificationService
 
     @State private var searchText = ""
-    @State private var priorityFilter: TaskPriority?
-    @State private var statusFilter: TaskStatus?
     @State private var sortOption: TaskService.SortOption = .created
     @State private var sortAscending = false
     @State private var showAddTask = false
     @State private var showNotificationSettings = false
     @State private var showSettings = false
     @State private var showOverdue = false
+    @State private var quickTaskTitle = ""
+    @State private var isAddingQuickTask = false
+    @State private var quickAddError: String?
     @State private var reschedulingTask: TaskItem?
     @State private var errorDismissed = false
     @State private var isCompletedExpanded = false
@@ -179,8 +180,6 @@ struct TaskListView: View {
 
     private struct LoadKey: Hashable {
         let search: String
-        let priority: TaskPriority?
-        let status: TaskStatus?
         let archived: Bool
         let sort: TaskService.SortOption
         let order: String
@@ -190,13 +189,50 @@ struct TaskListView: View {
     private var loadKey: LoadKey {
         LoadKey(
             search: searchText,
-            priority: priorityFilter,
-            status: statusFilter,
             archived: taskService.showingArchived,
             sort: sortOption,
             order: sortAscending ? "asc" : "desc",
             dataVersion: taskService.dataVersion
         )
+    }
+
+    private var quickAddSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.secondary)
+                    TextField("Quick add a task…", text: $quickTaskTitle)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            Task { await addQuickTask() }
+                        }
+                    if isAddingQuickTask {
+                        ProgressView()
+                    }
+                }
+                .padding(.vertical, 4)
+                if let quickAddError {
+                    Label(quickAddError, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    private func addQuickTask() async {
+        let title = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !isAddingQuickTask else { return }
+        isAddingQuickTask = true
+        quickAddError = nil
+        defer { isAddingQuickTask = false }
+        do {
+            _ = try await taskService.quickAdd(text: title)
+            quickTaskTitle = ""
+        } catch {
+            quickAddError = "Couldn't add task. Try again."
+        }
     }
 
     private var activeTasks: [TaskItem] {
@@ -238,7 +274,8 @@ struct TaskListView: View {
                     }
                 } else {
                     List {
-                        if !deferredTasks.isEmpty && !taskService.showingArchived && statusFilter == nil {
+                        quickAddSection
+                        if !deferredTasks.isEmpty && !taskService.showingArchived {
                             Section {
                                 ForEach(deferredTasks) { task in
                                     NavigationLink(value: task) {
@@ -269,7 +306,7 @@ struct TaskListView: View {
                             }
                         }
 
-                        if !completedTasks.isEmpty && statusFilter == nil {
+                        if !completedTasks.isEmpty {
                             Section {
                                 DisclosureGroup(isExpanded: $isCompletedExpanded) {
                                     ForEach(completedTasks) { task in
@@ -369,24 +406,6 @@ struct TaskListView: View {
                         Label("Sort", systemImage: "arrow.up.arrow.down")
                     }
 
-                    Menu {
-                        Menu("Priority") {
-                            Button("All") { priorityFilter = nil }
-                            ForEach(TaskPriority.allCases) { priority in
-                                Button(priority.label) { priorityFilter = priority }
-                            }
-                        }
-                        Menu("Status") {
-                            Button("All") { statusFilter = nil }
-                            ForEach(TaskStatus.allCases) { status in
-                                Button(status.label) { statusFilter = status }
-                            }
-                        }
-                    } label: {
-                        Label("Filter", systemImage: "line.3.horizontal.decrease.circle")
-                    }
-                    .accessibilityIdentifier("filterMenuButton")
-
                     Button {
                         taskService.setShowingArchived(!taskService.showingArchived)
                     } label: {
@@ -419,8 +438,15 @@ struct TaskListView: View {
                 }
             }
             .sheet(item: $reschedulingTask) { task in
-                RescheduleSheet(task: task) { minutes, reason in
-                    Task { await reschedule(task, minutes: minutes, reason: reason) }
+                RescheduleSheet(task: task) { minutes, deadline, reason in
+                    Task {
+                        await reschedule(
+                            task,
+                            minutes: minutes,
+                            deadline: deadline,
+                            reason: reason
+                        )
+                    }
                 }
             }
             .confirmationDialog(
@@ -438,8 +464,6 @@ struct TaskListView: View {
             .task(id: loadKey) {
                 await taskService.loadTasks(
                     search: searchText,
-                    priority: priorityFilter,
-                    status: statusFilter,
                     sort: sortOption,
                     order: sortAscending ? "asc" : "desc"
                 )
@@ -472,9 +496,19 @@ struct TaskListView: View {
         }
     }
 
-    private func reschedule(_ task: TaskItem, minutes: Int, reason: String?) async {
+    private func reschedule(
+        _ task: TaskItem,
+        minutes: Int,
+        deadline: Date?,
+        reason: String?
+    ) async {
         do {
-            _ = try await taskService.rescheduleTask(task, minutesRemaining: minutes, reason: reason)
+            _ = try await taskService.rescheduleTask(
+                task,
+                minutesRemaining: minutes,
+                deadline: deadline,
+                reason: reason
+            )
             await taskService.loadOverdue()
         } catch {
             taskService.presentError(error.localizedDescription)

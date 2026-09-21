@@ -1,3 +1,4 @@
+import ActivityKit
 import Charts
 import SwiftUI
 
@@ -176,6 +177,9 @@ struct FocusDashboardView: View {
         timerStartedAtRef = Date().timeIntervalSince1970
         elapsedSeconds = 0
         startTicker()
+        if #available(iOS 16.1, *) {
+            FocusLiveActivityManager.startLiveActivity()
+        }
     }
 
     private func stopTimer() {
@@ -184,7 +188,11 @@ struct FocusDashboardView: View {
         guard let started = timerStartedAt else { return }
         let ended = Date()
         timerStartedAtRef = 0
+        let seconds = elapsedSeconds
         Task {
+            if #available(iOS 16.1, *) {
+                await FocusLiveActivityManager.endLiveActivity(elapsedSeconds: seconds)
+            }
             await focus.createSession(taskID: nil, startedAt: started, endedAt: ended)
             await focus.loadFocus(after: range.dateStart, before: .now)
         }
@@ -317,4 +325,5 @@ struct FocusDashboardView: View {
         }
         return totals
     }
+
 }

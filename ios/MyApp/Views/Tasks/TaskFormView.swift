@@ -32,6 +32,7 @@ struct TaskFormView: View {
     @State private var repeatEndDate: Date
     @State private var category: String
     @State private var notes: String
+    @State private var checklist: [ChecklistItem]
     @State private var beforeTaskIDs: Set<UUID>
     @State private var afterTaskIDs: Set<UUID>
     @State private var isSaving = false
@@ -64,6 +65,7 @@ struct TaskFormView: View {
             )
             _category = State(initialValue: "")
             _notes = State(initialValue: "")
+            _checklist = State(initialValue: [])
             _beforeTaskIDs = State(initialValue: [])
             _afterTaskIDs = State(initialValue: [])
         case .edit(let task):
@@ -93,6 +95,7 @@ struct TaskFormView: View {
             )
             _category = State(initialValue: task.category ?? "")
             _notes = State(initialValue: task.notes ?? "")
+            _checklist = State(initialValue: task.checklist ?? [])
             _beforeTaskIDs = State(initialValue: Set(task.beforeTaskIds ?? []))
             _afterTaskIDs = State(initialValue: Set(task.afterTaskIds ?? []))
         }
@@ -387,6 +390,8 @@ struct TaskFormView: View {
                     }
                     TextField("Notes", text: $notes, axis: .vertical)
                         .lineLimit(2...6)
+                    TaskChecklistEditor(items: $checklist, onSave: {})
+                        .padding(.vertical, 4)
                 }
 
                 if let errorMessage {
@@ -472,6 +477,7 @@ struct TaskFormView: View {
         let categoryValue = category.isEmpty ? nil : category
         let descriptionValue = detail.isEmpty ? nil : detail
         let notesValue = notes.isEmpty ? nil : notes
+        let checklistValue = checklist.isEmpty ? nil : checklist
         let repeatWeekdaysValue = hasRepeat ? selectedWeekdaysValue : nil
         let repeatEndsOnValue = repeatEndsOnValue
         let beforeTaskIdsValue = beforeTaskIDs.isEmpty ? nil : Array(beforeTaskIDs)
@@ -494,7 +500,8 @@ struct TaskFormView: View {
                     repeatWeekdays: repeatWeekdaysValue,
                     beforeTaskIds: beforeTaskIdsValue,
                     afterTaskIds: afterTaskIdsValue,
-                    repeatEndsOn: repeatEndsOnValue
+                    repeatEndsOn: repeatEndsOnValue,
+                    checklist: checklistValue
                 )
                 onSaved?(created)
             case .edit(let task):
@@ -509,6 +516,7 @@ struct TaskFormView: View {
                 updated.estimatedDuration = durationValue
                 updated.category = categoryValue
                 updated.notes = notesValue
+                updated.checklist = checklistValue
                 updated.repeatWeekdays = repeatWeekdaysValue
                 updated.repeatEndsOn = repeatEndsOnValue
                 updated.beforeTaskIds = beforeTaskIdsValue

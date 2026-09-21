@@ -3,6 +3,8 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
+
 from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 
@@ -753,3 +755,95 @@ class TestOverdue:
         assert updated.status_code == 200
 
         assert created["id"] not in self._overdue_ids(client, token)
+
+
+class TestChecklist:
+    def test_creates_task_with_checklist(self, client):
+        data = _login(client)
+        response = _create(
+            client,
+            data["access_token"],
+            checklist=[
+                {"text": "Gather materials", "done": True},
+                {"text": "Write outline", "done": False},
+            ],
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["checklist"] == [
+            {"text": "Gather materials", "done": True},
+            {"text": "Write outline", "done": False},
+        ]
+
+    def test_defaults_checklist_to_empty_list(self, client):
+        data = _login(client)
+        response = _create(client, data["access_token"])
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body.get("checklist") in (None, [])
+
+    def test_updates_checklist(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        created = _create(client, token).json()
+
+        updated = client.patch(
+            f"/api/v1/tasks/{created['id']}",
+            json={"checklist": [{"text": "Write tests", "done": True}]},
+            headers=_auth(token),
+        )
+        assert updated.status_code == 200
+        assert updated.json()["checklist"] == [
+            {"text": "Write tests", "done": True}
+        ]
+
+
+class TestParseTask:
+    @pytest.fixture(autouse=True)
+    def _force_heuristic_parser(self, monkeypatch):
+        from app.services import text_analysis
+
+        monkeypatch.setattr(
+            text_analysis,
+            "default_task_parser",
+            lambda: text_analysis.HeuristicTextAnalysisProvider(),
+        )
+
+    def test_parse_requires_authentication(self, client):
+        response = client.post(
+            "/api/v1/tasks/parse", json={"text": "study for exam"}
+        )
+        assert response.status_code == 401
+
+    def test_parse_creates_task_with_duration_and_deadline(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/tasks/parse",
+            json={
+                "text": "catch up on lectures by tomorrow 9pm, "
+                "should take an hour",
+                "timezone": "UTC",
+            },
+            headers=_auth(data["access_token"]),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert "lectures" in body["title"]
+        assert body["estimated_duration"] == 60
+        assert body["deadline"] is not None
+        assert body["status"] == "pending"
+
+    def test_parse_creates_task_with_plain_text_fallback(self, client):
+        data = _login(client)
+        response = client.post(
+            "/api/v1/tasks/parse",
+            json={"text": "water the plants"},
+            headers=_auth(data["access_token"]),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["title"] == "water the plants"

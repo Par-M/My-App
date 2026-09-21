@@ -21,7 +21,7 @@ enum TaskEndpoint: Endpoint {
     case complete(id: UUID, minutes: Int?, productivity: TaskProductivity?)
     case recordTime(id: UUID, minutes: Int)
     case overdue
-    case reschedule(id: UUID, minutes: Int, reason: String?, timezone: String)
+    case reschedule(id: UUID, minutes: Int, reason: String?, timezone: String, deadline: Date?)
 
     var path: String {
         switch self {
@@ -47,7 +47,7 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/\(id.uuidString.lowercased())"
         case .overdue:
             return "/api/v1/tasks/overdue"
-        case .reschedule(let id, _, _, _):
+        case .reschedule(let id, _, _, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/reschedule"
         }
     }
@@ -81,11 +81,12 @@ enum TaskEndpoint: Endpoint {
             return CompleteTaskRequest(actualMinutes: minutes, productivity: productivity)
         case .recordTime(_, let minutes):
             return RecordTimeRequest(minutes: minutes)
-        case .reschedule(_, let minutes, let reason, let timezone):
+        case .reschedule(_, let minutes, let reason, let timezone, let deadline):
             return RescheduleRequest(
                 minutesRemaining: minutes,
                 reason: reason,
-                timezone: timezone
+                timezone: timezone,
+                deadline: deadline
             )
         default:
             return nil

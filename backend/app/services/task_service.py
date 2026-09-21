@@ -355,6 +355,7 @@ class TaskService:
         minutes_remaining: int,
         reason: str | None = None,
         timezone_name: str = "UTC",
+        deadline: datetime | None = None,
     ) -> tuple[Task, list[CalendarBlock]]:
         task = self.get_task(task_id)
         if task.status == TaskStatus.completed:
@@ -365,7 +366,18 @@ class TaskService:
         tz = ZoneInfo(timezone_name)
         now = datetime.now(tz)
         old_deadline = task.deadline
-        new_deadline = now + timedelta(minutes=minutes_remaining)
+        if deadline is not None:
+            new_deadline = (
+                deadline
+                if deadline.tzinfo is not None
+                else deadline.replace(tzinfo=tz)
+            )
+            if new_deadline <= now:
+                raise InvalidTaskTransitionError(
+                    "The new deadline must be in the future"
+                )
+        else:
+            new_deadline = now + timedelta(minutes=minutes_remaining)
 
         task.deadline = new_deadline
         task.estimated_duration = minutes_remaining
@@ -389,8 +401,16 @@ class TaskService:
             int((block.end_at - block.start_at).total_seconds() / 60)
             for block in pending_blocks
         )
+        # Fit the pending blocks inside whichever is sooner: the time the user
+        # says the work still needs, or the window left before the new deadline.
+        available_minutes = minutes_remaining
+        if deadline is not None:
+            window_minutes = max(
+                1, int((new_deadline - now).total_seconds() // 60)
+            )
+            available_minutes = min(available_minutes, window_minutes)
         scale = (
-            min(1.0, minutes_remaining / total_duration)
+            min(1.0, available_minutes / total_duration)
             if total_duration
             else 0.0
         )

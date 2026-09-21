@@ -226,6 +226,7 @@ def reschedule_task(
             payload.minutes_remaining,
             payload.reason,
             payload.timezone,
+            payload.deadline,
         )
     except (TaskNotFoundError, InvalidTaskTransitionError) as exc:
         _handle_service_errors(exc)

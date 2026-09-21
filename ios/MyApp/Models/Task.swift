@@ -336,11 +336,13 @@ struct RescheduleRequest: Encodable, Sendable {
     let minutesRemaining: Int
     let reason: String?
     let timezone: String
+    let deadline: Date?
 
     private enum CodingKeys: String, CodingKey {
         case minutesRemaining = "minutes_remaining"
         case reason
         case timezone
+        case deadline
     }
 
     func encode(to encoder: Encoder) throws {
@@ -348,6 +350,7 @@ struct RescheduleRequest: Encodable, Sendable {
         try container.encode(minutesRemaining, forKey: .minutesRemaining)
         try container.encodeIfPresent(reason, forKey: .reason)
         try container.encode(timezone, forKey: .timezone)
+        try container.encodeIfPresent(deadline, forKey: .deadline)
     }
 }
 

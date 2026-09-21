@@ -496,6 +496,7 @@ final class TaskService {
     func rescheduleTask(
         _ task: TaskItem,
         minutesRemaining: Int,
+        deadline: Date?,
         reason: String?
     ) async throws -> RescheduleResponse {
         let response: RescheduleResponse = try await client.request(
@@ -503,7 +504,8 @@ final class TaskService {
                 id: task.id,
                 minutes: minutesRemaining,
                 reason: reason,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                deadline: deadline
             )
         )
         store?.upsert(response.task)

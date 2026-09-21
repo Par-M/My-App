@@ -2,10 +2,12 @@ import SwiftUI
 
 struct RescheduleSheet: View {
     let task: TaskItem
-    let onSubmit: (Int, String?) -> Void
+    let onSubmit: (Int, Date?, String?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var minutes: Int
+    @State private var hasDeadline: Bool
+    @State private var deadline: Date
     @State private var reason: String = ""
 
     private static let suggestedReasons = [
@@ -16,11 +18,18 @@ struct RescheduleSheet: View {
         "Task was too big",
     ]
 
-    init(task: TaskItem, onSubmit: @escaping (Int, String?) -> Void) {
+    init(task: TaskItem, onSubmit: @escaping (Int, Date?, String?) -> Void) {
         self.task = task
         self.onSubmit = onSubmit
-        let duration = task.estimatedDuration ?? 30
-        _minutes = State(initialValue: min(max(duration, 5), 180))
+        let duration = min(max(task.estimatedDuration ?? 30, 5), 180)
+        _minutes = State(initialValue: duration)
+        let now = Date()
+        let existing = task.deadline.flatMap { $0 > now ? $0 : nil }
+        _hasDeadline = State(initialValue: false)
+        _deadline = State(
+            initialValue: existing
+                ?? now.addingTimeInterval(TimeInterval(duration * 60))
+        )
     }
 
     var body: some View {
@@ -42,6 +51,24 @@ struct RescheduleSheet: View {
                             Text("\(value) min").tag(value)
                         }
                     }
+                }
+
+                Section("New deadline") {
+                    Toggle("Change deadline", isOn: $hasDeadline)
+                    if hasDeadline {
+                        DatePicker(
+                            "Due",
+                            selection: $deadline,
+                            in: Date()...,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
+                }
+                .onChange(of: minutes) { _, newValue in
+                    guard !hasDeadline else { return }
+                    if let existing = task.deadline, existing > Date() { return }
+                    deadline = Date()
+                        .addingTimeInterval(TimeInterval(newValue * 60))
                 }
 
                 Section("Why was it missed? (optional)") {
@@ -66,7 +93,7 @@ struct RescheduleSheet: View {
                         Text("What happens next")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text("Your unfinished calendar blocks for this task will move into the next \(minutes) minutes.")
+                        Text(explanation)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -83,12 +110,23 @@ struct RescheduleSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Reschedule") {
                         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-                        onSubmit(minutes, trimmed.isEmpty ? nil : trimmed)
+                        onSubmit(
+                            minutes,
+                            hasDeadline ? deadline : nil,
+                            trimmed.isEmpty ? nil : trimmed
+                        )
                         dismiss()
                     }
                     .fontWeight(.semibold)
                 }
             }
         }
+    }
+
+    private var explanation: String {
+        let move = "Your unfinished calendar blocks for this task will move into the next \(minutes) minutes."
+        guard hasDeadline else { return move }
+        let due = deadline.formatted(date: .abbreviated, time: .shortened)
+        return move + " The deadline will be set to \(due)."
     }
 }

@@ -174,6 +174,7 @@ class RescheduleRequest(BaseModel):
     minutes_remaining: int = Field(ge=1, le=525600)
     reason: str | None = Field(default=None, max_length=2000)
     timezone: str = "UTC"
+    deadline: datetime | None = None
 
 
 class RescheduleResponse(BaseModel):

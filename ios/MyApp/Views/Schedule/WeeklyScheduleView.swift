@@ -29,6 +29,12 @@ struct WeeklyScheduleView: View {
         }
     }
 
+    private struct OccurrenceEditContext: Identifiable {
+        let id = UUID()
+        let task: TaskItem
+        let date: Date
+    }
+
     private var calendar: Calendar { Calendar.current }
 
     @State private var viewMode: ScheduleViewMode = .day
@@ -40,6 +46,7 @@ struct WeeklyScheduleView: View {
     @State private var errorDismissed = false
     @State private var expandedSlots: Set<String> = []
     @State private var editingBlock: CalendarBlock?
+    @State private var editingOccurrence: OccurrenceEditContext?
     @State private var reviewStore = ScheduleReviewStore()
     @State private var confirmedReviewKeys: Set<String> = []
     @State private var orderStore = RecommendationOrderStore()
@@ -233,6 +240,9 @@ struct WeeklyScheduleView: View {
             }
             .sheet(item: $editingBlock) { block in
                 BlockTimeEditorView(block: block)
+            }
+            .sheet(item: $editingOccurrence) { context in
+                OccurrenceEditorView(task: context.task, date: context.date)
             }
             .sheet(item: $selectedTask) { task in
                 NavigationStack {
@@ -974,8 +984,9 @@ struct WeeklyScheduleView: View {
     }
 
     private func repeatingEvent(from task: TaskItem, on day: Date) -> CalendarEventItem {
-        let start = task.startAt ?? day
-        let end = task.endAt ?? day.addingTimeInterval(30 * 60)
+        let override = task.repeatOverrides?[OccurrenceDateKey.key(for: day)]
+        let start = override?.startAt ?? task.startAt ?? day
+        let end = override?.endAt ?? task.endAt ?? day.addingTimeInterval(30 * 60)
         let startTime = calendar.dateComponents([.hour, .minute], from: start)
         let endTime = calendar.dateComponents([.hour, .minute], from: end)
         let s = calendar.date(bySettingHour: startTime.hour ?? 0, minute: startTime.minute ?? 0, second: 0, of: day) ?? day
@@ -1098,6 +1109,19 @@ struct WeeklyScheduleView: View {
         let content = eventRowContent(event, ignored: ignored, isApp: isApp, isAppBlock: isAppBlock)
 
         if isApp && !isAppBlock {
+            if let task = task(for: event) {
+                return AnyView(
+                    Button {
+                        editingOccurrence = OccurrenceEditContext(
+                            task: task,
+                            date: calendar.startOfDay(for: event.start)
+                        )
+                    } label: {
+                        content
+                    }
+                    .buttonStyle(.plain)
+                )
+            }
             return AnyView(content)
         } else {
             return AnyView(
@@ -1120,6 +1144,17 @@ struct WeeklyScheduleView: View {
         let uuidString = String(event.id.dropFirst("app-block-".count))
         guard let id = UUID(uuidString: uuidString) else { return nil }
         return scheduleService.blocks.first { $0.id == id }
+    }
+
+    private func task(for event: CalendarEventItem) -> TaskItem? {
+        guard event.id.hasPrefix("app-task-") else { return nil }
+        let remainder = event.id.dropFirst("app-task-".count)
+        guard let separator = remainder.range(of: "-", options: .backwards) else {
+            return nil
+        }
+        let uuidString = String(remainder[remainder.startIndex..<separator.lowerBound])
+        guard let id = UUID(uuidString: uuidString) else { return nil }
+        return taskService.tasks.first { $0.id == id }
     }
 
     private func eventRowContent(

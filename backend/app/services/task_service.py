@@ -349,6 +349,105 @@ class TaskService:
         )
         return tasks
 
+    def update_occurrence(
+        self,
+        task_id: uuid.UUID,
+        *,
+        occurrence_date,
+        scope: str,
+        start_at: datetime,
+        end_at: datetime,
+        timezone_name: str = "UTC",
+    ) -> tuple[Task, Task | None]:
+        """Edit a single time slot of a (possibly repeating) task.
+
+        ``this_event_only`` records a per-date override and leaves the series
+        untouched. ``from_now_onwards`` either rewrites the whole series (when
+        editing its first occurrence) or splits it: the original task ends the
+        day before the edited occurrence and a new task continues the series
+        from the edited date with the new time.
+        """
+        task = self.get_task(task_id)
+        if task.status == TaskStatus.completed:
+            raise InvalidTaskTransitionError(
+                "A completed task cannot be edited"
+            )
+        if end_at <= start_at:
+            raise InvalidTaskTransitionError("end_at must be after start_at")
+
+        tz = ZoneInfo(timezone_name)
+        weekdays = task.repeat_weekdays or []
+        if not weekdays:
+            task.start_at = start_at
+            task.end_at = end_at
+            self.db.commit()
+            self.db.refresh(task)
+            return task, None
+
+        if scope == "this_event_only":
+            overrides = dict(task.repeat_overrides or {})
+            overrides[occurrence_date.isoformat()] = {
+                "start_at": start_at.isoformat(),
+                "end_at": end_at.isoformat(),
+            }
+            task.repeat_overrides = overrides
+            self.db.commit()
+            self.db.refresh(task)
+            return task, None
+
+        first_day = (
+            task.start_at.astimezone(tz).date()
+            if task.start_at
+            else occurrence_date
+        )
+        if occurrence_date <= first_day:
+            # Editing the first occurrence of the series is the whole series.
+            task.start_at = start_at
+            task.end_at = end_at
+            self.db.commit()
+            self.db.refresh(task)
+            return task, None
+
+        original_end = task.repeat_ends_on
+        task.repeat_ends_on = datetime.combine(
+            occurrence_date - timedelta(days=1),
+            dt_time.max,
+            tzinfo=tz,
+        )
+        if task.repeat_overrides:
+            kept = {
+                day: value
+                for day, value in task.repeat_overrides.items()
+                if day < occurrence_date.isoformat()
+            }
+            task.repeat_overrides = kept or None
+
+        new_task = task_repository.create_task(
+            self.db,
+            user_id=self.user_id,
+            data=TaskCreate(
+                title=task.title,
+                description=task.description,
+                deadline=task.deadline,
+                start_at=start_at,
+                end_at=end_at,
+                priority=task.priority,
+                status=task.status,
+                estimated_duration=task.estimated_duration,
+                category=task.category,
+                notes=task.notes,
+                checklist=task.checklist,
+                repeat_weekdays=weekdays,
+                repeat_ends_on=original_end,
+                before_task_ids=task.before_task_ids,
+                after_task_ids=task.after_task_ids,
+            ),
+        )
+        self.db.commit()
+        self.db.refresh(task)
+        self.db.refresh(new_task)
+        return task, new_task
+
     def reschedule_task(
         self,
         task_id: uuid.UUID,

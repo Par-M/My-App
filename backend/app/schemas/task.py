@@ -1,5 +1,7 @@
 import uuid
+from datetime import date
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -120,6 +122,17 @@ class TaskUpdate(BaseModel):
         return self
 
 
+class RepeatOverride(BaseModel):
+    start_at: datetime
+    end_at: datetime
+
+    @model_validator(mode="after")
+    def times_valid(self):
+        if self.end_at <= self.start_at:
+            raise ValueError("end_at must be after start_at")
+        return self
+
+
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -143,6 +156,7 @@ class TaskResponse(BaseModel):
     progress_percent: int
     repeat_weekdays: list[int] | None
     repeat_ends_on: datetime | None
+    repeat_overrides: dict[str, RepeatOverride] | None
     before_task_ids: list[uuid.UUID] | None
     after_task_ids: list[uuid.UUID] | None
     is_archived: bool
@@ -180,6 +194,25 @@ class RescheduleRequest(BaseModel):
 class RescheduleResponse(BaseModel):
     task: TaskResponse
     blocks: list[CalendarBlockResponse]
+
+
+class OccurrenceUpdateRequest(BaseModel):
+    date: date
+    scope: Literal["this_event_only", "from_now_onwards"]
+    start_at: datetime
+    end_at: datetime
+    timezone: str = "UTC"
+
+    @model_validator(mode="after")
+    def times_valid(self):
+        if self.end_at <= self.start_at:
+            raise ValueError("end_at must be after start_at")
+        return self
+
+
+class OccurrenceUpdateResponse(BaseModel):
+    task: TaskResponse
+    new_task: TaskResponse | None = None
 
 
 class TaskParseRequest(BaseModel):

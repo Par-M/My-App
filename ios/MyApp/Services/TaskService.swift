@@ -517,6 +517,34 @@ final class TaskService {
         return response
     }
 
+    func updateOccurrence(
+        _ task: TaskItem,
+        date: Date,
+        scope: OccurrenceScope,
+        startAt: Date,
+        endAt: Date
+    ) async throws -> OccurrenceUpdateResponse {
+        let request = OccurrenceUpdateRequest(
+            date: OccurrenceDateKey.key(for: date),
+            scope: scope.rawValue,
+            startAt: startAt,
+            endAt: endAt,
+            timezone: TimeZone.current.identifier
+        )
+        let response: OccurrenceUpdateResponse = try await client.request(
+            TaskEndpoint.occurrence(id: task.id, request: request)
+        )
+        store?.upsert(response.task)
+        replace(response.task)
+        if let newTask = response.newTask {
+            store?.upsert(newTask)
+            replace(newTask)
+        }
+        isOfflineMode = false
+        dataVersion += 1
+        return response
+    }
+
     private func bump(_ task: TaskItem) -> TaskItem {
         var updated = task
         updated.updatedAt = Date()

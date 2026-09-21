@@ -1177,15 +1177,19 @@ struct WeeklyScheduleView: View {
         await scheduleService.loadBlocks()
         await taskService.loadTasks()
 
-        guard await calendarService.requestPermission() == .granted else {
+        if await calendarService.requestPermission() == .granted {
+            busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
+        } else {
             busyEvents = []
-            return
         }
 
-        busyEvents = calendarService.fetchEvents(from: visibleStart, to: visibleEnd)
-
+        // Keep recommendations static while a focus session is running, but
+        // always fetch them when the visible day has none so the section is
+        // never left permanently empty (e.g. after a session outlives a launch).
         let focusTimerRunning = focusTimerStartedAt > 0
-        if !focusTimerRunning {
+        let hasVisibleRecommendation =
+            recommendationService.recommendations(for: visibleStart) != nil
+        if !focusTimerRunning || !hasVisibleRecommendation {
             await recommendationService.load(
                 from: visibleStart,
                 to: visibleEnd,

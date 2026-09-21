@@ -198,58 +198,40 @@ struct TaskListView: View {
 
     private var quickAddSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                TextField("New task title", text: $quickTaskTitle)
-                    .textFieldStyle(.roundedBorder)
-                    .submitLabel(.done)
-                    .onSubmit { addQuickTask() }
-                HStack {
-                    Button("Cancel") {
-                        isAddingQuickTask = false
-                        quickTaskTitle = ""
-                        quickAddError = nil
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.secondary)
+                    TextField("Quick add a task…", text: $quickTaskTitle)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            Task { await addQuickTask() }
+                        }
+                    if isAddingQuickTask {
+                        ProgressView()
                     }
-                    Spacer()
-                    Button("Add") { addQuickTask() }
                 }
-                .font(.subheadline)
+                .padding(.vertical, 4)
                 if let quickAddError {
-                    Text(quickAddError)
+                    Label(quickAddError, systemImage: "exclamationmark.triangle")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.orange)
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
-    private func addQuickTask() {
+    private func addQuickTask() async {
         let title = quickTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else {
-            quickAddError = "Enter a task title."
-            return
-        }
-        Task {
-            do {
-                try await taskService.createTask(
-                    title: title,
-                    description: nil,
-                    deadline: nil,
-                    startAt: nil,
-                    endAt: nil,
-                    priority: .medium,
-                    status: .pending,
-                    estimatedDuration: nil,
-                    category: nil,
-                    notes: nil,
-                    repeatWeekdays: nil
-                )
-                quickTaskTitle = ""
-                quickAddError = nil
-                isAddingQuickTask = false
-            } catch {
-                quickAddError = error.localizedDescription
-            }
+        guard !title.isEmpty, !isAddingQuickTask else { return }
+        isAddingQuickTask = true
+        quickAddError = nil
+        defer { isAddingQuickTask = false }
+        do {
+            _ = try await taskService.quickAdd(text: title)
+            quickTaskTitle = ""
+        } catch {
+            quickAddError = "Couldn't add task. Try again."
         }
     }
 
@@ -392,17 +374,6 @@ struct TaskListView: View {
                         }
                         .accessibilityIdentifier("overdueBadgeButton")
                     }
-
-                    Button {
-                        isAddingQuickTask.toggle()
-                        if !isAddingQuickTask {
-                            quickTaskTitle = ""
-                            quickAddError = nil
-                        }
-                    } label: {
-                        Label("Quick Add", systemImage: "bolt.circle")
-                    }
-                    .accessibilityIdentifier("quickAddButton")
 
                     Button {
                         showAddTask = true

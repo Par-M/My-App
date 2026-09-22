@@ -215,7 +215,11 @@ def complete_task(
 ) -> TaskResponse:
     try:
         return service.complete_task(
-            task_id, payload.actual_minutes, payload.productivity
+            task_id,
+            payload.actual_minutes,
+            payload.productivity,
+            occurrence_date=payload.occurrence_date,
+            timezone_name=payload.timezone,
         )
     except TaskNotFoundError as exc:
         _handle_service_errors(exc)

@@ -94,7 +94,7 @@ class ReflectionResponse(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID
-    date: datetime
+    date: date
     text: str
     analysis: str | None
     created_at: datetime
@@ -103,7 +103,8 @@ class ReflectionResponse(BaseModel):
 
 class ReflectionAnalysisResponse(BaseModel):
     id: uuid.UUID
-    date: datetime
+    user_id: uuid.UUID
+    date: date
     analysis: str
 
 

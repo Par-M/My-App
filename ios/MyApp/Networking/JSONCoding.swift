@@ -10,12 +10,24 @@ enum JSONCoding {
     }
 
     static func parseISO8601(_ string: String) -> Date? {
+        if let date = parseISO8601Formatter(withFractionalSeconds: true).date(from: string)
+            ?? parseISO8601Formatter(withFractionalSeconds: false).date(from: string) {
+            return date
+        }
+
+        // Fallback for offsets like "+00:00"/"-05:00" (ISO8601DateFormatter only
+        // handles "Z") and for naive datetimes the server can emit (no offset,
+        // no fractional seconds) when serializing a date column as a datetime.
         let formats = [
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSZZZZZ",
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ",
             "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ",
             "yyyy-MM-dd'T'HH:mm:ssZZZZZ",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
             "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm",
             "yyyy-MM-dd",
         ]
         let formatter = makeDateFormatter()
@@ -26,6 +38,15 @@ enum JSONCoding {
             }
         }
         return nil
+    }
+
+    private static func parseISO8601Formatter(withFractionalSeconds: Bool) -> ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = withFractionalSeconds
+            ? [.withInternetDateTime, .withFractionalSeconds]
+            : [.withInternetDateTime]
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter
     }
 
     static let decoder: JSONDecoder = {

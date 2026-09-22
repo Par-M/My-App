@@ -80,6 +80,7 @@ class ReflectionService:
         self.db.refresh(reflection)
         return ReflectionAnalysisResponse(
             id=reflection.id,
+            user_id=self.user_id,
             date=reflection.date,
             analysis=reflection.analysis or "",
         )

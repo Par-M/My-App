@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from datetime import time as dt_time
@@ -244,11 +245,24 @@ class TaskService:
         task_id: uuid.UUID,
         actual_minutes: int | None = None,
         productivity=None,
+        occurrence_date: date | None = None,
+        timezone_name: str = "UTC",
     ) -> Task:
         task = self.get_task(task_id)
         if task.status == TaskStatus.completed:
             self.db.refresh(task)
             return task
+        if task.repeat_weekdays:
+            # A repeating task is never "completed" as a whole by marking one
+            # occurrence done - that would scrub future occurrences from the
+            # calendar. Complete only the occurrence on the given date (or
+            # today) and keep the series running.
+            return self._complete_occurrence(
+                task,
+                occurrence_date=occurrence_date,
+                timezone_name=timezone_name,
+                actual_minutes=actual_minutes,
+            )
         task.status = TaskStatus.completed
         task.completed_at = datetime.now(_utc())
         if productivity is not None:
@@ -288,6 +302,53 @@ class TaskService:
             svc.auto_regenerate(trigger=f"task '{task.title}' marked complete")
         except Exception:
             pass
+        return task
+
+    def _complete_occurrence(
+        self,
+        task: Task,
+        *,
+        occurrence_date: date | None,
+        timezone_name: str,
+        actual_minutes: int | None,
+    ) -> Task:
+        """Mark a single occurrence of a repeating task as done.
+
+        Records the completion in ``repeat_overrides[date]["completed"]`` and
+        completes only the block(s) that fall inside that local day, leaving
+        the task in-progress so future occurrences keep appearing in the
+        calendar.
+        """
+        tz = ZoneInfo(timezone_name)
+        local_date = occurrence_date or datetime.now(tz).date()
+
+        overrides = dict(task.repeat_overrides or {})
+        key = local_date.isoformat()
+        entry = dict(overrides.get(key) or {})
+        entry["completed"] = True
+        if actual_minutes is not None:
+            entry["actual_duration"] = int(actual_minutes)
+        overrides[key] = entry
+        task.repeat_overrides = overrides
+
+        day_start = datetime.combine(local_date, dt_time.min, tzinfo=tz)
+        day_end = day_start + timedelta(days=1)
+        now_ts = datetime.now(_utc())
+        pending_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.completed_at.is_(None),
+                    CalendarBlock.start_at >= day_start,
+                    CalendarBlock.start_at < day_end,
+                )
+            ).all()
+        )
+        for blk in pending_blocks:
+            blk.completed_at = now_ts
+        recompute_task_progress(self.db, task.id)
+        self.db.commit()
+        self.db.refresh(task)
         return task
 
     def list_overdue(self) -> list[Task]:
@@ -386,10 +447,14 @@ class TaskService:
 
         if scope == "this_event_only":
             overrides = dict(task.repeat_overrides or {})
-            overrides[occurrence_date.isoformat()] = {
-                "start_at": start_at.isoformat(),
-                "end_at": end_at.isoformat(),
-            }
+            existing = dict(overrides.get(occurrence_date.isoformat()) or {})
+            existing.update(
+                {
+                    "start_at": start_at.isoformat(),
+                    "end_at": end_at.isoformat(),
+                }
+            )
+            overrides[occurrence_date.isoformat()] = existing
             task.repeat_overrides = overrides
             self.db.commit()
             self.db.refresh(task)

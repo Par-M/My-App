@@ -67,8 +67,15 @@ struct MyAppApp: App {
                     await authService.restoreSession()
                 }
                 .onOpenURL { url in
-                    guard url.scheme == "app", url.host == "reflect" else { return }
-                    NotificationCenter.default.post(name: .openReflection, object: nil)
+                    guard url.scheme == "app" else { return }
+                    switch url.host {
+                    case "reflect":
+                        NotificationCenter.default.post(name: .openReflection, object: nil)
+                    case "focus":
+                        NotificationCenter.default.post(name: .openFocus, object: nil)
+                    default:
+                        break
+                    }
                 }
         }
         .modelContainer(localStore.container)

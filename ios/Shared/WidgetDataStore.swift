@@ -32,6 +32,17 @@ struct WidgetDataStore {
         defaults.set(Date().timeIntervalSince1970, forKey: "last_updated")
     }
 
+    static func writeFocus(startedAt: TimeInterval, title: String? = nil) {
+        guard let defaults = shared else { return }
+        defaults.set(startedAt, forKey: "focus_started_at")
+        if let title, !title.isEmpty {
+            defaults.set(title, forKey: "focus_title")
+        } else {
+            defaults.removeObject(forKey: "focus_title")
+        }
+        defaults.set(Date().timeIntervalSince1970, forKey: "last_updated")
+    }
+
     static func read() -> WidgetData {
         guard let defaults = shared else {
             return WidgetData(
@@ -47,7 +58,9 @@ struct WidgetDataStore {
             nextTaskTitle: defaults.string(forKey: "next_task_title"),
             tasksRemaining: defaults.integer(forKey: "tasks_remaining"),
             habitsRemaining: defaults.integer(forKey: "habits_remaining"),
-            topTaskTitles: defaults.stringArray(forKey: "top_task_titles") ?? []
+            topTaskTitles: defaults.stringArray(forKey: "top_task_titles") ?? [],
+            focusStartedAt: defaults.double(forKey: "focus_started_at"),
+            focusTitle: defaults.string(forKey: "focus_title")
         )
     }
 }
@@ -58,4 +71,7 @@ struct WidgetData {
     let tasksRemaining: Int
     let habitsRemaining: Int
     var topTaskTitles: [String] = []
+    var focusStartedAt: TimeInterval = 0
+    var focusTitle: String?
+    var isFocusRunning: Bool { focusStartedAt > 0 }
 }

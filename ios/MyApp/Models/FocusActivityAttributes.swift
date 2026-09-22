@@ -1,4 +1,6 @@
 import Foundation
+
+#if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
 import ActivityKit
 
 @available(iOS 16.1, *)
@@ -53,3 +55,11 @@ public enum FocusLiveActivityManager {
         }
     }
 }
+#else
+@MainActor
+public enum FocusLiveActivityManager {
+    public static func startLiveActivity() {}
+
+    public static func endLiveActivity(elapsedSeconds: Int) async {}
+}
+#endif

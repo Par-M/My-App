@@ -1,4 +1,3 @@
-import ActivityKit
 import SwiftUI
 
 extension Notification.Name {

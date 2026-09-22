@@ -147,16 +147,23 @@ struct FocusStatsView: View {
                 .font(.headline)
 
             Chart(entries) { entry in
-                BarMark(
+                LineMark(
+                    x: .value("Bucket", entry.bucket),
+                    y: .value("Minutes", entry.minutes),
+                    series: .value("Category", entry.category)
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(Self.color(for: entry.category))
+                .lineStyle(StrokeStyle(lineWidth: 2.5))
+
+                PointMark(
                     x: .value("Bucket", entry.bucket),
                     y: .value("Minutes", entry.minutes)
                 )
+                .symbolSize(18)
                 .foregroundStyle(Self.color(for: entry.category))
-                .cornerRadius(3)
             }
-            .chartForegroundStyleScale(domain: categories) { category in
-                Self.color(for: category)
-            }
+            .chartYScale(domain: 0...(maxMinutes + 5))
             .chartXAxis {
                 AxisMarks { value in
                     AxisValueLabel {
@@ -167,9 +174,16 @@ struct FocusStatsView: View {
                 }
             }
             .chartYAxis {
-                AxisMarks(values: .automatic(desiredCount: 3))
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine().foregroundStyle(Color.secondary.opacity(0.2))
+                    AxisValueLabel {
+                        if let minutes = value.as(Int.self) {
+                            Text("\(minutes)")
+                        }
+                    }
+                }
             }
-            .frame(height: 200)
+            .frame(height: 220)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -254,33 +268,35 @@ struct FocusStatsView: View {
 
     private var entries: [Entry] {
         let calendar = Calendar.current
-        var result: [Entry] = []
-        if usesDailyBuckets {
-            for bucket in dailyBuckets(dayCount: dayCount) {
-                let daySessions = sessions.filter { calendar.isDate($0.startedAt, inSameDayAs: bucket) }
-                for (category, minutes) in totalMinutes(daySessions) {
-                    result.append(Entry(bucket: bucket, category: category, minutes: minutes))
-                }
+        let buckets: [Date] = usesDailyBuckets
+            ? dailyBuckets(dayCount: dayCount)
+            : weeklyBuckets(weekCount: weekCount)
+        guard !categories.isEmpty else { return [] }
+
+        var totals: [String: Int] = [:]
+        for session in sessions {
+            let bucket: Date
+            if usesDailyBuckets {
+                bucket = calendar.startOfDay(for: session.startedAt)
+            } else {
+                bucket = calendar.dateInterval(of: .weekOfYear, for: session.startedAt)?.start ?? session.startedAt
             }
-        } else {
-            for bucket in weeklyBuckets(weekCount: weekCount) {
-                let weekSessions = sessions.filter { session in
-                    calendar.isDate(session.startedAt, equalTo: bucket, toGranularity: .weekOfYear)
-                }
-                for (category, minutes) in totalMinutes(weekSessions) {
-                    result.append(Entry(bucket: bucket, category: category, minutes: minutes))
-                }
+            let key = "\(bucket.timeIntervalSince1970)|\(session.category ?? "Uncategorized")"
+            totals[key, default: 0] += session.durationSeconds / 60
+        }
+
+        var result: [Entry] = []
+        for bucket in buckets {
+            for category in categories {
+                let key = "\(bucket.timeIntervalSince1970)|\(category)"
+                result.append(Entry(bucket: bucket, category: category, minutes: totals[key] ?? 0))
             }
         }
         return result
     }
 
-    private func totalMinutes(_ slice: [FocusSession]) -> [(String, Int)] {
-        let grouped = Dictionary(grouping: slice, by: { $0.category ?? "Uncategorized" })
-        return grouped
-            .map { key, value in (key, value.reduce(0) { $0 + $1.durationSeconds } / 60) }
-            .filter { $0.1 > 0 }
-            .sorted { $0.1 > $1.1 }
+    private var maxMinutes: Int {
+        entries.map(\.minutes).max() ?? 0
     }
 
     private func dailyBuckets(dayCount: Int) -> [Date] {

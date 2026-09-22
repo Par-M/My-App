@@ -73,6 +73,22 @@ class TaskCreate(BaseModel):
         return self
 
 
+class RepeatOverride(BaseModel):
+    # A repeating occurrence can hold a time override (start_at/end_at) and/or
+    # a per-date completion marker. Either may be present on its own.
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    completed: bool = False
+    actual_duration: int | None = Field(default=None, ge=0, le=525600)
+
+    @model_validator(mode="after")
+    def times_valid(self):
+        if self.start_at is not None and self.end_at is not None:
+            if self.end_at <= self.start_at:
+                raise ValueError("end_at must be after start_at")
+        return self
+
+
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
@@ -117,22 +133,6 @@ class TaskUpdate(BaseModel):
 
     @model_validator(mode="after")
     def fixed_event_times_valid(self):
-        if self.start_at is not None and self.end_at is not None:
-            if self.end_at <= self.start_at:
-                raise ValueError("end_at must be after start_at")
-        return self
-
-
-class RepeatOverride(BaseModel):
-    # A repeating occurrence can hold a time override (start_at/end_at) and/or
-    # a per-date completion marker. Either may be present on its own.
-    start_at: datetime | None = None
-    end_at: datetime | None = None
-    completed: bool = False
-    actual_duration: int | None = Field(default=None, ge=0, le=525600)
-
-    @model_validator(mode="after")
-    def times_valid(self):
         if self.start_at is not None and self.end_at is not None:
             if self.end_at <= self.start_at:
                 raise ValueError("end_at must be after start_at")

@@ -89,6 +89,7 @@ class TaskUpdate(BaseModel):
     checklist: list[ChecklistItem] | None = None
     repeat_weekdays: list[int] | None = None
     repeat_ends_on: datetime | None = None
+    repeat_overrides: dict[str, RepeatOverride] | None = None
     before_task_ids: list[uuid.UUID] | None = None
     after_task_ids: list[uuid.UUID] | None = None
 
@@ -123,13 +124,18 @@ class TaskUpdate(BaseModel):
 
 
 class RepeatOverride(BaseModel):
-    start_at: datetime
-    end_at: datetime
+    # A repeating occurrence can hold a time override (start_at/end_at) and/or
+    # a per-date completion marker. Either may be present on its own.
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    completed: bool = False
+    actual_duration: int | None = Field(default=None, ge=0, le=525600)
 
     @model_validator(mode="after")
     def times_valid(self):
-        if self.end_at <= self.start_at:
-            raise ValueError("end_at must be after start_at")
+        if self.start_at is not None and self.end_at is not None:
+            if self.end_at <= self.start_at:
+                raise ValueError("end_at must be after start_at")
         return self
 
 
@@ -172,6 +178,12 @@ class TaskListResponse(BaseModel):
 class CompleteTaskRequest(BaseModel):
     actual_minutes: int | None = Field(default=None, ge=1, le=525600)
     productivity: TaskProductivity | None = None
+    # When supplied for a repeating task, completion applies only to the
+    # occurrence on that local date (the series keeps going). Without it,
+    # repeating tasks complete today's occurrence; non-repeating tasks are
+    # completed as a whole.
+    occurrence_date: date | None = None
+    timezone: str = "UTC"
 
 
 class SnoozeRequest(BaseModel):

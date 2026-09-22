@@ -18,7 +18,7 @@ enum TaskEndpoint: Endpoint {
     case archive(UUID)
     case restore(UUID)
     case start(UUID)
-    case complete(id: UUID, minutes: Int?, productivity: TaskProductivity?)
+    case complete(id: UUID, minutes: Int?, productivity: TaskProductivity?, occurrenceDate: String?, timezone: String?)
     case recordTime(id: UUID, minutes: Int)
     case overdue
     case reschedule(id: UUID, minutes: Int, reason: String?, timezone: String, deadline: Date?)
@@ -42,7 +42,7 @@ enum TaskEndpoint: Endpoint {
             return "/api/v1/tasks/\(id.uuidString.lowercased())/restore"
         case .start(let id):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/start"
-        case .complete(let id, _, _):
+        case .complete(let id, _, _, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/complete"
         case .recordTime(let id, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())"
@@ -80,8 +80,13 @@ enum TaskEndpoint: Endpoint {
             return request
         case .update(_, let request):
             return request
-        case .complete(_, let minutes, let productivity):
-            return CompleteTaskRequest(actualMinutes: minutes, productivity: productivity)
+        case .complete(_, let minutes, let productivity, let occurrenceDate, let timezone):
+            return CompleteTaskRequest(
+                actualMinutes: minutes,
+                productivity: productivity,
+                occurrenceDate: occurrenceDate,
+                timezone: timezone
+            )
         case .recordTime(_, let minutes):
             return RecordTimeRequest(minutes: minutes)
         case .reschedule(_, let minutes, let reason, let timezone, let deadline):

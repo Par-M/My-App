@@ -45,7 +45,7 @@ struct CurrentTaskWidget: Widget {
         }
         .configurationDisplayName("Top Priority Today")
         .description("Shows your highest priority tasks to complete today.")
-        .supportedFamilies([.accessoryRectangular])
+        .supportedFamilies([.accessoryRectangular, .systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -86,6 +86,6 @@ struct TasksRemainingWidget: Widget {
         }
         .configurationDisplayName("Tasks & Habits")
         .description("Shows remaining tasks and habits.")
-        .supportedFamilies([.accessoryRectangular])
+        .supportedFamilies([.accessoryRectangular, .systemSmall, .systemMedium, .systemLarge])
     }
 }

@@ -1,7 +1,9 @@
 import SwiftUI
+import WidgetKit
 
 extension Notification.Name {
     static let openReflection = Notification.Name("openReflection")
+    static let openFocus = Notification.Name("openFocus")
 }
 
 struct FocusDashboardView: View {
@@ -115,6 +117,10 @@ struct FocusDashboardView: View {
                 await focus.loadFocus(after: range.dateStart, before: .now)
                 await focus.loadMorningMessage()
                 await rescheduleNotifications()
+                if isTimerRunning {
+                    WidgetDataStore.writeFocus(startedAt: timerStartedAtRef, title: "Deep Work Session")
+                    WidgetCenter.shared.reloadTimelines(ofKind: "FocusTimerWidget")
+                }
             }
             .onChange(of: range) {
                 Task { await focus.loadFocus(after: range.dateStart, before: .now) }
@@ -185,6 +191,8 @@ struct FocusDashboardView: View {
         timerStartedAtRef = Date().timeIntervalSince1970
         elapsedSeconds = 0
         startTicker()
+        WidgetDataStore.writeFocus(startedAt: timerStartedAtRef, title: "Deep Work Session")
+        WidgetCenter.shared.reloadTimelines(ofKind: "FocusTimerWidget")
         if #available(iOS 16.1, *) {
             FocusLiveActivityManager.startLiveActivity()
         }
@@ -196,6 +204,8 @@ struct FocusDashboardView: View {
         guard let started = timerStartedAt else { return }
         let ended = Date()
         timerStartedAtRef = 0
+        WidgetDataStore.writeFocus(startedAt: 0)
+        WidgetCenter.shared.reloadTimelines(ofKind: "FocusTimerWidget")
         pendingSessionStop = SessionStop(startedAt: started, endedAt: ended)
         Task {
             if #available(iOS 16.1, *) {

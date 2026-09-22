@@ -43,6 +43,7 @@ final class NotificationService {
         var workHoursEnd: Double
         var hasReflectionToday: Bool
         var morningMessage: String?
+        var blocks: [CalendarBlock]
     }
 
     private var lastRescheduleContext: RescheduleContext?
@@ -140,7 +141,7 @@ final class NotificationService {
         scheduleAll(
             tasks: tasks,
             events: [],
-            blocks: [],
+            blocks: context?.blocks ?? [],
             workHoursStart: context?.workHoursStart ?? 9,
             workHoursEnd: context?.workHoursEnd ?? 17,
             hasReflectionToday: context?.hasReflectionToday ?? false,
@@ -163,7 +164,8 @@ final class NotificationService {
             workHoursStart: workHoursStart,
             workHoursEnd: workHoursEnd,
             hasReflectionToday: hasReflectionToday,
-            morningMessage: morningMessage
+            morningMessage: morningMessage,
+            blocks: blocks
         )
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
@@ -176,6 +178,7 @@ final class NotificationService {
         scheduleGoodMorning(workHoursStart: workHoursStart, message: morningMessage)
         scheduleEventReminders(events: events)
         scheduleFocusNudges(blocks: blocks, hasOngoingFocus: hasOngoingFocus)
+        scheduleBlockCompletionReminders(blocks: blocks)
         scheduleHourlyNudges(workHoursStart: workHoursStart, workHoursEnd: workHoursEnd)
     }
 
@@ -331,6 +334,25 @@ final class NotificationService {
                 date: block.startAt,
                 title: "Time to focus",
                 body: "\"\(block.title)\" is starting now — start your focus timer or mark it done.",
+                taskId: block.taskId,
+                url: "app://today"
+            )
+        }
+    }
+
+    private func scheduleBlockCompletionReminders(blocks: [CalendarBlock]) {
+        let now = Date()
+        let endFormatter = DateFormatter()
+        endFormatter.timeStyle = .short
+        endFormatter.dateStyle = .none
+        for block in blocks where block.completedAt == nil && block.endAt > now {
+            let fireAt = block.endAt.addingTimeInterval(5 * 60)
+            guard fireAt > now else { continue }
+            addAlert(
+                identifier: "block-done-\(block.id)",
+                date: fireAt,
+                title: "Did you finish?",
+                body: "\"\(block.title)\" ended at \(endFormatter.string(from: block.endAt)) — mark it complete if you did.",
                 taskId: block.taskId,
                 url: "app://today"
             )

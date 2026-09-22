@@ -5,6 +5,7 @@ enum FocusEndpoint: Endpoint {
     case summary(after: Date?, before: Date?)
     case create(FocusSessionCreate)
     case update(id: UUID, FocusSessionUpdate)
+    case delete(UUID)
     case reflections
     case createReflection(ReflectionCreate)
     case analysis(UUID)
@@ -17,6 +18,8 @@ enum FocusEndpoint: Endpoint {
         case .summary:
             return "/api/v1/focus/summary"
         case .update(let id, _):
+            return "/api/v1/focus/sessions/\(id.uuidString.lowercased())"
+        case .delete(let id):
             return "/api/v1/focus/sessions/\(id.uuidString.lowercased())"
         case .reflections, .createReflection:
             return "/api/v1/reflections"
@@ -35,6 +38,8 @@ enum FocusEndpoint: Endpoint {
             return .post
         case .update:
             return .patch
+        case .delete:
+            return .delete
         }
     }
 

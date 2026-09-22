@@ -6,44 +6,94 @@ struct FocusStatsView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum Granularity: String, CaseIterable, Identifiable {
-        case day = "Day"
-        case week = "Week"
+        case threeDays = "3 Days"
+        case week = "1 Week"
+        case twoWeeks = "2 Weeks"
+        case month = "Month"
         var id: String { rawValue }
     }
 
-    @State private var granularity: Granularity = .day
+    @State private var granularity: Granularity = .threeDays
     @State private var editingSession: FocusSession?
 
     private var sessions: [FocusSession] { focus.dailySessions }
 
+    private var sorted: [FocusSession] {
+        sessions.sorted { $0.startedAt > $1.startedAt }
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+            List {
+                if sessions.isEmpty {
+                    Section {
+                        ContentUnavailableView(
+                            "No focus sessions yet",
+                            systemImage: "timer",
+                            description: Text("Start a focus session and it will show up here.")
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+                } else {
+                    Section("Minutes focused") {
+                        chartCard
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                    }
+
+                    Section("Categories") {
+                        legendCard
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                    }
+
+                    Section("Sessions per category") {
+                        sessionsPerCategoryCard
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                    }
+
+                    Section("All sessions") {
+                        ForEach(sorted) { session in
+                            Button {
+                                editingSession = session
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(Self.color(for: session.category ?? "Uncategorized"))
+                                        .frame(width: 10, height: 10)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(Self.sessionFormatter.string(from: session.startedAt))
+                                            .font(.subheadline)
+                                            .foregroundStyle(.primary)
+                                        Text(timeRange(for: session))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(session.durationSeconds / 60) min")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(minWidth: 56, alignment: .trailing)
+                                }
+                            }
+                            .accessibilityIdentifier("focusSessionRow")
+                        }
+                        .onDelete(perform: deleteSessions)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .safeAreaInset(edge: .top, spacing: 8) {
+                if !sessions.isEmpty {
                     Picker("Granularity", selection: $granularity) {
                         ForEach(Granularity.allCases) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
                     .pickerStyle(.segmented)
-
-                    if sessions.isEmpty {
-                        ContentUnavailableView(
-                            "No focus sessions yet",
-                            systemImage: "timer",
-                            description: Text("Start a focus session and it will show up here.")
-                        )
-                    } else {
-                        chartCard
-
-                        legendCard
-
-                        sessionsPerCategoryCard
-
-                        sessionsListCard
-                    }
+                    .padding(.horizontal)
                 }
-                .padding()
             }
             .navigationTitle("Focus stats")
             .navigationBarTitleDisplayMode(.inline)
@@ -59,40 +109,18 @@ struct FocusStatsView: View {
         .presentationDetents([.large])
     }
 
-    private var sessionsListCard: some View {
-        let sorted = sessions.sorted { $0.startedAt > $1.startedAt }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("All sessions")
-                .font(.headline)
-            ForEach(sorted) { session in
-                Button {
-                    editingSession = session
-                } label: {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(Self.color(for: session.category ?? "Uncategorized"))
-                            .frame(width: 10, height: 10)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(Self.sessionFormatter.string(from: session.startedAt))
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                            Text(timeRange(for: session))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(session.durationSeconds / 60) min")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(minWidth: 56, alignment: .trailing)
-                    }
-                }
+    private func deleteSessions(at offsets: IndexSet) {
+        let toDelete = offsets.map { sorted[$0] }
+        Task {
+            for session in toDelete {
+                await delete(session)
             }
-            .accessibilityIdentifier("focusSessionList")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @discardableResult
+    private func delete(_ session: FocusSession) async -> Bool {
+        await focus.deleteSession(id: session.id)
     }
 
     private static let sessionFormatter: DateFormatter = {
@@ -115,7 +143,7 @@ struct FocusStatsView: View {
 
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(granularity == .day ? "Minutes focused each day" : "Minutes focused each week")
+            Text(usesDailyBuckets ? "Minutes focused each day" : "Minutes focused each week")
                 .font(.headline)
 
             Chart(entries) { entry in
@@ -133,7 +161,7 @@ struct FocusStatsView: View {
                 AxisMarks { value in
                     AxisValueLabel {
                         if let bucket = value.as(Date.self) {
-                            Text(granularity == .day ? bucketLabel(bucket) : weekLabel(bucket))
+                            Text(usesDailyBuckets ? bucketLabel(bucket) : weekLabel(bucket))
                         }
                     }
                 }
@@ -144,6 +172,7 @@ struct FocusStatsView: View {
             .frame(height: 200)
         }
         .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
@@ -199,8 +228,21 @@ struct FocusStatsView: View {
         return all.sorted()
     }
 
-    private var longestBucket: Int {
-        granularity == .day ? 28 : 8
+    private var usesDailyBuckets: Bool {
+        granularity != .month
+    }
+
+    private var dayCount: Int {
+        switch granularity {
+        case .threeDays: 3
+        case .week: 7
+        case .twoWeeks: 14
+        case .month: 0
+        }
+    }
+
+    private var weekCount: Int {
+        granularity == .month ? 5 : 0
     }
 
     private struct Entry: Identifiable {
@@ -213,22 +255,19 @@ struct FocusStatsView: View {
     private var entries: [Entry] {
         let calendar = Calendar.current
         var result: [Entry] = []
-        if granularity == .day {
-            let buckets = dailyBuckets
-            for bucket in buckets {
+        if usesDailyBuckets {
+            for bucket in dailyBuckets(dayCount: dayCount) {
                 let daySessions = sessions.filter { calendar.isDate($0.startedAt, inSameDayAs: bucket) }
-                let totalsByCategory = totalMinutes(daySessions)
-                for (category, minutes) in totalsByCategory {
+                for (category, minutes) in totalMinutes(daySessions) {
                     result.append(Entry(bucket: bucket, category: category, minutes: minutes))
                 }
             }
         } else {
-            for bucket in weeklyBuckets {
+            for bucket in weeklyBuckets(weekCount: weekCount) {
                 let weekSessions = sessions.filter { session in
                     calendar.isDate(session.startedAt, equalTo: bucket, toGranularity: .weekOfYear)
                 }
-                let totalsByCategory = totalMinutes(weekSessions)
-                for (category, minutes) in totalsByCategory {
+                for (category, minutes) in totalMinutes(weekSessions) {
                     result.append(Entry(bucket: bucket, category: category, minutes: minutes))
                 }
             }
@@ -244,10 +283,10 @@ struct FocusStatsView: View {
             .sorted { $0.1 > $1.1 }
     }
 
-    private var dailyBuckets: [Date] {
+    private func dailyBuckets(dayCount: Int) -> [Date] {
         let calendar = Calendar.current
         let now = Date()
-        let start = calendar.date(byAdding: .day, value: -(longestBucket - 1), to: now) ?? now
+        let start = calendar.date(byAdding: .day, value: -(dayCount - 1), to: now) ?? now
         var buckets: [Date] = []
         var date = calendar.startOfDay(for: start)
         let end = calendar.startOfDay(for: now)
@@ -258,11 +297,11 @@ struct FocusStatsView: View {
         return buckets
     }
 
-    private var weeklyBuckets: [Date] {
+    private func weeklyBuckets(weekCount: Int) -> [Date] {
         let calendar = Calendar.current
         guard let thisWeek = calendar.dateInterval(of: .weekOfYear, for: Date()) else { return [] }
         var buckets: [Date] = []
-        for offset in stride(from: -(longestBucket - 1), through: 0, by: 1) {
+        for offset in stride(from: -(weekCount - 1), through: 0, by: 1) {
             if let interval = calendar.dateInterval(of: .weekOfYear, for: calendar.date(byAdding: .weekOfYear, value: offset, to: thisWeek.start) ?? thisWeek.start) {
                 buckets.append(interval.start)
             }
@@ -270,13 +309,12 @@ struct FocusStatsView: View {
         return buckets
     }
 
-    private var bucketsNeeded: [Date] {
-        granularity == .day ? dailyBuckets : weeklyBuckets
-    }
-
     private func bucketLabel(_ date: Date) -> String {
         if Calendar.current.isDateInToday(date) {
             return "Today"
+        }
+        if Calendar.current.isDate(date, inSameDayAs: Date().addingTimeInterval(-24 * 3600)) {
+            return "Yesterday"
         }
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"

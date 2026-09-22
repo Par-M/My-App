@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from datetime import datetime
 from datetime import timedelta
 
@@ -109,7 +110,7 @@ class ReflectionService:
                     "Good morning. No reflection from yesterday yet — pick one "
                     "task that matters most and start there."
                 ),
-                date=datetime.utcnow(),
+                date=date.today(),
             )
         latest = reflections[0]
         message = self._morning_from_reflection(latest.text)

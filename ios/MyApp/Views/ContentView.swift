@@ -53,7 +53,7 @@ struct ContentView: View {
         notificationService.scheduleAll(
             tasks: taskService.tasks,
             events: [],
-            blocks: [],
+            blocks: scheduleService.blocks,
             workHoursStart: workStart,
             workHoursEnd: workEnd,
             hasReflectionToday: hasReflectionToday,

@@ -74,6 +74,19 @@ final class FocusService {
     }
 
     @discardableResult
+    func deleteSession(id: UUID) async -> Bool {
+        do {
+            _ = try await client.request(FocusEndpoint.delete(id)) as MessageResponse
+            dailySessions.removeAll { $0.id == id }
+            dataVersion += 1
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
     func createReflection(date: Date, text: String) async -> Reflection? {
         let payload = ReflectionCreate(date: date, text: text)
         do {

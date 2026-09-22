@@ -38,6 +38,16 @@ final class NotificationService {
     private(set) var errorMessage: String?
     private(set) var lastDeepLink: Date?
 
+    private struct RescheduleContext {
+        var workHoursStart: Double
+        var workHoursEnd: Double
+        var hasReflectionToday: Bool
+        var morningMessage: String?
+        var blocks: [CalendarBlock]
+    }
+
+    private var lastRescheduleContext: RescheduleContext?
+
     private let client: APIClient
     private let deviceId: String
 
@@ -127,14 +137,16 @@ final class NotificationService {
     }
 
     func scheduleLocalNotifications(tasks: [TaskItem]) {
+        let context = lastRescheduleContext
         scheduleAll(
             tasks: tasks,
             events: [],
-            blocks: [],
-            workHoursStart: 9,
-            workHoursEnd: 17,
-            hasReflectionToday: false,
-            hasOngoingFocus: false
+            blocks: context?.blocks ?? [],
+            workHoursStart: context?.workHoursStart ?? 9,
+            workHoursEnd: context?.workHoursEnd ?? 17,
+            hasReflectionToday: context?.hasReflectionToday ?? false,
+            hasOngoingFocus: false,
+            morningMessage: context?.morningMessage
         )
     }
 
@@ -145,8 +157,16 @@ final class NotificationService {
         workHoursStart: Double,
         workHoursEnd: Double,
         hasReflectionToday: Bool,
-        hasOngoingFocus: Bool
+        hasOngoingFocus: Bool,
+        morningMessage: String?
     ) {
+        lastRescheduleContext = RescheduleContext(
+            workHoursStart: workHoursStart,
+            workHoursEnd: workHoursEnd,
+            hasReflectionToday: hasReflectionToday,
+            morningMessage: morningMessage,
+            blocks: blocks
+        )
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         guard authorizationStatus == .authorized || authorizationStatus == .provisional else {
@@ -155,8 +175,10 @@ final class NotificationService {
 
         scheduleTaskReminders(tasks: tasks)
         scheduleReflectionReminder(workHoursEnd: workHoursEnd, hasReflectionToday: hasReflectionToday)
+        scheduleGoodMorning(workHoursStart: workHoursStart, message: morningMessage)
         scheduleEventReminders(events: events)
         scheduleFocusNudges(blocks: blocks, hasOngoingFocus: hasOngoingFocus)
+        scheduleBlockCompletionReminders(blocks: blocks)
         scheduleHourlyNudges(workHoursStart: workHoursStart, workHoursEnd: workHoursEnd)
     }
 
@@ -260,6 +282,31 @@ final class NotificationService {
         )
     }
 
+    private func scheduleGoodMorning(workHoursStart: Double, message: String?) {
+        guard let message, !message.isEmpty else { return }
+        let calendar = Calendar.current
+        let now = Date()
+        let wholeHours = Int(workHoursStart)
+        let minutes = Int((workHoursStart - Double(wholeHours)) * 60)
+        var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
+        components.hour = min(max(wholeHours, 0), 23)
+        components.minute = minutes
+        guard let startOfToday = calendar.date(from: components) else { return }
+        // Only fire in the future; otherwise wait until tomorrow at work start.
+        var fireAt = startOfToday
+        if fireAt <= now {
+            fireAt = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        }
+        addAlert(
+            identifier: "good-morning",
+            date: fireAt,
+            title: "Good morning",
+            body: message,
+            taskId: nil,
+            url: "app://today"
+        )
+    }
+
     private func scheduleEventReminders(events: [CalendarEventItem]) {
         let now = Date()
         let horizon = now.addingTimeInterval(48 * 3600)
@@ -287,6 +334,25 @@ final class NotificationService {
                 date: block.startAt,
                 title: "Time to focus",
                 body: "\"\(block.title)\" is starting now — start your focus timer or mark it done.",
+                taskId: block.taskId,
+                url: "app://today"
+            )
+        }
+    }
+
+    private func scheduleBlockCompletionReminders(blocks: [CalendarBlock]) {
+        let now = Date()
+        let endFormatter = DateFormatter()
+        endFormatter.timeStyle = .short
+        endFormatter.dateStyle = .none
+        for block in blocks where block.completedAt == nil && block.endAt > now {
+            let fireAt = block.endAt.addingTimeInterval(5 * 60)
+            guard fireAt > now else { continue }
+            addAlert(
+                identifier: "block-done-\(block.id)",
+                date: fireAt,
+                title: "Did you finish?",
+                body: "\"\(block.title)\" ended at \(endFormatter.string(from: block.endAt)) — mark it complete if you did.",
                 taskId: block.taskId,
                 url: "app://today"
             )

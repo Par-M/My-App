@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.repositories import focus_session_repository
 from app.schemas.reflection import FocusSessionCreate
 from app.schemas.reflection import FocusSessionResponse
+from app.schemas.reflection import FocusSessionUpdate
 from app.schemas.reflection import FocusSummaryResponse
 from app.services.text_analysis import AnalysisResult
 from app.services.text_analysis import TextAnalysisError
@@ -67,6 +68,28 @@ class FocusService:
             raise FocusSessionNotFoundError("Focus session not found")
         focus_session_repository.delete_focus_session(self.db, session=session)
         self.db.commit()
+
+    def update_focus_session(
+        self,
+        session_id: uuid.UUID,
+        data: FocusSessionUpdate,
+    ) -> FocusSessionResponse:
+        session = focus_session_repository.get_focus_session(
+            self.db,
+            user_id=self.user_id,
+            session_id=session_id,
+        )
+        if session is None:
+            raise FocusSessionNotFoundError("Focus session not found")
+        session = focus_session_repository.update_focus_session(
+            self.db,
+            session=session,
+            started_at=data.started_at,
+            ended_at=data.ended_at,
+        )
+        self.db.commit()
+        self.db.refresh(session)
+        return FocusSessionResponse.model_validate(session)
 
     def focus_summary(
         self,

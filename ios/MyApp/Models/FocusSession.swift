@@ -6,6 +6,7 @@ struct FocusSession: Codable, Identifiable, Hashable, Sendable {
     let durationSeconds: Int
     let startedAt: Date
     let endedAt: Date
+    let category: String?
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -14,6 +15,7 @@ struct FocusSession: Codable, Identifiable, Hashable, Sendable {
         case durationSeconds = "duration_seconds"
         case startedAt = "started_at"
         case endedAt = "ended_at"
+        case category
         case createdAt = "created_at"
     }
 }
@@ -23,17 +25,20 @@ struct FocusSessionCreate: Encodable, Sendable {
     let startedAt: Date
     let endedAt: Date
     let durationSeconds: Int?
+    let category: String?
 
     init(
         taskID: UUID?,
         startedAt: Date,
         endedAt: Date,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        category: String? = nil
     ) {
         self.taskID = taskID
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.durationSeconds = durationSeconds
+        self.category = category
     }
 
     enum CodingKeys: String, CodingKey {
@@ -41,6 +46,17 @@ struct FocusSessionCreate: Encodable, Sendable {
         case startedAt = "started_at"
         case endedAt = "ended_at"
         case durationSeconds = "duration_seconds"
+        case category
+    }
+}
+
+struct FocusSessionUpdate: Encodable, Sendable {
+    let startedAt: Date?
+    let endedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case startedAt = "started_at"
+        case endedAt = "ended_at"
     }
 }
 

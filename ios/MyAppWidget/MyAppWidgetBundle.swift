@@ -6,5 +6,6 @@ struct MyAppWidgetBundle: WidgetBundle {
     var body: some Widget {
         CurrentTaskWidget()
         TasksRemainingWidget()
+        FocusTimerWidget()
     }
 }

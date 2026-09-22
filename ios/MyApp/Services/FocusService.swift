@@ -7,6 +7,7 @@ final class FocusService {
     private(set) var dailySessions: [FocusSession] = []
     private(set) var reflections: [Reflection] = []
     private(set) var summary: FocusSummary?
+    private(set) var morningMessage: MorningMessage?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var dataVersion = 0
@@ -31,16 +32,38 @@ final class FocusService {
         taskID: UUID?,
         startedAt: Date,
         endedAt: Date,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        category: String? = nil
     ) async -> FocusSession? {
         let payload = FocusSessionCreate(
             taskID: taskID,
             startedAt: startedAt,
             endedAt: endedAt,
-            durationSeconds: durationSeconds
+            durationSeconds: durationSeconds,
+            category: category
         )
         do {
             let session: FocusSession = try await client.request(FocusEndpoint.create(payload))
+            dataVersion += 1
+            await loadFocus()
+            return session
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    @discardableResult
+    func updateSession(
+        id: UUID,
+        startedAt: Date?,
+        endedAt: Date?
+    ) async -> FocusSession? {
+        let payload = FocusSessionUpdate(startedAt: startedAt, endedAt: endedAt)
+        do {
+            let session: FocusSession = try await client.request(
+                FocusEndpoint.update(id: id, payload)
+            )
             dataVersion += 1
             await loadFocus()
             return session
@@ -71,6 +94,19 @@ final class FocusService {
             )
             dataVersion += 1
             return response.analysis
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    @discardableResult
+    func loadMorningMessage() async -> MorningMessage? {
+        do {
+            let message: MorningMessage = try await client.request(FocusEndpoint.morningMessage)
+            morningMessage = message
+            dataVersion += 1
+            return message
         } catch {
             errorMessage = error.localizedDescription
             return nil

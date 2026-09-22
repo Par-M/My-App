@@ -38,6 +38,15 @@ final class NotificationService {
     private(set) var errorMessage: String?
     private(set) var lastDeepLink: Date?
 
+    private struct RescheduleContext {
+        var workHoursStart: Double
+        var workHoursEnd: Double
+        var hasReflectionToday: Bool
+        var morningMessage: String?
+    }
+
+    private var lastRescheduleContext: RescheduleContext?
+
     private let client: APIClient
     private let deviceId: String
 
@@ -127,14 +136,16 @@ final class NotificationService {
     }
 
     func scheduleLocalNotifications(tasks: [TaskItem]) {
+        let context = lastRescheduleContext
         scheduleAll(
             tasks: tasks,
             events: [],
             blocks: [],
-            workHoursStart: 9,
-            workHoursEnd: 17,
-            hasReflectionToday: false,
-            hasOngoingFocus: false
+            workHoursStart: context?.workHoursStart ?? 9,
+            workHoursEnd: context?.workHoursEnd ?? 17,
+            hasReflectionToday: context?.hasReflectionToday ?? false,
+            hasOngoingFocus: false,
+            morningMessage: context?.morningMessage
         )
     }
 
@@ -145,8 +156,15 @@ final class NotificationService {
         workHoursStart: Double,
         workHoursEnd: Double,
         hasReflectionToday: Bool,
-        hasOngoingFocus: Bool
+        hasOngoingFocus: Bool,
+        morningMessage: String?
     ) {
+        lastRescheduleContext = RescheduleContext(
+            workHoursStart: workHoursStart,
+            workHoursEnd: workHoursEnd,
+            hasReflectionToday: hasReflectionToday,
+            morningMessage: morningMessage
+        )
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         guard authorizationStatus == .authorized || authorizationStatus == .provisional else {
@@ -155,6 +173,7 @@ final class NotificationService {
 
         scheduleTaskReminders(tasks: tasks)
         scheduleReflectionReminder(workHoursEnd: workHoursEnd, hasReflectionToday: hasReflectionToday)
+        scheduleGoodMorning(workHoursStart: workHoursStart, message: morningMessage)
         scheduleEventReminders(events: events)
         scheduleFocusNudges(blocks: blocks, hasOngoingFocus: hasOngoingFocus)
         scheduleHourlyNudges(workHoursStart: workHoursStart, workHoursEnd: workHoursEnd)
@@ -255,6 +274,31 @@ final class NotificationService {
             date: fireAt,
             title: "Daily reflection",
             body: "The day is wrapping up — take a minute to reflect on how you focused.",
+            taskId: nil,
+            url: "app://today"
+        )
+    }
+
+    private func scheduleGoodMorning(workHoursStart: Double, message: String?) {
+        guard let message, !message.isEmpty else { return }
+        let calendar = Calendar.current
+        let now = Date()
+        let wholeHours = Int(workHoursStart)
+        let minutes = Int((workHoursStart - Double(wholeHours)) * 60)
+        var components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: now)
+        components.hour = min(max(wholeHours, 0), 23)
+        components.minute = minutes
+        guard let startOfToday = calendar.date(from: components) else { return }
+        // Only fire in the future; otherwise wait until tomorrow at work start.
+        var fireAt = startOfToday
+        if fireAt <= now {
+            fireAt = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        }
+        addAlert(
+            identifier: "good-morning",
+            date: fireAt,
+            title: "Good morning",
+            body: message,
             taskId: nil,
             url: "app://today"
         )

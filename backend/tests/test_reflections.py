@@ -128,3 +128,27 @@ def test_reflection_other_user_404(client: TestClient) -> None:
         headers=intruder,
     )
     assert got.status_code == 404, got.text
+
+
+def test_morning_message_with_previous_reflection(client: TestClient) -> None:
+    headers = _auth_headers(client, email="morning@test.dev")
+    _create(
+        client,
+        headers,
+        on=date.today() - timedelta(days=1),
+        text="Today I finally shipped the feature and felt great about it.",
+    )
+
+    resp = client.get("/api/v1/reflections/morning-message", headers=headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["message"]
+    assert body["date"]
+
+
+def test_morning_message_without_reflection(client: TestClient) -> None:
+    headers = _auth_headers(client, email="nomorning@test.dev")
+
+    resp = client.get("/api/v1/reflections/morning-message", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["message"]

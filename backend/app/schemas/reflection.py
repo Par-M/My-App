@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from datetime import datetime
 from datetime import time
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
 
 class FocusSessionCreate(BaseModel):
@@ -13,6 +15,7 @@ class FocusSessionCreate(BaseModel):
     started_at: datetime
     ended_at: datetime
     duration_seconds: int | None = Field(default=None, ge=1, le=86400)
+    category: str | None = Field(default=None, max_length=100)
 
     @field_validator("ended_at")
     @classmethod
@@ -29,6 +32,14 @@ class FocusSessionCreate(BaseModel):
             raise ValueError("duration_seconds must be positive")
         return value
 
+    @field_validator("category")
+    @classmethod
+    def category_stripped(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
 
 class FocusSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -39,7 +50,21 @@ class FocusSessionResponse(BaseModel):
     started_at: datetime
     ended_at: datetime
     duration_seconds: int
+    category: str | None
     created_at: datetime
+
+
+class FocusSessionUpdate(BaseModel):
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def check_order(self) -> "FocusSessionUpdate":
+        started = self.started_at
+        ended = self.ended_at
+        if started is not None and ended is not None and ended <= started:
+            raise ValueError("ended_at must be after started_at")
+        return self
 
 
 class FocusSummaryResponse(BaseModel):
@@ -80,3 +105,8 @@ class ReflectionAnalysisResponse(BaseModel):
     id: uuid.UUID
     date: datetime
     analysis: str
+
+
+class MorningMessageResponse(BaseModel):
+    message: str
+    date: date

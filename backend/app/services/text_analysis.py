@@ -58,6 +58,11 @@ class TextAnalysisProvider(Protocol):
         """Return a short analysis for the given free-form text."""
         ...
 
+    def morning_message(self, reflection_text: str) -> str:
+        """Return a warm, short good-morning message inspired by the previous
+        evening's reflection."""
+        ...
+
 
 class TaskTextParser(Protocol):
     def parse_task(self, text: str, timezone: str) -> ParsedTask:
@@ -206,6 +211,52 @@ class GeminiTextAnalysisProvider:
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise TextAnalysisError(f"Could not parse Gemini response: {exc}") from exc
 
+    def morning_message(self, reflection_text: str) -> str:
+        if not self.api_key:
+            raise TextAnalysisError("Gemini API key is not configured")
+
+        prompt = (
+            "You help a busy professional start their day. Given their "
+            "end-of-day reflection from yesterday, write a short, warm "
+            "good-morning message (1-2 sentences) that turns what they "
+            "shared into a concrete motivation for the day ahead. Keep it "
+            "specific, kind, and actionable. Produce a JSON object with "
+            'exactly one key: "message". No other text.\n\nYesterday\'s '
+            f"reflection:\n{reflection_text}"
+        )
+        try:
+            response = httpx.post(
+                f"{self.BASE_URL}/models/{self.model}:generateContent",
+                params={"key": self.api_key},
+                json={
+                    "contents": [
+                        {"role": "user", "parts": [{"text": prompt}]}
+                    ],
+                    "generationConfig": {
+                        "responseMimeType": "application/json",
+                        "temperature": 0.7,
+                    },
+                },
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            raw = (
+                payload.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            )
+            if not raw:
+                raise TextAnalysisError("Gemini returned an empty response")
+            data = json.loads(raw)
+            message = str(data.get("message", "")).strip()
+            return message or "Good morning — make today count."
+        except httpx.HTTPError as exc:
+            raise TextAnalysisError(f"Gemini request failed: {exc}") from exc
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise TextAnalysisError(f"Could not parse Gemini response: {exc}") from exc
+
     def _parsed_task(self, data: dict) -> ParsedTask:
         raw_title = str(data.get("title", "")).strip()
         title = raw_title or "Untitled task"
@@ -305,6 +356,26 @@ class HeuristicTextAnalysisProvider:
                 "makes tomorrow more intentional."
             )
         return AnalysisResult(insight=insight, tags=tags)
+
+    def morning_message(self, reflection_text: str) -> str:
+        lowered = reflection_text.lower()
+        hits_pos = sum(1 for word in self.POSITIVE if word in lowered)
+        hits_neg = sum(1 for word in self.NEGATIVE if word in lowered)
+
+        if hits_pos > hits_neg:
+            return (
+                "Good morning. Yesterday ended with real momentum — carry it "
+                "into today by starting with your most meaningful task."
+            )
+        if hits_neg > hits_pos:
+            return (
+                "Good morning. Yesterday was heavy, so today give yourself a "
+                "small win first — one task done early will change the whole day."
+            )
+        return (
+            "Good morning. A steady day behind you is a solid start — pick one "
+            "intention for today and protect the focus time to make it real."
+        )
 
     def parse_task(self, text: str, timezone: str = "UTC") -> ParsedTask:
         cleaned = re.sub(r"\s+", " ", text).strip()

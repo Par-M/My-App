@@ -28,6 +28,7 @@ def create_focus_session(
         started_at=data.started_at,
         ended_at=data.ended_at,
         duration_seconds=duration,
+        category=data.category,
     )
     db.add(session)
     db.flush()
@@ -41,6 +42,27 @@ def get_focus_session(
     return db.scalar(
         _base_query(user_id).where(FocusSession.id == session_id)
     )
+
+
+def update_focus_session(
+    db: Session,
+    *,
+    session: FocusSession,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+) -> FocusSession:
+    if started_at is not None:
+        session.started_at = started_at
+    if ended_at is not None:
+        session.ended_at = ended_at
+    if started_at is not None or ended_at is not None:
+        session.duration_seconds = max(
+            0,
+            int((session.ended_at - session.started_at).total_seconds()),
+        )
+    db.flush()
+    db.refresh(session)
+    return session
 
 
 def list_focus_sessions(

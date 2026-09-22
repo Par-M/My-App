@@ -38,3 +38,8 @@ struct ReflectionAnalysisResponse: Codable, Hashable, Sendable {
         case analysis
     }
 }
+
+struct MorningMessage: Codable, Hashable, Sendable {
+    let message: String
+    let date: Date
+}

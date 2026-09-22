@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
 from app.repositories import reflection_repository
+from app.schemas.reflection import MorningMessageResponse
 from app.schemas.reflection import ReflectionAnalysisResponse
 from app.schemas.reflection import ReflectionCreate
 from app.schemas.reflection import ReflectionResponse
@@ -91,6 +93,45 @@ class ReflectionService:
             raise ReflectionNotFoundError("Reflection not found")
         reflection_repository.delete_reflection(self.db, reflection)
         self.db.commit()
+
+    def morning_message(self) -> MorningMessageResponse:
+        """Return a short good-morning motivation based on the user's most
+        recent reflection from a previous day."""
+        today = datetime.utcnow().date()
+        reflections = reflection_repository.list_reflections(
+            self.db,
+            user_id=self.user_id,
+            before=today - timedelta(days=1),
+        )
+        if not reflections:
+            return MorningMessageResponse(
+                message=(
+                    "Good morning. No reflection from yesterday yet — pick one "
+                    "task that matters most and start there."
+                ),
+                date=datetime.utcnow(),
+            )
+        latest = reflections[0]
+        message = self._morning_from_reflection(latest.text)
+        return MorningMessageResponse(message=message, date=latest.date)
+
+    def _morning_from_reflection(self, text: str) -> str:
+        provider = default_analysis_provider()
+        try:
+            return provider.morning_message(text)
+        except (TextAnalysisError, AttributeError):
+            return self._fallback_morning(text)
+
+    @staticmethod
+    def _fallback_morning(text: str) -> str:
+        tokens = [t.strip(" .,!?") for t in text.split()]
+        words = [t for t in tokens if t]
+        if not words:
+            return "Good morning. Set one clear intention for today and make it happen."
+        return (
+            f"Good morning. Yesterday you wrote about "
+            f"'{' '.join(words[:8])}' — carry that reflection into a focused start."
+        )
 
     def _analyze(self, reflection):
         analysis = self._analyze_text(reflection.text)

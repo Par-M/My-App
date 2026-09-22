@@ -5,6 +5,9 @@ struct ContentView: View {
     @Environment(NotificationService.self) private var notificationService
     @Environment(SyncManager.self) private var syncManager
     @Environment(ConnectivityMonitor.self) private var connectivity
+    @Environment(TaskService.self) private var taskService
+    @Environment(ScheduleService.self) private var scheduleService
+    @Environment(FocusService.self) private var focusService
 
     @State private var onboardingComplete = OnboardingView.isComplete
 
@@ -28,6 +31,10 @@ struct ContentView: View {
             if authService.state == .signedIn {
                 await notificationService.load()
                 await syncManager.syncNow()
+                if !taskService.tasks.isEmpty {
+                    await focusService.loadMorningMessage()
+                    rescheduleNotifications()
+                }
             }
         }
         .task(id: connectivity.isConnected) {
@@ -35,6 +42,24 @@ struct ContentView: View {
                 await syncManager.syncNow()
             }
         }
+    }
+
+    private func rescheduleNotifications() {
+        let workStart = scheduleService.preference?.workHoursStart ?? 9
+        let workEnd = scheduleService.preference?.workHoursEnd ?? 17
+        let hasReflectionToday = focusService.reflections.contains {
+            Calendar.current.isDateInToday($0.date)
+        }
+        notificationService.scheduleAll(
+            tasks: taskService.tasks,
+            events: [],
+            blocks: [],
+            workHoursStart: workStart,
+            workHoursEnd: workEnd,
+            hasReflectionToday: hasReflectionToday,
+            hasOngoingFocus: false,
+            morningMessage: focusService.morningMessage?.message
+        )
     }
 }
 

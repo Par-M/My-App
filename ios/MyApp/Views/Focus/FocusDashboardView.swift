@@ -46,7 +46,7 @@ struct FocusDashboardView: View {
     }
 
     @State private var range: RangeOption = .week
-    @State private var showingReflection = false
+    @State private var showingReflections = false
     @State private var showingStats = false
     @State private var pendingSessionStop: SessionStop?
     @AppStorage("focusTimerStartedAt") private var timerStartedAtRef = 0.0
@@ -75,13 +75,11 @@ struct FocusDashboardView: View {
 
                     statsButton
 
+                    reflectionsButton
+
                     if let summary = focus.summary, let analysis = summary.analysis, !analysis.isEmpty {
                         analysisCard(analysis)
                     }
-
-                    reflectionButton
-
-                    reflectionsSection
                 }
                 .padding()
             }
@@ -97,8 +95,8 @@ struct FocusDashboardView: View {
                     .accessibilityIdentifier("refreshFocusButton")
                 }
             }
-            .sheet(isPresented: $showingReflection) {
-                ReflectionSheetView()
+            .sheet(isPresented: $showingReflections) {
+                ReflectionListView()
             }
             .sheet(isPresented: $showingStats) {
                 FocusStatsView()
@@ -123,7 +121,7 @@ struct FocusDashboardView: View {
                 Task { await focus.loadFocus(after: range.dateStart, before: .now) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openReflection)) { _ in
-                showingReflection = true
+                showingReflections = true
             }
         }
     }
@@ -160,8 +158,7 @@ struct FocusDashboardView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 12)
         .onAppear {
             resumeTickerIfRunning()
         }
@@ -276,35 +273,23 @@ struct FocusDashboardView: View {
         .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private var reflectionButton: some View {
+    private var reflectionsButton: some View {
         Button {
-            showingReflection = true
+            showingReflections = true
         } label: {
-            Label("End-of-day reflection", systemImage: "square.and.pencil")
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-        }
-        .buttonStyle(.borderedProminent)
-    }
-
-    private var reflectionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Reflections")
-                .font(.headline)
-            if focus.reflections.isEmpty {
-                Text("No reflections yet. Take a moment each evening to review your focus.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(focus.reflections) { reflection in
-                    ReflectionCard(reflection: reflection) { id in
-                        Task { await focus.requestAnalysis(reflectionID: id) }
-                    }
-                }
+            HStack {
+                Label("View reflections", systemImage: "square.and.pencil")
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
         }
-        .padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("viewReflectionsButton")
     }
 
 }

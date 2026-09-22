@@ -1,8 +1,9 @@
 # Lock In Bud
 
-An AI-powered daily planner for iOS. It shows the events already in your Apple Calendar, then recommends which tasks you can realistically complete each day based on your free time, task durations, priorities, and due dates — no forced time slots, just smart guidance.
+An AI-powered daily planner for iOS **and Mac**. It shows the events already in your Apple Calendar, then recommends which tasks you can realistically complete each day based on your free time, task durations, priorities, and due dates — no forced time slots, just smart guidance.
 
-- **iOS app** — SwiftUI, offline-first with local storage and background sync
+- **iOS / Mac app** — SwiftUI, offline-first with local storage and background sync (the Mac app shares the same codebase via Mac Catalyst)
+- **Home Screen / Mac widgets** — family-sized task widgets plus a live focus-timer widget
 - **Backend API** — Python FastAPI + PostgreSQL, AI scheduling via Google Gemini, deployed on Vercel
 
 ## Features
@@ -13,12 +14,13 @@ An AI-powered daily planner for iOS. It shows the events already in your Apple C
 - **Description-aware breakdown** — tasks with structured descriptions ("1. … 2. …" or sentences) are automatically split into named parts; long tasks are chunked into ≤90-minute pieces spread across days
 - **Overload detection** — anything that doesn't fit the selected window is surfaced in a separate "Doesn't fit this window" section
 - **Tasks** — titles, notes, priorities, statuses, deadlines, categories, repeating weekday schedules, estimated durations, plus a per-task checklist (inline-editable from the task detail screen, persisted as JSON)
+- **Repeating-task occurrences** — reschedule a single occurrence without touching the series, and complete just the day you worked (other occurrences stay open)
 - **Task progress** — percent complete computed from checked-off blocks
 - **Today planner** — shows today's priorities, what's up next, a quick-add field, and day progress
 - **Missed-deadline recovery** — detects overdue tasks, lets you reschedule them into the remaining time, records why you missed them, and surfaces patterns in "Why did I miss tasks?"
 - **Daily summary** — hours worked, schedule adherence, tasks completed/remaining/rescheduled, and what was missed today
 - **Habits** — build and track daily habits
-- **Focus** — start/stop a focus timer (wall-clock based, so it survives app backgrounding and relaunches), then review your sessions as a chart across **1D / 3D / 5D / 1W / 2W / 4W** ranges
+- **Focus** — start/stop a focus timer (wall-clock based, so it survives app backgrounding and relaunches), then review your sessions as a chart across **1D / 3D / 5D / 1W / 2W / 4W** ranges (optionally per category)
 - **Reflections** — write a short daily reflection and get an AI-powered analysis of your focus trends
 - **Notifications** — local + push (APNs) reminders
 - **Offline-first iOS** — local store, connectivity monitoring, and a sync manager that reconciles changes when you're back online
@@ -71,13 +73,15 @@ The backend can push reminders outside the app. Delivery requires APNs credentia
 │   ├── alembic/              Database migrations
 │   ├── tests/                pytest suite
 │   └── docker-compose.yml    Local PostgreSQL
-├── ios/MyApp/                SwiftUI app
+├── ios/MyApp/                SwiftUI app (iOS + Mac Catalyst)
 │   ├── App/                  Entry point, app delegate
 │   ├── Models/               Codable models mirroring the API
 │   ├── Networking/           API client + endpoints
 │   ├── Services/             Auth, tasks, schedule, planner, sync, offline store
 │   ├── Views/                SwiftUI screens
 │   └── Utilities/            Shared helpers
+├── ios/Shared/               Code shared by the app and widgets
+├── ios/MyAppWidget/          Home Screen / Mac widgets
 ├── .github/workflows/ci.yml  Backend CI (migrations + tests against Postgres)
 └── docs/                     PRD + system architecture
 ```

@@ -1108,8 +1108,15 @@ struct WeeklyScheduleView: View {
         let isAppBlock = event.id.hasPrefix("app-block-")
         let isApp = isAppEvent(event)
         let ignored = isApp ? false : calendarService.isIgnored(event)
+        let completed = occurrenceCompleted(event)
 
-        let content = eventRowContent(event, ignored: ignored, isApp: isApp, isAppBlock: isAppBlock)
+        let content = eventRowContent(
+            event,
+            ignored: ignored,
+            completed: completed,
+            isApp: isApp,
+            isAppBlock: isAppBlock
+        )
 
         if isApp && !isAppBlock {
             if let task = task(for: event) {
@@ -1160,21 +1167,30 @@ struct WeeklyScheduleView: View {
         return taskService.tasks.first { $0.id == id }
     }
 
+    private func occurrenceCompleted(_ event: CalendarEventItem) -> Bool {
+        guard let task = task(for: event) else { return false }
+        guard let override = task.repeatOverrides?[OccurrenceDateKey.key(for: event.start)] else {
+            return false
+        }
+        return override.completed == true
+    }
+
     private func eventRowContent(
         _ event: CalendarEventItem,
         ignored: Bool,
+        completed: Bool,
         isApp: Bool,
         isAppBlock: Bool
     ) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(isApp ? Color.accentColor : .gray)
+                .fill(completed ? Color.green : (isApp ? Color.accentColor : .gray))
                 .frame(width: 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title)
                     .font(.subheadline)
                     .lineLimit(1)
-                    .strikethrough(ignored)
+                    .strikethrough(ignored || completed)
                 Text("\(event.start.formatted(date: .omitted, time: .shortened)) – \(event.end.formatted(date: .omitted, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1189,9 +1205,15 @@ struct WeeklyScheduleView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if isApp {
-                Image(systemName: "checklist")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if completed {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Image(systemName: "checklist")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("Ignore")
                     .font(.caption)

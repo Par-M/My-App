@@ -899,9 +899,16 @@ class TestOccurrenceEditing:
 
     def test_completed_task_conflicts(self, client):
         data = _login(client)
-        task = self._repeating_task(client, data["access_token"])
-        first = datetime.fromisoformat(
-            task["start_at"].replace("Z", "+00:00")
+        # A single (non-repeating) task is still completed as a whole, so
+        # editing a completed task must conflict. Repeating tasks keep their
+        # series open after completing an occurrence (see TestOccurrenceCompletion).
+        first = _now().replace(hour=12, minute=0, second=0, microsecond=0)
+        task = _create_task(
+            client,
+            data["access_token"],
+            title="One-off",
+            start_at=first.isoformat(),
+            end_at=(first + timedelta(hours=1)).isoformat(),
         )
         client.post(
             f"/api/v1/tasks/{task['id']}/complete",
@@ -945,6 +952,138 @@ class TestOccurrenceEditing:
                 "start_at": "2026-09-21T12:00:00+00:00",
                 "end_at": "2026-09-21T13:00:00+00:00",
             },
+        )
+        assert response.status_code == 401
+
+
+class TestOccurrenceCompletion:
+    def _repeating_task(self, client, token, **overrides):
+        first = _now().replace(hour=12, minute=0, second=0, microsecond=0)
+        payload = {
+            "title": "Breakfast",
+            "start_at": first.isoformat(),
+            "end_at": (first + timedelta(hours=1)).isoformat(),
+            "repeat_weekdays": [0, 1, 2, 3, 4, 5, 6],
+            "repeat_ends_on": (first + timedelta(days=60)).isoformat(),
+        }
+        payload.update(overrides)
+        return _create_task(client, token, **payload)
+
+    def _complete(self, client, token, task_id, **overrides):
+        payload = {}
+        payload.update(overrides)
+        return client.post(
+            f"/api/v1/tasks/{task_id}/complete",
+            json=payload,
+            headers=_auth(token),
+        )
+
+    def test_completing_repeating_task_marks_today_only(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        today = _now().date()
+
+        response = self._complete(client, data["access_token"], task["id"])
+        assert response.status_code == 200
+        body = response.json()
+
+        # The task itself stays in progress so future occurrences remain on
+        # the calendar for the rest of the repeat period.
+        assert body["status"] != "completed"
+        assert body["completed_at"] is None
+        assert body["repeat_overrides"][today.isoformat()]["completed"] is True
+        assert datetime.fromisoformat(
+            body["repeat_ends_on"].replace("Z", "+00:00")
+        ) == datetime.fromisoformat(
+            task["repeat_ends_on"].replace("Z", "+00:00")
+        )
+
+    def test_completing_repeating_task_keeps_future_blocks_pending(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        now = _now()
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            now - timedelta(minutes=30),
+            now,
+        )
+        tomorrow = (now + timedelta(days=1)).replace(hour=9, minute=0)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            tomorrow,
+            tomorrow + timedelta(minutes=30),
+        )
+
+        response = self._complete(client, data["access_token"], task["id"])
+        assert response.status_code == 200
+
+        blocks = client.get(
+            "/api/v1/calendar/blocks",
+            headers=_auth(data["access_token"]),
+        ).json()["items"]
+        completed_blocks = [
+            b for b in blocks if b["completed_at"] is not None
+        ]
+        # Only today's block gets completed, not the one scheduled tomorrow.
+        assert len(completed_blocks) == 1
+        start = datetime.fromisoformat(
+            completed_blocks[0]["start_at"].replace("Z", "+00:00")
+        )
+        assert start.date() == now.date()
+        task_after = client.get(
+            f"/api/v1/tasks/{task['id']}",
+            headers=_auth(data["access_token"]),
+        ).json()
+        assert task_after["status"] != "completed"
+
+    def test_explicit_occurrence_date(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        target = (_now() + timedelta(days=3)).date()
+
+        response = self._complete(
+            client,
+            data["access_token"],
+            task["id"],
+            occurrence_date=target.isoformat(),
+            timezone="UTC",
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] != "completed"
+        assert body["repeat_overrides"][target.isoformat()]["completed"] is True
+
+    def test_non_repeating_task_still_completes_series(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"], title="One-off")
+        response = self._complete(client, data["access_token"], task["id"])
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "completed"
+        assert body["completed_at"] is not None
+        assert body["repeat_overrides"] is None
+
+    def test_completion_is_idempotent(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        first = self._complete(client, data["access_token"], task["id"])
+        second = self._complete(client, data["access_token"], task["id"])
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json()["status"] != "completed"
+        assert (
+            second.json()["repeat_overrides"]
+            == first.json()["repeat_overrides"]
+        )
+
+    def test_requires_authentication(self, client):
+        response = client.post(
+            f"/api/v1/tasks/{uuid.uuid4()}/complete",
+            json={"occurrence_date": "2026-09-22"},
         )
         assert response.status_code == 401
 

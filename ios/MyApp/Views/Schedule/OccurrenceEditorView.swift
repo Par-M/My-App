@@ -111,7 +111,9 @@ struct OccurrenceEditorView: View {
         date: Date
     ) -> (start: Date, end: Date) {
         if let override = task.repeatOverrides?[OccurrenceDateKey.key(for: date)] {
-            return (override.startAt, override.endAt)
+            let fallbackStart = task.startAt ?? date
+            let fallbackEnd = task.endAt ?? fallbackStart.addingTimeInterval(30 * 60)
+            return (override.startAt ?? fallbackStart, override.endAt ?? fallbackEnd)
         }
         let calendar = Calendar.current
         let baseStart = task.startAt ?? date

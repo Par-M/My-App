@@ -58,14 +58,18 @@ struct ChecklistItem: Codable, Hashable, Sendable {
     }
 }
 
-/// A time override for a single occurrence of a repeating task.
+/// A time override and/or completion marker for a single occurrence of a
+/// repeating task. An occurrence may carry a time override, a per-date
+/// completion marker, or both.
 struct RepeatOverride: Codable, Hashable, Sendable {
-    var startAt: Date
-    var endAt: Date
+    var startAt: Date?
+    var endAt: Date?
+    var completed: Bool? = nil
 
     private enum CodingKeys: String, CodingKey {
         case startAt = "start_at"
         case endAt = "end_at"
+        case completed
     }
 }
 
@@ -262,6 +266,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
     let checklist: [ChecklistItem]?
     let repeatWeekdays: [Int]?
     let repeatEndsOn: Date?
+    let repeatOverrides: [String: RepeatOverride]?
     let beforeTaskIds: [UUID]?
     let afterTaskIds: [UUID]?
 
@@ -280,6 +285,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         checklist = task.checklist
         repeatWeekdays = task.repeatWeekdays
         repeatEndsOn = task.repeatEndsOn
+        repeatOverrides = task.repeatOverrides
         beforeTaskIds = task.beforeTaskIds
         afterTaskIds = task.afterTaskIds
     }
@@ -299,6 +305,12 @@ struct TaskUpdateRequest: Encodable, Sendable {
         checklist = local.checklist
         repeatWeekdays = local.repeatWeekdays
         repeatEndsOn = local.repeatEndsOn
+        repeatOverrides = local.repeatOverridesData.flatMap {
+            try? JSONCoding.decoder.decode(
+                [String: RepeatOverride].self,
+                from: $0
+            )
+        }
         beforeTaskIds = local.beforeTaskIds
         afterTaskIds = local.afterTaskIds
     }
@@ -319,6 +331,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         try container.encode(checklist, forKey: .checklist)
         try container.encode(repeatWeekdays, forKey: .repeatWeekdays)
         try container.encode(repeatEndsOn, forKey: .repeatEndsOn)
+        try container.encodeIfPresent(repeatOverrides, forKey: .repeatOverrides)
         try container.encodeIfPresent(beforeTaskIds, forKey: .beforeTaskIds)
         try container.encodeIfPresent(afterTaskIds, forKey: .afterTaskIds)
     }
@@ -338,6 +351,7 @@ struct TaskUpdateRequest: Encodable, Sendable {
         case checklist
         case repeatWeekdays = "repeat_weekdays"
         case repeatEndsOn = "repeat_ends_on"
+        case repeatOverrides = "repeat_overrides"
         case beforeTaskIds = "before_task_ids"
         case afterTaskIds = "after_task_ids"
     }
@@ -346,16 +360,22 @@ struct TaskUpdateRequest: Encodable, Sendable {
 struct CompleteTaskRequest: Encodable, Sendable {
     let actualMinutes: Int?
     let productivity: TaskProductivity?
+    let occurrenceDate: String?
+    let timezone: String?
 
     private enum CodingKeys: String, CodingKey {
         case actualMinutes = "actual_minutes"
         case productivity
+        case occurrenceDate = "occurrence_date"
+        case timezone
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(actualMinutes, forKey: .actualMinutes)
         try container.encodeIfPresent(productivity, forKey: .productivity)
+        try container.encodeIfPresent(occurrenceDate, forKey: .occurrenceDate)
+        try container.encodeIfPresent(timezone, forKey: .timezone)
     }
 }
 

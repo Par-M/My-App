@@ -27,7 +27,7 @@ struct ReflectionCreate: Encodable, Sendable {
 
 struct ReflectionAnalysisResponse: Codable, Hashable, Sendable {
     let id: UUID
-    let userId: UUID
+    let userId: UUID?
     let date: Date
     let analysis: String
 

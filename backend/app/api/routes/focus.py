@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.reflection import FocusSessionCreate
 from app.schemas.reflection import FocusSessionResponse
+from app.schemas.reflection import FocusSessionUpdate
 from app.schemas.reflection import FocusSummaryResponse
 from app.services.focus_service import FocusSessionNotFoundError
 from app.services.focus_service import FocusService
@@ -71,6 +72,18 @@ def get_focus_session(
 ) -> FocusSessionResponse:
     try:
         return service.get_focus_session(session_id)
+    except FocusSessionNotFoundError as exc:
+        _handle_not_found(exc)
+
+
+@router.patch("/sessions/{session_id}", response_model=FocusSessionResponse)
+def update_focus_session(
+    session_id: uuid.UUID,
+    payload: FocusSessionUpdate,
+    service: FocusService = Depends(_service),
+) -> FocusSessionResponse:
+    try:
+        return service.update_focus_session(session_id, payload)
     except FocusSessionNotFoundError as exc:
         _handle_not_found(exc)
 

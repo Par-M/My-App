@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.reflection import MorningMessageResponse
 from app.schemas.reflection import ReflectionAnalysisResponse
 from app.schemas.reflection import ReflectionCreate
 from app.schemas.reflection import ReflectionCreateDaily
@@ -66,6 +67,13 @@ def list_reflections(
     service: ReflectionService = Depends(_service),
 ) -> list[ReflectionResponse]:
     return service.list_reflections(after=after, before=before)
+
+
+@router.get("/morning-message", response_model=MorningMessageResponse)
+def morning_message(
+    service: ReflectionService = Depends(_service),
+) -> MorningMessageResponse:
+    return service.morning_message()
 
 
 @router.get("/{reflection_id}", response_model=ReflectionResponse)

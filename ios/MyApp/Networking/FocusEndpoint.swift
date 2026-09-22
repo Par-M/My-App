@@ -4,9 +4,12 @@ enum FocusEndpoint: Endpoint {
     case sessions
     case summary(after: Date?, before: Date?)
     case create(FocusSessionCreate)
+    case update(id: UUID, FocusSessionUpdate)
+    case delete(UUID)
     case reflections
     case createReflection(ReflectionCreate)
     case analysis(UUID)
+    case morningMessage
 
     var path: String {
         switch self {
@@ -14,19 +17,29 @@ enum FocusEndpoint: Endpoint {
             return "/api/v1/focus/sessions"
         case .summary:
             return "/api/v1/focus/summary"
+        case .update(let id, _):
+            return "/api/v1/focus/sessions/\(id.uuidString.lowercased())"
+        case .delete(let id):
+            return "/api/v1/focus/sessions/\(id.uuidString.lowercased())"
         case .reflections, .createReflection:
             return "/api/v1/reflections"
         case .analysis(let id):
             return "/api/v1/reflections/\(id.uuidString.lowercased())/analysis"
+        case .morningMessage:
+            return "/api/v1/reflections/morning-message"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .sessions, .summary, .reflections:
+        case .sessions, .summary, .reflections, .morningMessage:
             return .get
         case .create, .createReflection, .analysis:
             return .post
+        case .update:
+            return .patch
+        case .delete:
+            return .delete
         }
     }
 
@@ -35,6 +48,8 @@ enum FocusEndpoint: Endpoint {
         case .create(let payload):
             return payload
         case .createReflection(let payload):
+            return payload
+        case .update(_, let payload):
             return payload
         default:
             return nil

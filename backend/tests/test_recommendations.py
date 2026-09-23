@@ -1,9 +1,38 @@
+import importlib
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
+
 from app.services.recommendation_service import split_description_into_steps
 from app.services.recommendation_service import split_task_into_parts
+
+
+def _fake_now() -> datetime:
+    # Fixed mid-morning UTC so "today's free time" always contains a usable
+    # work window regardless of when CI happens to run (the daily endpoint
+    # clamps today's window to the current time, so runs near the evening
+    # boundary used to yield available_minutes == 0 and flake).
+    return datetime(2026, 9, 22, 9, 0, 0, tzinfo=timezone.utc)
+
+
+class _FakeDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _fake_now()
+
+
+@pytest.fixture(autouse=True)
+def _freeze_clock(monkeypatch):
+    for module_name in (
+        "app.services.recommendation_service",
+        "app.services.scheduling.free_slots",
+    ):
+        monkeypatch.setattr(
+            importlib.import_module(module_name), "datetime", _FakeDatetime
+        )
+
 
 NOW = datetime.now(timezone.utc)
 

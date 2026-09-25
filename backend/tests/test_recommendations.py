@@ -1,9 +1,38 @@
+import importlib
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import pytest
+
 from app.services.recommendation_service import split_description_into_steps
 from app.services.recommendation_service import split_task_into_parts
+
+
+def _fake_now() -> datetime:
+    # Fixed mid-morning UTC so "today's free time" always contains a usable
+    # work window regardless of when CI happens to run (the daily endpoint
+    # clamps today's window to the current time, so runs near the evening
+    # boundary used to yield available_minutes == 0 and flake).
+    return datetime(2026, 9, 22, 9, 0, 0, tzinfo=timezone.utc)
+
+
+class _FakeDatetime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _fake_now()
+
+
+@pytest.fixture(autouse=True)
+def _freeze_clock(monkeypatch):
+    for module_name in (
+        "app.services.recommendation_service",
+        "app.services.scheduling.free_slots",
+    ):
+        monkeypatch.setattr(
+            importlib.import_module(module_name), "datetime", _FakeDatetime
+        )
+
 
 NOW = datetime.now(timezone.utc)
 
@@ -233,6 +262,227 @@ class TestDailyRecommendationsEndpoint:
             for item in day["items"]
         ]
         assert all(item["task_title"] != "All done" for item in items)
+
+    def test_work_does_not_cram_into_earliest_day(self, client):
+        data = _login(client)
+        _create(client, data["access_token"], title="A", estimated_duration=60)
+        _create(client, data["access_token"], title="B", estimated_duration=60)
+        _create(client, data["access_token"], title="C", estimated_duration=60)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        days = response.json()["days"]
+        titles = [i["task_title"] for i in days[0]["items"]]
+        assert titles == ["A"]
+
+    def test_far_deadline_task_spreads_before_deadline(self, client):
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        near = (NOW + timedelta(days=1)).isoformat()
+        _create(client, data["access_token"], title="Near", estimated_duration=60, deadline=near)
+        _create(client, data["access_token"], title="Far", estimated_duration=480, deadline=far)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        days = response.json()["days"]
+        far_day_indices = [
+            index
+            for index, day in enumerate(days)
+            if any(i["task_title"] == "Far" for i in day["items"])
+        ]
+        assert far_day_indices[0] > 0
+        assert sum(
+            i["minutes"]
+            for day in days
+            for i in day["items"]
+            if i["task_title"] == "Far"
+        ) == 480
+
+    def test_parts_scheduled_in_order(self, client):
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="Big build",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        scheduled = [
+            (day_index, item)
+            for day_index, day in enumerate(body["days"])
+            for item in day["items"]
+            if item["task_title"] == "Big build"
+        ]
+        assert scheduled
+        assert sum(item["minutes"] for _, item in scheduled) == 540
+        indices = [item["part_index"] for _, item in scheduled]
+        assert indices == sorted(indices), (
+            "parts must be scheduled in order (part 9 must never appear "
+            "before parts 1-8)"
+        )
+
+    def test_parts_of_blocked_task_not_forceplaced(self, client):
+        # If an earlier part cannot fit anywhere, later parts of the same task
+        # must not show a time block on their own.
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="One-shot",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        midnight = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": midnight.date().isoformat(),
+                "end_date": midnight.date().isoformat(),
+                "busy_times": [
+                    {
+                        "start": midnight.isoformat(),
+                        "end": (midnight + timedelta(hours=23)).isoformat(),
+                    }
+                ],
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["days"][0]["items"] == []
+        assert len(body["unscheduled"]) == 6
+
+    def test_multi_part_task_spreads_across_days(self, client):
+        # A big multi-part task should fan its parts out across the window (one
+        # per day when there is room) rather than stacking them all into a single
+        # day, and the parts must stay in index order.
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="Big build",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        parts = [
+            (day_index, item)
+            for day_index, day in enumerate(body["days"])
+            for item in day["items"]
+            if item["task_title"] == "Big build"
+        ]
+        assert sum(item["minutes"] for _, item in parts) == 540
+        days_used = {day_index for day_index, _ in parts}
+        # 540 min at 90-min chunks = 6 parts; an empty 7-day window has room to
+        # give each part its own day.
+        assert len(days_used) == 6, (
+            "parts must be spread across days, not stacked into one day: "
+            f"days used {sorted(days_used)}"
+        )
+        parts_per_day = {day_index: 0 for day_index in days_used}
+        for day_index, _ in parts:
+            parts_per_day[day_index] += 1
+        assert max(parts_per_day.values()) == 1, (
+            "a day should hold at most one part of a task when the window "
+            "has room to spread"
+        )
+        indices = [item["part_index"] for _, item in parts]
+        assert indices == sorted(indices), (
+            "parts must be scheduled in order (part 9 must never appear "
+            "before parts 1-8)"
+        )
+
+    def test_big_multi_part_tasks_still_fit(self, client):
+        # Regression: many large multi-part tasks with a near deadline must all
+        # fit into the remaining free time (before the indexing change, empty
+        # days were left blank and parts spilled into "doesn't fit this window").
+        data = _login(client)
+        deadline = (NOW + timedelta(days=4)).isoformat()
+        for title, duration, priority in [
+            ("Circuit notes 8-15", 720, "high"),
+            ("Circuit TD problem set", 360, "medium"),
+            ("Tutorial part 7/8", 300, "medium"),
+            ("Notes + problem set/tutorial part 10-15", 900, "low"),
+        ]:
+            _create(
+                client,
+                data["access_token"],
+                title=title,
+                estimated_duration=duration,
+                priority=priority,
+                deadline=deadline,
+            )
+
+        start = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+        busy_times = []
+        for offset in range(7):
+            day = start + timedelta(days=offset)
+            busy_times.append(
+                {
+                    "start": (day + timedelta(hours=9)).isoformat(),
+                    "end": (day + timedelta(hours=11)).isoformat(),
+                }
+            )
+            busy_times.append(
+                {
+                    "start": (day + timedelta(hours=13)).isoformat(),
+                    "end": (day + timedelta(hours=17)).isoformat(),
+                }
+            )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": start.date().isoformat(),
+                "end_date": (start + timedelta(days=6)).date().isoformat(),
+                "busy_times": busy_times,
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["unscheduled"] == [], (
+            "all parts must fit; nothing may spill into unscheduled"
+        )
+        # Each task's parts appear in order across the window.
+        for day_index in range(len(body["days"])):
+            seen: dict[str, int] = {}
+            for item in body["days"][day_index]["items"]:
+                previous = seen.get(item["task_title"])
+                assert previous is None or item["part_index"] > previous, (
+                    f"{item['task_title']} parts out of order on "
+                    f'{body["days"][day_index]["date"]}'
+                )
+                seen[item["task_title"]] = item["part_index"]
 
     def test_busy_time_defers_to_unscheduled(self, client):
         data = _login(client)

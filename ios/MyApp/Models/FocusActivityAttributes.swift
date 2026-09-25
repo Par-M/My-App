@@ -4,8 +4,8 @@ import Foundation
 import ActivityKit
 
 @available(iOS 16.1, *)
-public struct FocusActivityAttributes: ActivityAttributes, Sendable {
-    public struct ContentState: Codable, Hashable, Sendable {
+nonisolated public struct FocusActivityAttributes: ActivityAttributes, Sendable {
+    nonisolated public struct ContentState: Codable, Hashable, Sendable {
         public var elapsedSeconds: Int
         public var isPaused: Bool
 

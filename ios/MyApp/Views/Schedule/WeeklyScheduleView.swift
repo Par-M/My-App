@@ -282,6 +282,19 @@ struct WeeklyScheduleView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var isShowingToday: Bool {
+        switch viewMode {
+        case .day:
+            return calendar.isDateInToday(selectedDate)
+        case .week:
+            return weekDays.contains { calendar.isDateInToday($0) }
+        case .month:
+            return calendar.isDate(selectedDate, equalTo: Date(), toGranularity: .month)
+        case .review:
+            return false
+        }
+    }
+
     private var navigator: some View {
         HStack {
             Button {
@@ -295,6 +308,23 @@ struct WeeklyScheduleView: View {
 
             Text(navigatorTitle)
                 .font(.subheadline.weight(.semibold))
+
+            if !isShowingToday {
+                Button {
+                    selectedDate = Date()
+                    viewMode = .day
+                } label: {
+                    Text("Today")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 8)
+                .accessibilityLabel("Back to today")
+            }
 
             Spacer()
 
@@ -1293,10 +1323,12 @@ struct WeeklyScheduleView: View {
     }
 
     private func startRecommendedFocus(_ item: RecommendedPart) {
-        focusTimerStartedAt = Date().timeIntervalSince1970
-        if #available(iOS 16.1, *) {
-            FocusLiveActivityManager.startLiveActivity()
-        }
+        let category = taskService.tasks.first(where: { $0.id == item.taskId })?.category
+        FocusTimerStarter.startFocus(
+            taskID: item.taskId,
+            title: displayTitle(item),
+            category: category
+        )
     }
 }
 

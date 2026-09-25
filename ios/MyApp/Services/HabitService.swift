@@ -136,11 +136,13 @@ final class HabitService {
         let today = cal.startOfDay(for: Date())
 
         var remaining = 0
+        var remainingTitles: [String] = []
 
         for stat in habits {
             guard let dayStat = stat.last7Days.first(where: { cal.isDate($0.date, inSameDayAs: today) }) else { continue }
             if dayStat.scheduled && dayStat.completedCount < stat.habit.dailyGoal {
                 remaining += 1
+                remainingTitles.append(stat.habit.title)
             }
         }
 
@@ -149,7 +151,9 @@ final class HabitService {
             currentTaskTitle: existing.currentTaskTitle,
             nextTaskTitle: existing.nextTaskTitle,
             tasksRemaining: existing.tasksRemaining,
-            habitsRemaining: remaining
+            habitsRemaining: remaining,
+            topTaskTitles: existing.topTaskTitles,
+            habitTitles: Array(remainingTitles.prefix(10))
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")

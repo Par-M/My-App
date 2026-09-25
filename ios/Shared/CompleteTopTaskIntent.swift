@@ -20,7 +20,8 @@ struct CompleteTopTaskIntent: AppIntent {
             nextTaskTitle: updatedTitles.dropFirst().first,
             tasksRemaining: updatedTaskCount,
             habitsRemaining: current.habitsRemaining,
-            topTaskTitles: updatedTitles
+            topTaskTitles: updatedTitles,
+            habitTitles: current.habitTitles
         )
         
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")

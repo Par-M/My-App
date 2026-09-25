@@ -67,14 +67,15 @@ final class PlannerService {
         let tasksRemaining = (today?.currentTask != nil ? 1 : 0) + (today?.nextTasks.count ?? 0)
 
         let candidates = ([today?.currentTask].compactMap { $0 }) + (today?.nextTasks ?? [])
-        let topTaskTitles = Self.topPriorityTitles(from: candidates, limit: 3)
+        let topTaskTitles = Self.topPriorityTitles(from: candidates, limit: 15)
 
         WidgetDataStore.write(
             currentTaskTitle: currentTitle,
             nextTaskTitle: nextTitle,
             tasksRemaining: tasksRemaining,
             habitsRemaining: existing.habitsRemaining,
-            topTaskTitles: topTaskTitles
+            topTaskTitles: topTaskTitles,
+            habitTitles: existing.habitTitles
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")

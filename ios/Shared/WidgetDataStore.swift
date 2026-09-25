@@ -12,7 +12,8 @@ struct WidgetDataStore {
         nextTaskTitle: String?,
         tasksRemaining: Int,
         habitsRemaining: Int,
-        topTaskTitles: [String] = []
+        topTaskTitles: [String] = [],
+        habitTitles: [String] = []
     ) {
         guard let defaults = shared else { return }
 
@@ -29,6 +30,7 @@ struct WidgetDataStore {
         defaults.set(tasksRemaining, forKey: "tasks_remaining")
         defaults.set(habitsRemaining, forKey: "habits_remaining")
         defaults.set(topTaskTitles, forKey: "top_task_titles")
+        defaults.set(habitTitles, forKey: "habit_titles")
         defaults.set(Date().timeIntervalSince1970, forKey: "last_updated")
     }
 
@@ -50,7 +52,8 @@ struct WidgetDataStore {
                 nextTaskTitle: nil,
                 tasksRemaining: 0,
                 habitsRemaining: 0,
-                topTaskTitles: []
+                topTaskTitles: [],
+                habitTitles: []
             )
         }
         return WidgetData(
@@ -59,6 +62,7 @@ struct WidgetDataStore {
             tasksRemaining: defaults.integer(forKey: "tasks_remaining"),
             habitsRemaining: defaults.integer(forKey: "habits_remaining"),
             topTaskTitles: defaults.stringArray(forKey: "top_task_titles") ?? [],
+            habitTitles: defaults.stringArray(forKey: "habit_titles") ?? [],
             focusStartedAt: defaults.double(forKey: "focus_started_at"),
             focusTitle: defaults.string(forKey: "focus_title")
         )
@@ -71,6 +75,7 @@ struct WidgetData {
     let tasksRemaining: Int
     let habitsRemaining: Int
     var topTaskTitles: [String] = []
+    var habitTitles: [String] = []
     var focusStartedAt: TimeInterval = 0
     var focusTitle: String?
     var isFocusRunning: Bool { focusStartedAt > 0 }

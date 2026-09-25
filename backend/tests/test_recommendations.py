@@ -372,6 +372,54 @@ class TestDailyRecommendationsEndpoint:
         assert body["days"][0]["items"] == []
         assert len(body["unscheduled"]) == 6
 
+    def test_multi_part_task_spreads_across_days(self, client):
+        # A big multi-part task should fan its parts out across the window (one
+        # per day when there is room) rather than stacking them all into a single
+        # day, and the parts must stay in index order.
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="Big build",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        parts = [
+            (day_index, item)
+            for day_index, day in enumerate(body["days"])
+            for item in day["items"]
+            if item["task_title"] == "Big build"
+        ]
+        assert sum(item["minutes"] for _, item in parts) == 540
+        days_used = {day_index for day_index, _ in parts}
+        # 540 min at 90-min chunks = 6 parts; an empty 7-day window has room to
+        # give each part its own day.
+        assert len(days_used) == 6, (
+            "parts must be spread across days, not stacked into one day: "
+            f"days used {sorted(days_used)}"
+        )
+        parts_per_day = {day_index: 0 for day_index in days_used}
+        for day_index, _ in parts:
+            parts_per_day[day_index] += 1
+        assert max(parts_per_day.values()) == 1, (
+            "a day should hold at most one part of a task when the window "
+            "has room to spread"
+        )
+        indices = [item["part_index"] for _, item in parts]
+        assert indices == sorted(indices), (
+            "parts must be scheduled in order (part 9 must never appear "
+            "before parts 1-8)"
+        )
+
     def test_big_multi_part_tasks_still_fit(self, client):
         # Regression: many large multi-part tasks with a near deadline must all
         # fit into the remaining free time (before the indexing change, empty

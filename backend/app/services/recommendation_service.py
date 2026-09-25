@@ -248,78 +248,155 @@ class RecommendationService:
             for part in parts:
                 pending.append((task, part, len(parts)))
 
-        days: list[dict] = []
-        unscheduled: list[dict] = []
-
-        for day in dates:
-            day_slots = sorted(
+        slots_by_date: dict[date, list[TimeSlot]] = {
+            day: sorted(
                 slots_by_day.get(day, []),
                 key=lambda slot: (slot.start, slot.end),
             )
-            capacity = sum(slot.duration_minutes for slot in day_slots)
-            used_by_slot = [0] * len(day_slots)
-            items: list[dict] = []
+            for day in dates
+        }
+        capacity_by_date: dict[date, int] = {
+            day: sum(slot.duration_minutes for slot in slots_by_date[day])
+            for day in dates
+        }
+        used_by_slot: dict[date, list[int]] = {
+            day: [0] * len(slots_by_date[day]) for day in dates
+        }
+        items_by_date: dict[date, list[dict]] = {day: [] for day in dates}
+        used_by_date: dict[date, int] = {day: 0 for day in dates}
 
-            while pending and capacity > 0:
-                task, part, part_count = pending[0]
-                minutes = part["minutes"]
-                if minutes <= capacity:
-                    block_start, block_end = self._allocate_window(
-                        day_slots, used_by_slot, minutes
-                    )
-                    items.append(
-                        {
-                            "task_id": str(task.id),
-                            "task_title": task.title,
-                            "part_title": part["title"],
-                            "part_index": part["index"],
-                            "part_count": part_count,
-                            "minutes": minutes,
-                            "priority": task.priority.value,
-                            "deadline": (
-                                task.deadline.isoformat() if task.deadline else None
-                            ),
-                            "is_overdue": (
-                                task.deadline is not None and task.deadline < now
-                            ),
-                            "reason": self._reason(
-                                task, part["index"], part_count, tz
-                            ),
-                            "start_at": (
-                                block_start.isoformat() if block_start else None
-                            ),
-                            "end_at": (
-                                block_end.isoformat() if block_end else None
-                            ),
-                        }
-                    )
-                    capacity -= minutes
-                    pending.pop(0)
-                else:
-                    break
-
-            days.append(
-                {
-                    "date": day.isoformat(),
-                    "available_minutes": sum(
-                        slot.duration_minutes for slot in day_slots
-                    ),
-                    "items": items,
-                }
-            )
+        days: list[dict] = []
+        unscheduled: list[dict] = []
 
         for task, part, part_count in pending:
-            unscheduled.append(
+            minutes = part["minutes"]
+            # Eligible days = where the part can still be placed without missing
+            # the deadline: from today through (and including) the deadline day.
+            # Tasks with no deadline (or a deadline outside the window) can go
+            # anywhere in the window; overdue work is kept to the earliest days.
+            eligible = self._eligible_days(task, dates, tz, window_start, window_end)
+
+            # Pick the eligible day that is least loaded so far (relative to its
+            # total free capacity), so work is spread across the available time
+            # before the deadline instead of piling everything into the earliest
+            # free day. Ties break toward the earliest day so nearer-deadline
+            # work is nudged to the front.
+            def load(day_index: int) -> float:
+                day = dates[day_index]
+                capacity = capacity_by_date[day]
+                return used_by_date[day] / capacity if capacity > 0 else 1.0
+
+            candidates = [
+                i
+                for i in eligible
+                if capacity_by_date[dates[i]] - used_by_date[dates[i]] >= minutes
+            ]
+
+            if not candidates:
+                unscheduled.append(
+                    {
+                        "task_id": str(task.id),
+                        "task_title": task.title,
+                        "part_title": part["title"],
+                        "minutes": minutes,
+                        "priority": task.priority.value,
+                    }
+                )
+                continue
+
+            best_index = min(candidates, key=lambda i: (load(i), i))
+            day = dates[best_index]
+            day_slots = slots_by_date[day]
+            block_start, block_end = self._allocate_window(
+                day_slots, used_by_slot[day], minutes
+            )
+            if block_start is None:
+                unscheduled.append(
+                    {
+                        "task_id": str(task.id),
+                        "task_title": task.title,
+                        "part_title": part["title"],
+                        "minutes": minutes,
+                        "priority": task.priority.value,
+                    }
+                )
+                continue
+
+            used_by_date[day] += minutes
+            items_by_date[day].append(
                 {
                     "task_id": str(task.id),
                     "task_title": task.title,
                     "part_title": part["title"],
-                    "minutes": part["minutes"],
+                    "part_index": part["index"],
+                    "part_count": part_count,
+                    "minutes": minutes,
                     "priority": task.priority.value,
+                    "category": task.category,
+                    "deadline": (
+                        task.deadline.isoformat() if task.deadline else None
+                    ),
+                    "is_overdue": (
+                        task.deadline is not None and task.deadline < now
+                    ),
+                    "reason": self._reason(task, part["index"], part_count, tz),
+                    "start_at": (
+                        block_start.isoformat() if block_start else None
+                    ),
+                    "end_at": (
+                        block_end.isoformat() if block_end else None
+                    ),
+                }
+            )
+
+        # Stable chained sort within each day: overdue first, then soonest
+        # deadline, then highest priority, so items read most-urgent first.
+        # (The load-balancing above already spread the work across days.)
+        priority_string_weight = {
+            "high": PRIORITY_WEIGHT[TaskPriority.high],
+            "medium": PRIORITY_WEIGHT[TaskPriority.medium],
+            "low": PRIORITY_WEIGHT[TaskPriority.low],
+        }
+        for day in dates:
+            items_by_date[day].sort(
+                key=lambda item: (
+                    not item["is_overdue"],
+                    item["deadline"] or "9999",
+                    priority_string_weight.get(item.get("priority"), 1),
+                )
+            )
+            days.append(
+                {
+                    "date": day.isoformat(),
+                    "available_minutes": capacity_by_date[day],
+                    "items": items_by_date[day],
                 }
             )
 
         return {"days": days, "unscheduled": unscheduled}
+
+    @staticmethod
+    def _eligible_days(
+        task: Task,
+        dates: list[date],
+        tz,
+        window_start: date,
+        window_end: date,
+    ) -> list[int]:
+        """Day indices a part may be placed on while still finishing before the
+        deadline. Overdue work is restricted to the earliest days so it is
+        prioritized; otherwise the window runs from today through the deadline
+        (or the whole window when there is no deadline)."""
+        last = len(dates) - 1
+        if task.deadline is None:
+            return list(range(last + 1))
+        deadline_day = task.deadline.astimezone(tz).date()
+        if deadline_day < window_start:
+            return list(range(min(2, last + 1)))
+        for index, day in enumerate(dates):
+            if day > deadline_day:
+                return list(range(index)) or [0]
+        return list(range(last + 1))
 
     def breakdown_task(self, task: Task) -> dict:
         duration = task.estimated_duration or 30

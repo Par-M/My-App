@@ -263,6 +263,49 @@ class TestDailyRecommendationsEndpoint:
         ]
         assert all(item["task_title"] != "All done" for item in items)
 
+    def test_work_does_not_cram_into_earliest_day(self, client):
+        data = _login(client)
+        _create(client, data["access_token"], title="A", estimated_duration=60)
+        _create(client, data["access_token"], title="B", estimated_duration=60)
+        _create(client, data["access_token"], title="C", estimated_duration=60)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        days = response.json()["days"]
+        titles = [i["task_title"] for i in days[0]["items"]]
+        assert titles == ["A"]
+
+    def test_far_deadline_task_spreads_before_deadline(self, client):
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        near = (NOW + timedelta(days=1)).isoformat()
+        _create(client, data["access_token"], title="Near", estimated_duration=60, deadline=near)
+        _create(client, data["access_token"], title="Far", estimated_duration=480, deadline=far)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        days = response.json()["days"]
+        far_day_indices = [
+            index
+            for index, day in enumerate(days)
+            if any(i["task_title"] == "Far" for i in day["items"])
+        ]
+        assert far_day_indices[0] > 0
+        assert sum(
+            i["minutes"]
+            for day in days
+            for i in day["items"]
+            if i["task_title"] == "Far"
+        ) == 480
+
     def test_busy_time_defers_to_unscheduled(self, client):
         data = _login(client)
         _create(client, data["access_token"], estimated_duration=120)

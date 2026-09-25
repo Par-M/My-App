@@ -10,6 +10,7 @@ final class TaskService {
         case deadline = "deadline"
         case priority = "priority"
         case updated = "updated_at"
+        case category = "category"
 
         var id: String { rawValue }
 
@@ -19,6 +20,7 @@ final class TaskService {
             case .deadline: "Deadline"
             case .priority: "Priority"
             case .updated: "Last Updated"
+            case .category: "Category"
             }
         }
     }

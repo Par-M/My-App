@@ -18,7 +18,39 @@ final class RecommendationService {
         self.calendarService = calendarService
     }
 
-    func load(from start: Date, to end: Date, excluding eventIDs: Set<String> = []) async {
+    func load(
+        from start: Date,
+        to end: Date,
+        excluding eventIDs: Set<String> = [],
+        force: Bool = false
+    ) async {
+        let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: Date())
+        let requestStart = min(calendar.startOfDay(for: start), todayStart)
+        let existing = coverageRange()
+
+        // Keep one stable, growing plan window: anchoring the start at the
+        // earliest of (requested start, any already-planned start, today) and
+        // only ever extending the end. Toggling between upcoming days then
+        // shows each day's slice of the same spread-out plan instead of
+        // recomputing a fresh single-day plan (which repeated the same urgent
+        // tasks and marked everything else "doesn't fit this window").
+        let planStart = {
+            var start = requestStart
+            if let existing { start = min(start, existing.start) }
+            return start
+        }()
+        let planEnd = max(end, existing?.end ?? end)
+
+        // If the requested range is already covered and nothing changed, keep
+        // the cached plan so toggling days is instant and stable.
+        if !force,
+           let existing,
+           existing.start <= requestStart,
+           existing.end >= end {
+            return
+        }
+
         requestGeneration += 1
         let generation = requestGeneration
         isLoading = true
@@ -28,7 +60,7 @@ final class RecommendationService {
         var busyTimes: [BusyTimeRequest] = []
         if let calendarService, calendarService.permission == .granted {
             busyTimes = calendarService
-                .fetchEvents(from: start, to: end)
+                .fetchEvents(from: planStart, to: planEnd)
                 .filter {
                     !eventIDs.contains($0.id) && !$0.isAllDay && !calendarService.isIgnored($0)
                 }
@@ -37,8 +69,8 @@ final class RecommendationService {
 
         let request = DailyRecommendationsRequest(
             timezone: TimeZone.current.identifier,
-            startDate: Calendar.current.startOfDay(for: start),
-            endDate: end,
+            startDate: planStart,
+            endDate: planEnd,
             busyTimes: busyTimes
         )
 
@@ -57,6 +89,13 @@ final class RecommendationService {
             guard generation == requestGeneration else { return }
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func coverageRange() -> (start: Date, end: Date)? {
+        guard let first = days.first?.date, let last = days.last?.date else {
+            return nil
+        }
+        return (min(first, last), max(first, last))
     }
 
     func recommendations(for day: Date) -> DayRecommendation? {

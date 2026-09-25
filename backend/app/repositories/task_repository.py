@@ -37,6 +37,11 @@ SORT_FIELDS = {
     "updated_at": lambda order: Task.updated_at.asc()
     if order == "asc"
     else Task.updated_at.desc(),
+    "category": lambda order: (
+        Task.category.asc().nulls_last()
+        if order == "asc"
+        else Task.category.desc().nulls_first()
+    ),
 }
 
 

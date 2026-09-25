@@ -306,6 +306,72 @@ class TestDailyRecommendationsEndpoint:
             if i["task_title"] == "Far"
         ) == 480
 
+    def test_parts_scheduled_in_order(self, client):
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="Big build",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={"timezone": "UTC"},
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        scheduled = [
+            (day_index, item)
+            for day_index, day in enumerate(body["days"])
+            for item in day["items"]
+            if item["task_title"] == "Big build"
+        ]
+        assert scheduled
+        assert sum(item["minutes"] for _, item in scheduled) == 540
+        indices = [item["part_index"] for _, item in scheduled]
+        assert indices == sorted(indices), (
+            "parts must be scheduled in order (part 9 must never appear "
+            "before parts 1-8)"
+        )
+
+    def test_parts_of_blocked_task_not_forceplaced(self, client):
+        # If an earlier part cannot fit anywhere, later parts of the same task
+        # must not show a time block on their own.
+        data = _login(client)
+        far = (NOW + timedelta(days=14)).isoformat()
+        _create(
+            client,
+            data["access_token"],
+            title="One-shot",
+            estimated_duration=540,
+            deadline=far,
+        )
+
+        midnight = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": midnight.date().isoformat(),
+                "end_date": midnight.date().isoformat(),
+                "busy_times": [
+                    {
+                        "start": midnight.isoformat(),
+                        "end": (midnight + timedelta(hours=23)).isoformat(),
+                    }
+                ],
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["days"][0]["items"] == []
+        assert len(body["unscheduled"]) == 6
+
     def test_busy_time_defers_to_unscheduled(self, client):
         data = _login(client)
         _create(client, data["access_token"], estimated_duration=120)

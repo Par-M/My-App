@@ -267,14 +267,40 @@ class RecommendationService:
 
         days: list[dict] = []
         unscheduled: list[dict] = []
+        # Parts of the same task must appear in order: once a part is placed on
+        # a day, later parts are only allowed on that same day or later, so part
+        # 9 never shows a time block before parts 1-8. If an earlier part cannot
+        # be placed anywhere, the remaining parts are not recommended either.
+        last_day_by_task: dict[str, int] = {}
+        blocked_task: set[str] = set()
+
+        def unscheduled_item(task: Task, part: dict) -> dict:
+            return {
+                "task_id": str(task.id),
+                "task_title": task.title,
+                "part_title": part["title"],
+                "part_index": part["index"],
+                "minutes": part["minutes"],
+                "priority": task.priority.value,
+            }
 
         for task, part, part_count in pending:
             minutes = part["minutes"]
+            task_id = str(task.id)
+            if task_id in blocked_task:
+                unscheduled.append(unscheduled_item(task, part))
+                continue
+
             # Eligible days = where the part can still be placed without missing
             # the deadline: from today through (and including) the deadline day.
             # Tasks with no deadline (or a deadline outside the window) can go
             # anywhere in the window; overdue work is kept to the earliest days.
             eligible = self._eligible_days(task, dates, tz, window_start, window_end)
+
+            # Keep parts in sequence: only allow days on/after the previous
+            # part's day so the plan reads part 1, 2, 3, ... chronologically.
+            floor = last_day_by_task.get(task_id, 0)
+            eligible = [i for i in eligible if i >= floor]
 
             # Pick the eligible day that is least loaded so far (relative to its
             # total free capacity), so work is spread across the available time
@@ -293,15 +319,8 @@ class RecommendationService:
             ]
 
             if not candidates:
-                unscheduled.append(
-                    {
-                        "task_id": str(task.id),
-                        "task_title": task.title,
-                        "part_title": part["title"],
-                        "minutes": minutes,
-                        "priority": task.priority.value,
-                    }
-                )
+                blocked_task.add(task_id)
+                unscheduled.append(unscheduled_item(task, part))
                 continue
 
             best_index = min(candidates, key=lambda i: (load(i), i))
@@ -311,18 +330,12 @@ class RecommendationService:
                 day_slots, used_by_slot[day], minutes
             )
             if block_start is None:
-                unscheduled.append(
-                    {
-                        "task_id": str(task.id),
-                        "task_title": task.title,
-                        "part_title": part["title"],
-                        "minutes": minutes,
-                        "priority": task.priority.value,
-                    }
-                )
+                blocked_task.add(task_id)
+                unscheduled.append(unscheduled_item(task, part))
                 continue
 
             used_by_date[day] += minutes
+            last_day_by_task[task_id] = best_index
             items_by_date[day].append(
                 {
                     "task_id": str(task.id),
@@ -350,8 +363,8 @@ class RecommendationService:
             )
 
         # Stable chained sort within each day: overdue first, then soonest
-        # deadline, then highest priority, so items read most-urgent first.
-        # (The load-balancing above already spread the work across days.)
+        # deadline, then highest priority, then part order, so items read most-
+        # urgent first and multi-part tasks appear in sequence.
         priority_string_weight = {
             "high": PRIORITY_WEIGHT[TaskPriority.high],
             "medium": PRIORITY_WEIGHT[TaskPriority.medium],
@@ -363,6 +376,7 @@ class RecommendationService:
                     not item["is_overdue"],
                     item["deadline"] or "9999",
                     priority_string_weight.get(item.get("priority"), 1),
+                    item["part_index"],
                 )
             )
             days.append(

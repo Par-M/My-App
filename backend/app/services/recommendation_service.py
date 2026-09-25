@@ -267,12 +267,6 @@ class RecommendationService:
 
         days: list[dict] = []
         unscheduled: list[dict] = []
-        # Parts of the same task must appear in order: once a part is placed on
-        # a day, later parts are only allowed on that same day or later, so part
-        # 9 never shows a time block before parts 1-8. If an earlier part cannot
-        # be placed anywhere, the remaining parts are not recommended either.
-        last_day_by_task: dict[str, int] = {}
-        blocked_task: set[str] = set()
 
         def unscheduled_item(task: Task, part: dict) -> dict:
             return {
@@ -284,83 +278,134 @@ class RecommendationService:
                 "priority": task.priority.value,
             }
 
+        # Group each task's parts so all parts of a task are placed together in
+        # index order: a later part is only scheduled on the same day or a later
+        # day than the part before it, so part 9 never shows a time block before
+        # parts 1-8.
+        pending_by_task: list[tuple[Task, list[tuple[dict, int]]]] = []
         for task, part, part_count in pending:
-            minutes = part["minutes"]
-            task_id = str(task.id)
-            if task_id in blocked_task:
-                unscheduled.append(unscheduled_item(task, part))
-                continue
+            if pending_by_task and pending_by_task[-1][0].id == task.id:
+                pending_by_task[-1][1].append((part, part_count))
+            else:
+                pending_by_task.append((task, [(part, part_count)]))
 
-            # Eligible days = where the part can still be placed without missing
-            # the deadline: from today through (and including) the deadline day.
-            # Tasks with no deadline (or a deadline outside the window) can go
-            # anywhere in the window; overdue work is kept to the earliest days.
-            eligible = self._eligible_days(task, dates, tz, window_start, window_end)
+        def _reserve(
+            parts: list[tuple[dict, int]],
+            eligible: set[int],
+            start_index: int,
+            used_date: dict[date, int],
+            used_slot: dict[date, list[int]],
+        ) -> list[tuple[dict, int, date, datetime, datetime]] | None:
+            """Place all parts in order starting at start_index, packing into a
+            day's remaining capacity before advancing to the next eligible day.
+            Returns None if any part cannot be placed."""
+            last = len(dates) - 1
+            current = start_index
+            placed: list[tuple[dict, int, date, datetime, datetime]] = []
+            for part, part_count in parts:
+                minutes = part["minutes"]
+                day_index = current
+                block_start = block_end = None
+                while day_index <= last:
+                    day = dates[day_index]
+                    if (
+                        day_index in eligible
+                        and capacity_by_date[day] - used_date[day] >= minutes
+                    ):
+                        block_start, block_end = self._allocate_window(
+                            slots_by_date[day], used_slot[day], minutes
+                        )
+                        if block_start is not None:
+                            break
+                    day_index += 1
+                if day_index > last or block_start is None:
+                    return None
+                used_date[dates[day_index]] += minutes
+                placed.append(
+                    (part, part_count, dates[day_index], block_start, block_end)
+                )
+                current = day_index
+            return placed
 
-            # Keep parts in sequence: only allow days on/after the previous
-            # part's day so the plan reads part 1, 2, 3, ... chronologically.
-            floor = last_day_by_task.get(task_id, 0)
-            eligible = [i for i in eligible if i >= floor]
-
-            # Pick the eligible day that is least loaded so far (relative to its
-            # total free capacity), so work is spread across the available time
-            # before the deadline instead of piling everything into the earliest
-            # free day. Ties break toward the earliest day so nearer-deadline
-            # work is nudged to the front.
-            def load(day_index: int) -> float:
-                day = dates[day_index]
-                capacity = capacity_by_date[day]
-                return used_by_date[day] / capacity if capacity > 0 else 1.0
-
-            candidates = [
+        for task, parts in pending_by_task:
+            minutes_first = parts[0][0]["minutes"]
+            eligible = self._eligible_days(
+                task, dates, tz, window_start, window_end
+            )
+            anchors = [
                 i
                 for i in eligible
-                if capacity_by_date[dates[i]] - used_by_date[dates[i]] >= minutes
+                if capacity_by_date[dates[i]] - used_by_date[dates[i]]
+                >= minutes_first
             ]
-
-            if not candidates:
-                blocked_task.add(task_id)
-                unscheduled.append(unscheduled_item(task, part))
+            if not anchors:
+                unscheduled.extend(
+                    unscheduled_item(task, part) for part, _ in parts
+                )
                 continue
 
-            best_index = min(candidates, key=lambda i: (load(i), i))
-            day = dates[best_index]
-            day_slots = slots_by_date[day]
-            block_start, block_end = self._allocate_window(
-                day_slots, used_by_slot[day], minutes
+            def load(day_index: int, used_date: dict[date, int]) -> float:
+                day = dates[day_index]
+                capacity = capacity_by_date[day]
+                return used_date[day] / capacity if capacity > 0 else 1.0
+
+            anchor = min(
+                anchors, key=lambda i: (load(i, used_by_date), i)
             )
-            if block_start is None:
-                blocked_task.add(task_id)
-                unscheduled.append(unscheduled_item(task, part))
+
+            # Try from the least-loaded anchor day first (keeps work spread
+            # across the window). If the whole ordered sequence does not fit
+            # there, fall back to the earliest eligible day so the task still
+            # uses the free time that is available before its deadline.
+            used_date = dict(used_by_date)
+            used_slot = {d: list(v) for d, v in used_by_slot.items()}
+            placed = _reserve(
+                parts, set(eligible), anchor, used_date, used_slot
+            )
+            if placed is None and anchor != eligible[0]:
+                used_date = dict(used_by_date)
+                used_slot = {d: list(v) for d, v in used_by_slot.items()}
+                placed = _reserve(
+                    parts, set(eligible), eligible[0], used_date, used_slot
+                )
+            if placed is None:
+                unscheduled.extend(
+                    unscheduled_item(task, part) for part, _ in parts
+                )
                 continue
 
-            used_by_date[day] += minutes
-            last_day_by_task[task_id] = best_index
-            items_by_date[day].append(
-                {
-                    "task_id": str(task.id),
-                    "task_title": task.title,
-                    "part_title": part["title"],
-                    "part_index": part["index"],
-                    "part_count": part_count,
-                    "minutes": minutes,
-                    "priority": task.priority.value,
-                    "category": task.category,
-                    "deadline": (
-                        task.deadline.isoformat() if task.deadline else None
-                    ),
-                    "is_overdue": (
-                        task.deadline is not None and task.deadline < now
-                    ),
-                    "reason": self._reason(task, part["index"], part_count, tz),
-                    "start_at": (
-                        block_start.isoformat() if block_start else None
-                    ),
-                    "end_at": (
-                        block_end.isoformat() if block_end else None
-                    ),
-                }
-            )
+            used_by_date = used_date
+            used_by_slot = used_slot
+            for part, part_count, day, block_start, block_end in placed:
+                items_by_date[day].append(
+                    {
+                        "task_id": str(task.id),
+                        "task_title": task.title,
+                        "part_title": part["title"],
+                        "part_index": part["index"],
+                        "part_count": part_count,
+                        "minutes": part["minutes"],
+                        "priority": task.priority.value,
+                        "category": task.category,
+                        "deadline": (
+                            task.deadline.isoformat()
+                            if task.deadline
+                            else None
+                        ),
+                        "is_overdue": (
+                            task.deadline is not None and task.deadline < now
+                        ),
+                        "reason": self._reason(
+                            task, part["index"], part_count, tz
+                        ),
+                        "start_at": (
+                            block_start.isoformat() if block_start else None
+                        ),
+                        "end_at": (
+                            block_end.isoformat() if block_end else None
+                        ),
+                    }
+                )
 
         # Stable chained sort within each day: overdue first, then soonest
         # deadline, then highest priority, then part order, so items read most-

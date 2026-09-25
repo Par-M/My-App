@@ -372,6 +372,70 @@ class TestDailyRecommendationsEndpoint:
         assert body["days"][0]["items"] == []
         assert len(body["unscheduled"]) == 6
 
+    def test_big_multi_part_tasks_still_fit(self, client):
+        # Regression: many large multi-part tasks with a near deadline must all
+        # fit into the remaining free time (before the indexing change, empty
+        # days were left blank and parts spilled into "doesn't fit this window").
+        data = _login(client)
+        deadline = (NOW + timedelta(days=4)).isoformat()
+        for title, duration, priority in [
+            ("Circuit notes 8-15", 720, "high"),
+            ("Circuit TD problem set", 360, "medium"),
+            ("Tutorial part 7/8", 300, "medium"),
+            ("Notes + problem set/tutorial part 10-15", 900, "low"),
+        ]:
+            _create(
+                client,
+                data["access_token"],
+                title=title,
+                estimated_duration=duration,
+                priority=priority,
+                deadline=deadline,
+            )
+
+        start = NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+        busy_times = []
+        for offset in range(7):
+            day = start + timedelta(days=offset)
+            busy_times.append(
+                {
+                    "start": (day + timedelta(hours=9)).isoformat(),
+                    "end": (day + timedelta(hours=11)).isoformat(),
+                }
+            )
+            busy_times.append(
+                {
+                    "start": (day + timedelta(hours=13)).isoformat(),
+                    "end": (day + timedelta(hours=17)).isoformat(),
+                }
+            )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": start.date().isoformat(),
+                "end_date": (start + timedelta(days=6)).date().isoformat(),
+                "busy_times": busy_times,
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["unscheduled"] == [], (
+            "all parts must fit; nothing may spill into unscheduled"
+        )
+        # Each task's parts appear in order across the window.
+        for day_index in range(len(body["days"])):
+            seen: dict[str, int] = {}
+            for item in body["days"][day_index]["items"]:
+                previous = seen.get(item["task_title"])
+                assert previous is None or item["part_index"] > previous, (
+                    f"{item['task_title']} parts out of order on "
+                    f'{body["days"][day_index]["date"]}'
+                )
+                seen[item["task_title"]] = item["part_index"]
+
     def test_busy_time_defers_to_unscheduled(self, client):
         data = _login(client)
         _create(client, data["access_token"], estimated_duration=120)

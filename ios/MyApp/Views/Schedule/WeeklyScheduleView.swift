@@ -167,7 +167,7 @@ struct WeeklyScheduleView: View {
                 .padding()
             }
             .refreshable {
-                await loadData()
+                await loadData(force: true)
             }
             .navigationTitle("Schedule")
             .toolbar {
@@ -196,7 +196,7 @@ struct WeeklyScheduleView: View {
                     }
 
                     Button {
-                        Task { await loadData() }
+                        Task { await loadData(force: true) }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
@@ -223,11 +223,11 @@ struct WeeklyScheduleView: View {
             }
             .onChange(of: calendarService.permission) { _, newValue in
                 if newValue == .granted {
-                    Task { await loadData() }
+                    Task { await loadData(force: true) }
                 }
             }
             .onChange(of: taskService.dataVersion) { _, _ in
-                Task { await loadData() }
+                Task { await loadData(force: true) }
             }
             .onChange(of: scheduleService.blocks) { _, _ in
                 rescheduleNotifications()
@@ -664,7 +664,7 @@ struct WeeklyScheduleView: View {
                         Text("Doesn't fit this window")
                             .font(.subheadline.weight(.semibold))
                     }
-                    Text("These tasks need more free time than the selected window has. Extend work hours in Preferences or free up calendar time.")
+                    Text("These tasks genuinely can't be fit before their deadlines within this window. Extend work hours in Preferences, free up calendar time, or break them into smaller pieces.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ForEach(parts) { part in
@@ -1230,7 +1230,20 @@ struct WeeklyScheduleView: View {
 
     // MARK: - Data loading
 
-    private func loadData() async {
+    /// End of the recommended-plan window: at least ~a month out so upcoming
+    /// days share one coherent, spread-out plan instead of replanning a fresh
+    /// single-day window every time the user toggles days (which repeated the
+    /// same urgent tasks and dumped the rest in "doesn't fit"). Tasks with
+    /// deadlines beyond the window are still placed within it (before their
+    /// deadline), so we keep the horizon bounded.
+    private var planningEnd: Date {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let horizon = calendar.date(byAdding: .day, value: 30, to: today) ?? today
+        return max(visibleEnd, horizon)
+    }
+
+    private func loadData(force: Bool = false) async {
         errorDismissed = false
         await scheduleService.loadPreferences()
 
@@ -1252,8 +1265,9 @@ struct WeeklyScheduleView: View {
         if !focusTimerRunning || !hasVisibleRecommendation {
             await recommendationService.load(
                 from: visibleStart,
-                to: visibleEnd,
-                excluding: Set(busyEvents.filter { calendarService.isIgnored($0) }.map(\.id))
+                to: planningEnd,
+                excluding: Set(busyEvents.filter { calendarService.isIgnored($0) }.map(\.id)),
+                force: force
             )
         }
 

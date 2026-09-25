@@ -517,6 +517,32 @@ class TestSortTasks:
         titles = [item["id"] for item in response.json()["items"]]
         assert titles == [low["id"], high["id"]]
 
+    def test_sorts_by_category_ascending_null_last(self, client):
+        data = _login(client)
+        a = _create(client, data["access_token"], title="Alpha", category="Alpha").json()
+        b = _create(client, data["access_token"], title="Beta", category="Beta").json()
+        none_ = _create(client, data["access_token"], title="None", category=None).json()
+
+        response = client.get(
+            "/api/v1/tasks?sort=category",
+            headers=_auth(data["access_token"]),
+        )
+        titles = [item["id"] for item in response.json()["items"]]
+        assert titles == [a["id"], b["id"], none_["id"]]
+
+    def test_sorts_by_category_descending_null_first(self, client):
+        data = _login(client)
+        a = _create(client, data["access_token"], title="Alpha", category="Alpha").json()
+        b = _create(client, data["access_token"], title="Beta", category="Beta").json()
+        none_ = _create(client, data["access_token"], title="None", category=None).json()
+
+        response = client.get(
+            "/api/v1/tasks?sort=category&order=desc",
+            headers=_auth(data["access_token"]),
+        )
+        titles = [item["id"] for item in response.json()["items"]]
+        assert titles == [none_["id"], b["id"], a["id"]]
+
     def test_rejects_unknown_sort(self, client):
         data = _login(client)
         response = client.get(

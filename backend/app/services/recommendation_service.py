@@ -248,78 +248,277 @@ class RecommendationService:
             for part in parts:
                 pending.append((task, part, len(parts)))
 
-        days: list[dict] = []
-        unscheduled: list[dict] = []
-
-        for day in dates:
-            day_slots = sorted(
+        slots_by_date: dict[date, list[TimeSlot]] = {
+            day: sorted(
                 slots_by_day.get(day, []),
                 key=lambda slot: (slot.start, slot.end),
             )
-            capacity = sum(slot.duration_minutes for slot in day_slots)
-            used_by_slot = [0] * len(day_slots)
-            items: list[dict] = []
+            for day in dates
+        }
+        capacity_by_date: dict[date, int] = {
+            day: sum(slot.duration_minutes for slot in slots_by_date[day])
+            for day in dates
+        }
+        used_by_slot: dict[date, list[int]] = {
+            day: [0] * len(slots_by_date[day]) for day in dates
+        }
+        items_by_date: dict[date, list[dict]] = {day: [] for day in dates}
+        used_by_date: dict[date, int] = {day: 0 for day in dates}
 
-            while pending and capacity > 0:
-                task, part, part_count = pending[0]
+        days: list[dict] = []
+        unscheduled: list[dict] = []
+
+        def unscheduled_item(task: Task, part: dict) -> dict:
+            return {
+                "task_id": str(task.id),
+                "task_title": task.title,
+                "part_title": part["title"],
+                "part_index": part["index"],
+                "minutes": part["minutes"],
+                "priority": task.priority.value,
+            }
+
+        # Group each task's parts so all parts of a task are placed together in
+        # index order: a later part is only scheduled on the same day or a later
+        # day than the part before it, so part 9 never shows a time block before
+        # parts 1-8.
+        pending_by_task: list[tuple[Task, list[tuple[dict, int]]]] = []
+        for task, part, part_count in pending:
+            if pending_by_task and pending_by_task[-1][0].id == task.id:
+                pending_by_task[-1][1].append((part, part_count))
+            else:
+                pending_by_task.append((task, [(part, part_count)]))
+
+        def _spread(
+            parts: list[tuple[dict, int]],
+            eligible: set[int],
+            start_index: int,
+            used_date: dict[date, int],
+            used_slot: dict[date, list[int]],
+        ) -> list[tuple[dict, int, date, datetime, datetime]] | None:
+            """Place all parts in order, spread across the eligible days from
+            start_index: each part targets an evenly spaced day so a task's parts
+            fan out across the window (one per day where possible) instead of
+            stacking into a single day. If a target day's capacity is gone the
+            part advances to the next day with room, and later parts may back
+            up against the deadline. Parts of a task always stay in index order
+            (part 6/7 never appears before part 1). Returns None if any part
+            cannot be placed."""
+            order = sorted(eligible)
+            if not order:
+                return None
+            last_index = order[-1]
+            n = len(parts)
+            span = last_index - start_index
+            if n == 1:
+                targets = [start_index]
+            else:
+                targets = [
+                    start_index + int(round(i * span / (n - 1)))
+                    for i in range(n)
+                ]
+            placed: list[tuple[dict, int, date, datetime, datetime]] = []
+            previous = start_index
+            for (part, part_count), target in zip(parts, targets):
                 minutes = part["minutes"]
-                if minutes <= capacity:
-                    block_start, block_end = self._allocate_window(
-                        day_slots, used_by_slot, minutes
-                    )
-                    items.append(
-                        {
-                            "task_id": str(task.id),
-                            "task_title": task.title,
-                            "part_title": part["title"],
-                            "part_index": part["index"],
-                            "part_count": part_count,
-                            "minutes": minutes,
-                            "priority": task.priority.value,
-                            "deadline": (
-                                task.deadline.isoformat() if task.deadline else None
-                            ),
-                            "is_overdue": (
-                                task.deadline is not None and task.deadline < now
-                            ),
-                            "reason": self._reason(
-                                task, part["index"], part_count, tz
-                            ),
-                            "start_at": (
-                                block_start.isoformat() if block_start else None
-                            ),
-                            "end_at": (
-                                block_end.isoformat() if block_end else None
-                            ),
-                        }
-                    )
-                    capacity -= minutes
-                    pending.pop(0)
-                else:
-                    break
+                day_index = max(previous, target)
+                block_start = block_end = None
+                while day_index <= last_index:
+                    day = dates[day_index]
+                    if (
+                        day_index in eligible
+                        and capacity_by_date[day] - used_date[day] >= minutes
+                    ):
+                        block_start, block_end = self._allocate_window(
+                            slots_by_date[day], used_slot[day], minutes
+                        )
+                        if block_start is not None:
+                            break
+                    day_index += 1
+                if day_index > last_index or block_start is None:
+                    return None
+                used_date[dates[day_index]] += minutes
+                placed.append(
+                    (part, part_count, dates[day_index], block_start, block_end)
+                )
+                previous = day_index
+            return placed
 
+        def _pack(
+            parts: list[tuple[dict, int]],
+            eligible: set[int],
+            start_index: int,
+            used_date: dict[date, int],
+            used_slot: dict[date, list[int]],
+        ) -> list[tuple[dict, int, date, datetime, datetime]] | None:
+            """Dense fallback: pack every part into the earliest eligible day
+            with room, holding on to that day until it is full before moving to
+            the next one. Unlike _spread this cannot give up on slack left in
+            earlier days, so it fits whenever the eligible capacity suffices and
+            parts stay in index order."""
+            last = len(dates) - 1
+            current = start_index
+            placed: list[tuple[dict, int, date, datetime, datetime]] = []
+            for part, part_count in parts:
+                minutes = part["minutes"]
+                day_index = current
+                block_start = block_end = None
+                while day_index <= last:
+                    day = dates[day_index]
+                    if (
+                        day_index in eligible
+                        and capacity_by_date[day] - used_date[day] >= minutes
+                    ):
+                        block_start, block_end = self._allocate_window(
+                            slots_by_date[day], used_slot[day], minutes
+                        )
+                        if block_start is not None:
+                            break
+                    day_index += 1
+                if day_index > last or block_start is None:
+                    return None
+                used_date[dates[day_index]] += minutes
+                placed.append(
+                    (part, part_count, dates[day_index], block_start, block_end)
+                )
+                current = day_index
+            return placed
+
+        for task, parts in pending_by_task:
+            minutes_first = parts[0][0]["minutes"]
+            eligible = self._eligible_days(
+                task, dates, tz, window_start, window_end
+            )
+            anchors = [
+                i
+                for i in eligible
+                if capacity_by_date[dates[i]] - used_by_date[dates[i]]
+                >= minutes_first
+            ]
+            if not anchors:
+                unscheduled.extend(
+                    unscheduled_item(task, part) for part, _ in parts
+                )
+                continue
+
+            def load(day_index: int, used_date: dict[date, int]) -> float:
+                day = dates[day_index]
+                capacity = capacity_by_date[day]
+                return used_date[day] / capacity if capacity > 0 else 1.0
+
+            anchor = min(
+                anchors, key=lambda i: (load(i, used_by_date), i)
+            )
+
+            # Prefer spreading the task's parts across the window (so a big
+            # multi-part task fans out one part per day and shares days with
+            # other tasks) anchored at the least-loaded eligible day. If that
+            # leaves slack stranded behind ordered parts, fall back to the
+            # earliest eligible day, then to dense packing so the task still
+            # fits in whatever eligible capacity remains.
+            used_date = dict(used_by_date)
+            used_slot = {d: list(v) for d, v in used_by_slot.items()}
+            placed = _spread(parts, set(eligible), anchor, used_date, used_slot)
+            if placed is None and anchor != eligible[0]:
+                used_date = dict(used_by_date)
+                used_slot = {d: list(v) for d, v in used_by_slot.items()}
+                placed = _spread(
+                    parts, set(eligible), eligible[0], used_date, used_slot
+                )
+            if placed is None:
+                used_date = dict(used_by_date)
+                used_slot = {d: list(v) for d, v in used_by_slot.items()}
+                placed = _pack(
+                    parts, set(eligible), eligible[0], used_date, used_slot
+                )
+            if placed is None:
+                unscheduled.extend(
+                    unscheduled_item(task, part) for part, _ in parts
+                )
+                continue
+
+            used_by_date = used_date
+            used_by_slot = used_slot
+            for part, part_count, day, block_start, block_end in placed:
+                items_by_date[day].append(
+                    {
+                        "task_id": str(task.id),
+                        "task_title": task.title,
+                        "part_title": part["title"],
+                        "part_index": part["index"],
+                        "part_count": part_count,
+                        "minutes": part["minutes"],
+                        "priority": task.priority.value,
+                        "category": task.category,
+                        "deadline": (
+                            task.deadline.isoformat()
+                            if task.deadline
+                            else None
+                        ),
+                        "is_overdue": (
+                            task.deadline is not None and task.deadline < now
+                        ),
+                        "reason": self._reason(
+                            task, part["index"], part_count, tz
+                        ),
+                        "start_at": (
+                            block_start.isoformat() if block_start else None
+                        ),
+                        "end_at": (
+                            block_end.isoformat() if block_end else None
+                        ),
+                    }
+                )
+
+        # Stable chained sort within each day: overdue first, then soonest
+        # deadline, then highest priority, then part order, so items read most-
+        # urgent first and multi-part tasks appear in sequence.
+        priority_string_weight = {
+            "high": PRIORITY_WEIGHT[TaskPriority.high],
+            "medium": PRIORITY_WEIGHT[TaskPriority.medium],
+            "low": PRIORITY_WEIGHT[TaskPriority.low],
+        }
+        for day in dates:
+            items_by_date[day].sort(
+                key=lambda item: (
+                    not item["is_overdue"],
+                    item["deadline"] or "9999",
+                    priority_string_weight.get(item.get("priority"), 1),
+                    item["part_index"],
+                )
+            )
             days.append(
                 {
                     "date": day.isoformat(),
-                    "available_minutes": sum(
-                        slot.duration_minutes for slot in day_slots
-                    ),
-                    "items": items,
-                }
-            )
-
-        for task, part, part_count in pending:
-            unscheduled.append(
-                {
-                    "task_id": str(task.id),
-                    "task_title": task.title,
-                    "part_title": part["title"],
-                    "minutes": part["minutes"],
-                    "priority": task.priority.value,
+                    "available_minutes": capacity_by_date[day],
+                    "items": items_by_date[day],
                 }
             )
 
         return {"days": days, "unscheduled": unscheduled}
+
+    @staticmethod
+    def _eligible_days(
+        task: Task,
+        dates: list[date],
+        tz,
+        window_start: date,
+        window_end: date,
+    ) -> list[int]:
+        """Day indices a part may be placed on while still finishing before the
+        deadline. Overdue work is restricted to the earliest days so it is
+        prioritized; otherwise the window runs from today through the deadline
+        (or the whole window when there is no deadline)."""
+        last = len(dates) - 1
+        if task.deadline is None:
+            return list(range(last + 1))
+        deadline_day = task.deadline.astimezone(tz).date()
+        if deadline_day < window_start:
+            return list(range(min(2, last + 1)))
+        for index, day in enumerate(dates):
+            if day > deadline_day:
+                return list(range(index)) or [0]
+        return list(range(last + 1))
 
     def breakdown_task(self, task: Task) -> dict:
         duration = task.estimated_duration or 30

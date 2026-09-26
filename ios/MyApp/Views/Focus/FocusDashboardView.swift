@@ -136,6 +136,19 @@ struct FocusDashboardView: View {
         let seconds = elapsedSeconds % 60
         return VStack(spacing: 12) {
             if isTimerRunning {
+                if let title = FocusTimerStarter.activeTaskTitle {
+                    VStack(spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.medium))
+                            .lineLimit(1)
+                        if let task = taskService.tasks.first(where: { $0.id == FocusTimerStarter.activeTaskID }),
+                           let remaining = remainingMinutes(for: task) {
+                            Text("\(remaining) min left")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 Text(String(format: "%02d:%02d", minutes, seconds))
                     .font(.system(size: 44, weight: .bold, design: .rounded))
                     .monospacedDigit()
@@ -178,6 +191,12 @@ struct FocusDashboardView: View {
         startTicker()
     }
 
+    private func remainingMinutes(for task: TaskItem) -> Int? {
+        guard let estimated = task.estimatedDuration else { return nil }
+        let done = task.actualDuration ?? 0
+        return max(0, estimated - done)
+    }
+
     private func startTicker() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -188,14 +207,10 @@ struct FocusDashboardView: View {
     }
 
     private func startTimer() {
+        FocusTimerStarter.startFocus()
         timerStartedAtRef = Date().timeIntervalSince1970
         elapsedSeconds = 0
         startTicker()
-        WidgetDataStore.writeFocus(startedAt: timerStartedAtRef, title: "Deep Work Session")
-        WidgetCenter.shared.reloadTimelines(ofKind: "FocusTimerWidget")
-        if #available(iOS 16.1, *) {
-            FocusLiveActivityManager.startLiveActivity()
-        }
     }
 
     private func stopTimer() {
@@ -206,26 +221,43 @@ struct FocusDashboardView: View {
         timerStartedAtRef = 0
         WidgetDataStore.writeFocus(startedAt: 0)
         WidgetCenter.shared.reloadTimelines(ofKind: "FocusTimerWidget")
-        pendingSessionStop = SessionStop(startedAt: started, endedAt: ended)
-        Task {
-            if #available(iOS 16.1, *) {
-                await FocusLiveActivityManager.endLiveActivity(elapsedSeconds: elapsedSeconds)
+        if FocusTimerStarter.activeTaskID != nil {
+            Task {
+                if #available(iOS 16.1, *) {
+                    await FocusLiveActivityManager.endLiveActivity(elapsedSeconds: elapsedSeconds)
+                }
+                await logSession(startedAt: started, endedAt: ended, category: nil)
+            }
+        } else {
+            pendingSessionStop = SessionStop(startedAt: started, endedAt: ended)
+            Task {
+                if #available(iOS 16.1, *) {
+                    await FocusLiveActivityManager.endLiveActivity(elapsedSeconds: elapsedSeconds)
+                }
             }
         }
     }
 
     private func logSession(startedAt: Date, endedAt: Date, category: String?) async {
-        if let category, !category.isEmpty {
-            categoryStore.add(category)
+        let activeTaskID = FocusTimerStarter.activeTaskID
+        let activeCategory = FocusTimerStarter.activeCategory
+        FocusTimerStarter.clearActiveTask()
+        let resolvedCategory = category ?? activeCategory
+        if let resolvedCategory, !resolvedCategory.isEmpty {
+            categoryStore.add(resolvedCategory)
         }
         let seconds = Int(endedAt.timeIntervalSince(startedAt))
         await focus.createSession(
-            taskID: nil,
+            taskID: activeTaskID,
             startedAt: startedAt,
             endedAt: endedAt,
             durationSeconds: seconds,
-            category: category
+            category: resolvedCategory
         )
+        if let activeTaskID, seconds >= 60 {
+            let minutes = seconds / 60
+            try? await taskService.recordTime(id: activeTaskID, minutes: minutes)
+        }
         await rescheduleNotifications()
     }
 

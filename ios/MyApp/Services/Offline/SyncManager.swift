@@ -163,14 +163,15 @@ final class SyncManager {
         let ranked = active.sorted {
             (rank[$0.priority] ?? 1) < (rank[$1.priority] ?? 1)
         }
-        let topTitles = Array(ranked.prefix(3).map(\.title))
+        let topTitles = Array(ranked.prefix(15).map(\.title))
         let existing = WidgetDataStore.read()
         WidgetDataStore.write(
             currentTaskTitle: ranked.first?.title,
             nextTaskTitle: ranked.dropFirst().first?.title,
             tasksRemaining: active.count,
             habitsRemaining: existing.habitsRemaining,
-            topTaskTitles: topTitles
+            topTaskTitles: topTitles,
+            habitTitles: existing.habitTitles
         )
         WidgetCenter.shared.reloadTimelines(ofKind: "CurrentTaskWidget")
         WidgetCenter.shared.reloadTimelines(ofKind: "TasksRemainingWidget")

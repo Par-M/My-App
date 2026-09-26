@@ -3,7 +3,13 @@ import SwiftUI
 
 struct CurrentTaskProvider: TimelineProvider {
     func placeholder(in context: Context) -> CurrentTaskEntry {
-        CurrentTaskEntry(date: Date(), topTaskTitles: ["Finish pitch deck", "Review PRs", "Email landlord"], tasksRemaining: 4, habitsRemaining: 2)
+        CurrentTaskEntry(
+            date: Date(),
+            topTaskTitles: ["Finish pitch deck", "Review PRs", "Email landlord"],
+            habitTitles: ["Morning run", "Read 30 min"],
+            tasksRemaining: 4,
+            habitsRemaining: 2
+        )
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
@@ -11,6 +17,7 @@ struct CurrentTaskProvider: TimelineProvider {
         completion(CurrentTaskEntry(
             date: Date(),
             topTaskTitles: data.topTaskTitles,
+            habitTitles: data.habitTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         ))
@@ -21,6 +28,7 @@ struct CurrentTaskProvider: TimelineProvider {
         let entry = CurrentTaskEntry(
             date: Date(),
             topTaskTitles: data.topTaskTitles,
+            habitTitles: data.habitTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         )
@@ -32,6 +40,7 @@ struct CurrentTaskProvider: TimelineProvider {
 struct CurrentTaskEntry: TimelineEntry {
     let date: Date
     let topTaskTitles: [String]
+    let habitTitles: [String]
     let tasksRemaining: Int
     let habitsRemaining: Int
 }
@@ -51,7 +60,7 @@ struct CurrentTaskWidget: Widget {
 
 struct TasksRemainingProvider: TimelineProvider {
     func placeholder(in context: Context) -> CurrentTaskEntry {
-        CurrentTaskEntry(date: Date(), topTaskTitles: [], tasksRemaining: 4, habitsRemaining: 2)
+        CurrentTaskEntry(date: Date(), topTaskTitles: [], habitTitles: ["Morning run"], tasksRemaining: 4, habitsRemaining: 2)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CurrentTaskEntry) -> Void) {
@@ -59,6 +68,7 @@ struct TasksRemainingProvider: TimelineProvider {
         completion(CurrentTaskEntry(
             date: Date(),
             topTaskTitles: data.topTaskTitles,
+            habitTitles: data.habitTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         ))
@@ -69,6 +79,7 @@ struct TasksRemainingProvider: TimelineProvider {
         let entry = CurrentTaskEntry(
             date: Date(),
             topTaskTitles: data.topTaskTitles,
+            habitTitles: data.habitTitles,
             tasksRemaining: data.tasksRemaining,
             habitsRemaining: data.habitsRemaining
         )

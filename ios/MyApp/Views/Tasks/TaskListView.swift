@@ -3,6 +3,7 @@ import SwiftUI
 struct TaskRow: View {
     let task: TaskItem
     var onChangeStatus: (TaskStatus) -> Void = { _ in }
+    var onStartFocus: (TaskItem) -> Void = { _ in }
 
     private var statusColor: Color {
         switch task.status {
@@ -20,6 +21,18 @@ struct TaskRow: View {
                     .font(.body.weight(.medium))
                     .strikethrough(task.status == .completed, color: .secondary)
                     .lineLimit(1)
+                Spacer(minLength: 4)
+                if task.status != .completed {
+                    Button {
+                        onStartFocus(task)
+                    } label: {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Start focus on \(task.title)")
+                }
             }
 
             HStack(spacing: 12) {
@@ -58,16 +71,13 @@ struct TaskRow: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 Text(task.status.label)
                     .font(.caption2.weight(.medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9).weight(.semibold))
+                    .font(.system(size: 8).weight(.semibold))
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(statusColor.opacity(0.15), in: Capsule())
             .foregroundStyle(statusColor)
             .fixedSize()
         }
@@ -77,6 +87,7 @@ struct TaskRow: View {
 struct DeferredTaskRow: View {
     let task: TaskItem
     var onChangeStatus: (TaskStatus) -> Void = { _ in }
+    var onStartFocus: (TaskItem) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -88,6 +99,16 @@ struct DeferredTaskRow: View {
                     Text(task.title)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button {
+                        onStartFocus(task)
+                    } label: {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.tint)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Start focus on \(task.title)")
                 }
                 HStack(spacing: 12) {
                     if let deadline = task.deadline {
@@ -117,16 +138,13 @@ struct DeferredTaskRow: View {
                             }
                         }
                     } label: {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 2) {
                             Text(task.status.label)
                                 .font(.caption2.weight(.medium))
                                 .lineLimit(1)
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 9).weight(.semibold))
+                                .font(.system(size: 8).weight(.semibold))
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.15), in: Capsule())
                         .foregroundStyle(.orange)
                         .fixedSize()
                     }
@@ -235,6 +253,14 @@ struct TaskListView: View {
         }
     }
 
+    private func startFocus(_ task: TaskItem) {
+        FocusTimerStarter.startFocus(
+            taskID: task.id,
+            title: task.title,
+            category: task.category
+        )
+    }
+
     private var activeTasks: [TaskItem] {
         taskService.tasks.filter { $0.status != .completed }
     }
@@ -283,6 +309,8 @@ struct TaskListView: View {
                                             Task {
                                                 try? await taskService.setStatus(status, for: task)
                                             }
+                                        } onStartFocus: { task in
+                                            startFocus(task)
                                         }
                                     }
                                 }
@@ -302,6 +330,8 @@ struct TaskListView: View {
                                     Task {
                                         try? await taskService.setStatus(status, for: task)
                                     }
+                                } onStartFocus: { task in
+                                    startFocus(task)
                                 }
                             }
                         }
@@ -461,20 +491,20 @@ struct TaskListView: View {
             } message: {
                 Text("You can sign back in anytime. Your data is synced to your account.")
             }
-            .task(id: loadKey) {
-                await taskService.loadTasks(
-                    search: searchText,
-                    sort: sortOption,
-                    order: sortAscending ? "asc" : "desc"
-                )
-            }
-            .task {
-                await taskService.loadOverdue()
-            }
-            .onChange(of: taskService.tasks) { _, tasks in
-                notificationService.scheduleLocalNotifications(tasks: tasks)
-            }
-            .overlay(alignment: .bottom) {
+.task(id: loadKey) {
+                        await taskService.loadTasks(
+                            search: searchText,
+                            sort: sortOption,
+                            order: sortAscending ? "asc" : "desc"
+                        )
+                    }
+.task {
+                        await taskService.loadOverdue()
+                    }
+                    .onChange(of: taskService.tasks) { _, tasks in
+                        notificationService.scheduleLocalNotifications(tasks: tasks)
+                    }
+                    .overlay(alignment: .bottom) {
                 if let errorMessage = taskService.errorMessage, !errorDismissed {
                     VStack {
                         HStack {

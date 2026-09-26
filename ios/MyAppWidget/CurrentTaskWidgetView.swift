@@ -189,6 +189,10 @@ struct TasksRemainingWidgetView: View {
         )
     }
 
+    private var totalItems: Int {
+        entry.topTaskTitles.count + entry.habitTitles.count
+    }
+
     private func countRow(
         icon: String,
         iconColor: Color,
@@ -196,7 +200,7 @@ struct TasksRemainingWidgetView: View {
         label: String,
         size: CGFloat
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: icon)
                 .foregroundStyle(iconColor)
                 .font(.system(size: size * 0.4, weight: .semibold))
@@ -210,76 +214,127 @@ struct TasksRemainingWidgetView: View {
         }
     }
 
+    private func itemRow(title: String, isTask: Bool) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(isTask ? Color.orange : Color.green)
+                .frame(width: 6, height: 6)
+            Text(title)
+                .font(.system(size: 11, weight: .regular))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func itemColumn(title: String, row: @escaping (Int) -> some View, count: Int) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            ForEach(0..<count, id: \.self) { index in
+                row(index)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var isAllClear: Bool {
+        entry.tasksRemaining == 0 && entry.habitsRemaining == 0
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(.green)
+            Text("All clear")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Large
+
     private var largeLayout: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label("Progress Today", systemImage: "chart.bar.fill")
-                .font(.system(size: 15, weight: .bold))
-
-            HStack(spacing: 24) {
-                countRow(icon: "checklist", iconColor: .orange, count: entry.tasksRemaining, label: "tasks", size: 40)
-                countRow(icon: "checkmark.circle", iconColor: .green, count: entry.habitsRemaining, label: "habits", size: 40)
-            }
-
-            Divider().opacity(0.4)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Next up")
-                    .font(.system(size: 12, weight: .semibold))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Progress Today", systemImage: "chart.bar.fill")
+                    .font(.system(size: 15, weight: .bold))
+                Spacer()
+                Text("\(entry.tasksRemaining) tasks · \(entry.habitsRemaining) habits")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                if entry.topTaskTitles.isEmpty {
-                    Text("All clear — nothing pending.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(entry.topTaskTitles.prefix(4).enumerated()), id: \.offset) { index, title in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(index == 0 ? Color.orange : Color.secondary.opacity(0.4))
-                                .frame(width: 7, height: 7)
-                            Text(title)
-                                .font(.system(size: 13, weight: index == 0 ? .semibold : .regular))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .foregroundStyle(index == 0 ? Color.primary : Color.secondary)
-                        }
-                    }
-                }
             }
 
-            Spacer(minLength: 0)
+            if isAllClear && totalItems == 0 {
+                Spacer(minLength: 0)
+                emptyState
+                Spacer(minLength: 0)
+            } else {
+                HStack(alignment: .top, spacing: 16) {
+                    itemColumn(title: "Tasks", row: { index in
+                        itemRow(title: entry.topTaskTitles[index], isTask: true)
+                    }, count: min(entry.topTaskTitles.count, 8))
+
+                    itemColumn(title: "Habits", row: { index in
+                        itemRow(title: entry.habitTitles[index], isTask: false)
+                    }, count: min(entry.habitTitles.count, 8))
+                }
+                Spacer(minLength: 0)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) { background }
     }
+
+    // MARK: - Medium
 
     private var mediumLayout: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 14) {
-                countRow(icon: "checklist", iconColor: .orange, count: entry.tasksRemaining, label: "tasks", size: 30)
-                countRow(icon: "checkmark.circle", iconColor: .green, count: entry.habitsRemaining, label: "habits", size: 30)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text("Tasks · Habits")
+                    .font(.system(size: 12, weight: .bold))
+                Spacer()
+                Text("\(entry.tasksRemaining) tasks · \(entry.habitsRemaining) habits")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            Spacer()
-            if let title = entry.topTaskTitles.first {
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Top task")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Text(title)
-                        .font(.system(size: 12, weight: .medium))
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.7)
+
+            if isAllClear && totalItems == 0 {
+                Spacer(minLength: 0)
+                emptyState
+                Spacer(minLength: 0)
+            } else {
+                HStack(alignment: .top, spacing: 16) {
+                    itemColumn(title: "Tasks", row: { index in
+                        itemRow(title: entry.topTaskTitles[index], isTask: true)
+                    }, count: min(entry.topTaskTitles.count, 4))
+
+                    itemColumn(title: "Habits", row: { index in
+                        itemRow(title: entry.habitTitles[index], isTask: false)
+                    }, count: min(entry.habitTitles.count, 4))
                 }
+                Spacer(minLength: 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) { background }
     }
 
+    // MARK: - Small
+
     private var smallLayout: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            countRow(icon: "checklist", iconColor: .orange, count: entry.tasksRemaining, label: "tasks", size: 22)
-            countRow(icon: "checkmark.circle", iconColor: .green, count: entry.habitsRemaining, label: "habits", size: 22)
+        VStack(alignment: .leading, spacing: 8) {
+            countRow(icon: "checklist", iconColor: .orange, count: entry.tasksRemaining, label: "tasks", size: 18)
+            countRow(icon: "checkmark.circle", iconColor: .green, count: entry.habitsRemaining, label: "habits", size: 18)
+
+            if let title = entry.topTaskTitles.first {
+                Divider().opacity(0.4)
+                itemRow(title: title, isTask: true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) { background }

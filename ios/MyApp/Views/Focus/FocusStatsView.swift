@@ -5,6 +5,7 @@ struct FocusStatsView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum Granularity: String, CaseIterable, Identifiable {
+        case oneDay = "1 Day"
         case threeDays = "3 Days"
         case week = "1 Week"
         case twoWeeks = "2 Weeks"
@@ -12,7 +13,7 @@ struct FocusStatsView: View {
         var id: String { rawValue }
     }
 
-    @State private var granularity: Granularity = .threeDays
+    @State private var granularity: Granularity = .oneDay
     @State private var editingSession: FocusSession?
 
     private var sessions: [FocusSession] { focus.dailySessions }
@@ -212,11 +213,15 @@ struct FocusStatsView: View {
     }
 
     private var usesDailyBuckets: Bool {
-        granularity == .threeDays || granularity == .week
+        switch granularity {
+        case .oneDay, .threeDays, .week: true
+        case .twoWeeks, .fourWeeks: false
+        }
     }
 
     private var dayCount: Int {
         switch granularity {
+        case .oneDay: 1
         case .threeDays: 3
         case .week: 7
         default: 0
@@ -253,10 +258,11 @@ struct FocusStatsView: View {
             totals[date, default: [:]][category, default: 0] += session.durationSeconds / 60
         }
 
+        let isOneDay = granularity == .oneDay
         return bucketDates.map { date in
             FocusChartItem(
                 date: date,
-                label: daily ? Self.dailyLabel(date) : Self.weeklyLabel(date),
+                label: isOneDay ? "Today" : (daily ? Self.dailyLabel(date) : Self.weeklyLabel(date)),
                 isToday: daily ? calendar.isDateInToday(date)
                     : (self.currentWeekStart == date),
                 segments: categories.map { category in
@@ -373,16 +379,26 @@ enum FocusChartColors {
     static let secondaryText = Color.white.opacity(0.55)
 
     static let palette: [Color] = [
-        Color(red: 0.99, green: 0.42, blue: 0.42), // coral
-        Color(red: 0.31, green: 0.80, blue: 0.78), // teal
-        Color(red: 1.00, green: 0.85, blue: 0.24), // sunny
-        Color(red: 0.47, green: 0.51, blue: 0.93), // periwinkle
-        Color(red: 1.00, green: 0.62, blue: 0.29), // orange
-        Color(red: 0.86, green: 0.42, blue: 0.89), // orchid
-        Color(red: 0.24, green: 0.84, blue: 0.60), // mint
-        Color(red: 0.95, green: 0.32, blue: 0.58), // magenta
-        Color(red: 0.55, green: 0.76, blue: 0.95), // light blue
-        Color(red: 0.98, green: 0.83, blue: 0.64), // peach
+        Color(red: 0.93, green: 0.33, blue: 0.33), // coral red
+        Color(red: 0.16, green: 0.63, blue: 0.60), // teal
+        Color(red: 1.00, green: 0.84, blue: 0.20), // sunny yellow
+        Color(red: 0.40, green: 0.45, blue: 0.87), // periwinkle
+        Color(red: 1.00, green: 0.60, blue: 0.25), // orange
+        Color(red: 0.75, green: 0.42, blue: 0.87), // orchid
+        Color(red: 0.25, green: 0.78, blue: 0.45), // emerald
+        Color(red: 0.92, green: 0.34, blue: 0.61), // magenta
+        Color(red: 0.32, green: 0.66, blue: 0.93), // sky blue
+        Color(red: 0.93, green: 0.78, blue: 0.55), // sand
+        Color(red: 0.55, green: 0.37, blue: 0.30), // umber
+        Color(red: 0.62, green: 0.83, blue: 0.44), // lime
+        Color(red: 0.65, green: 0.36, blue: 0.55), // plum
+        Color(red: 0.25, green: 0.55, blue: 0.82), // steel blue
+        Color(red: 0.89, green: 0.47, blue: 0.67), // rose
+        Color(red: 0.96, green: 0.68, blue: 0.35), // apricot
+        Color(red: 0.38, green: 0.53, blue: 0.38), // olive
+        Color(red: 0.50, green: 0.73, blue: 0.73), // seafoam
+        Color(red: 0.73, green: 0.60, blue: 0.88), // lilac
+        Color(red: 0.80, green: 0.74, blue: 0.40), // mustard
     ]
 
     static func color(for category: String) -> Color {

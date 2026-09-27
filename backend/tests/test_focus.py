@@ -56,6 +56,41 @@ def test_create_focus_session_blank_category_rejected(client: TestClient) -> Non
     assert resp.json()["category"] is None
 
 
+def test_create_focus_session_longer_than_a_day_accepted(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    started = datetime.now(timezone.utc)
+    ended = started + timedelta(hours=30)
+    resp = client.post(
+        "/api/v1/focus/sessions",
+        headers=headers,
+        json={
+            "task_id": None,
+            "started_at": started.isoformat(),
+            "ended_at": ended.isoformat(),
+            "duration_seconds": 30 * 60 * 60,
+            "category": "Work",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["duration_seconds"] == 30 * 60 * 60
+
+
+def test_create_focus_session_zero_duration_rejected(client: TestClient) -> None:
+    headers = _auth_headers(client)
+    started = datetime.now(timezone.utc)
+    resp = client.post(
+        "/api/v1/focus/sessions",
+        headers=headers,
+        json={
+            "task_id": None,
+            "started_at": started.isoformat(),
+            "ended_at": (started + timedelta(minutes=25)).isoformat(),
+            "duration_seconds": 0,
+        },
+    )
+    assert resp.status_code == 422, resp.text
+
+
 def test_end_before_start_rejected(client: TestClient) -> None:
     headers = _auth_headers(client)
     started = datetime.now(timezone.utc)

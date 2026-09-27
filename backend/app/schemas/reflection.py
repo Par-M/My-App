@@ -14,7 +14,7 @@ class FocusSessionCreate(BaseModel):
     task_id: uuid.UUID | None = None
     started_at: datetime
     ended_at: datetime
-    duration_seconds: int | None = Field(default=None, ge=1, le=86400)
+    duration_seconds: int | None = Field(default=None, ge=1, le=2_592_000)
     category: str | None = Field(default=None, max_length=100)
 
     @field_validator("ended_at")

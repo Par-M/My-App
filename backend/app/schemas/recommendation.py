@@ -26,6 +26,7 @@ class RecommendedPart(BaseModel):
     part_count: int
     minutes: int
     priority: TaskPriority
+    category: str | None = None
     deadline: datetime | None = None
     is_overdue: bool = False
     reason: str = ""
@@ -39,6 +40,7 @@ class UnscheduledPart(BaseModel):
     part_title: str | None
     minutes: int
     priority: TaskPriority
+    category: str | None = None
 
 
 class DayRecommendation(BaseModel):

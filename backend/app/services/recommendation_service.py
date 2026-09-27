@@ -276,6 +276,7 @@ class RecommendationService:
                 "part_index": part["index"],
                 "minutes": part["minutes"],
                 "priority": task.priority.value,
+                "category": task.category,
             }
 
         # Group each task's parts so all parts of a task are placed together in

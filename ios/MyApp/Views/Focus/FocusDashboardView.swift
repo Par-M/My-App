@@ -246,7 +246,7 @@ struct FocusDashboardView: View {
         if let resolvedCategory, !resolvedCategory.isEmpty {
             categoryStore.add(resolvedCategory)
         }
-        let seconds = Int(endedAt.timeIntervalSince(startedAt))
+        let seconds = max(1, Int(endedAt.timeIntervalSince(startedAt)))
         await focus.createSession(
             taskID: activeTaskID,
             startedAt: startedAt,

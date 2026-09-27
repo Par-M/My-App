@@ -33,14 +33,14 @@ struct TaskRow: View {
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Start focus on \(task.title)")
                 }
+                if let estimated = task.estimatedDuration {
+                    TimeFractionLabel(actual: task.actualDuration ?? 0, estimated: estimated)
+                }
             }
 
             HStack(spacing: 12) {
                 if let deadline = task.deadline {
-                    Label(
-                        deadline.formatted(date: .abbreviated, time: .omitted),
-                        systemImage: "calendar"
-                    )
+                    Label(monthDay(deadline), systemImage: "calendar")
                 }
                 if let category = task.category, !category.isEmpty {
                     Text(category)
@@ -55,6 +55,10 @@ struct TaskRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    private func monthDay(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     private var statusMenu: some View {
@@ -109,11 +113,14 @@ struct DeferredTaskRow: View {
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel("Start focus on \(task.title)")
+                    if let estimated = task.estimatedDuration {
+                        TimeFractionLabel(actual: task.actualDuration ?? 0, estimated: estimated)
+                    }
                 }
                 HStack(spacing: 12) {
                     if let deadline = task.deadline {
                         Label(
-                            "Missed \(deadline.formatted(date: .abbreviated, time: .shortened))",
+                            "Missed \(monthDay(deadline))",
                             systemImage: "calendar.badge.exclamationmark"
                         )
                     } else if let start = task.startAt {
@@ -154,6 +161,35 @@ struct DeferredTaskRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private func monthDay(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).day())
+    }
+}
+
+struct TimeFractionLabel: View {
+    let actual: Int
+    let estimated: Int
+
+    private var color: Color {
+        guard estimated > 0 else { return Color.secondary }
+        switch Double(actual) / Double(estimated) {
+        case ...0.5:
+            return Color.secondary
+        case ...1.0:
+            return Color.orange
+        default:
+            return Color.green
+        }
+    }
+
+    var body: some View {
+        Text("\(actual)/\(estimated)min")
+            .font(.caption2.weight(.medium))
+            .monospacedDigit()
+            .foregroundStyle(color)
+            .lineLimit(1)
     }
 }
 

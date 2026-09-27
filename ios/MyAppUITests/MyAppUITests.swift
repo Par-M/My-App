@@ -70,9 +70,16 @@ final class MyAppUITests: XCTestCase {
     }
 
     @MainActor
-    func testDevSignInAndLogout() throws {
+    private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
         app.launch()
+        return app
+    }
+
+    @MainActor
+    func testDevSignInAndLogout() throws {
+        let app = launchApp()
 
         signIn(app)
 
@@ -84,8 +91,7 @@ final class MyAppUITests: XCTestCase {
 
     @MainActor
     func testCreateEditSearchArchiveRestoreDelete() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
 
         signIn(app)
         deleteAllVisibleTasks(app)
@@ -178,40 +184,31 @@ final class MyAppUITests: XCTestCase {
     }
 
     @MainActor
-    func testScheduleTabShowsDayWeekMonthViews() throws {
-        let app = XCUIApplication()
-        app.launch()
+    func testScheduleTabShowsCalendarAndReview() throws {
+        let app = launchApp()
 
         signIn(app)
         app.tabBars.buttons["Schedule"].tap()
 
-        let dayButton = app.buttons["Day"]
-        XCTAssertTrue(dayButton.waitForExistence(timeout: 10), "Day segmented control should exist")
-        XCTAssertTrue(app.buttons["Week"].exists, "Week segmented control should exist")
-        XCTAssertTrue(app.buttons["Month"].exists, "Month segmented control should exist")
+        let calendarButton = app.buttons["Calendar"]
+        XCTAssertTrue(calendarButton.waitForExistence(timeout: 10), "Calendar segmented control should exist")
+        XCTAssertTrue(app.buttons["Review"].exists, "Review segmented control should exist")
 
         XCTAssertTrue(
-            app.staticTexts["Today"].waitForExistence(timeout: 10),
-            "Day view should default to today"
+            app.buttons["Previous month"].waitForExistence(timeout: 10),
+            "Calendar should be visible with month navigation"
         )
 
-        app.buttons["Month"].tap()
+        app.buttons["Review"].tap()
         XCTAssertTrue(
-            dayButton.waitForExistence(timeout: 5),
-            "App should stay responsive after switching to month view"
-        )
-
-        app.buttons["Week"].tap()
-        XCTAssertTrue(
-            dayButton.waitForExistence(timeout: 5),
-            "App should stay responsive after switching to week view"
+            calendarButton.waitForExistence(timeout: 5),
+            "App should stay responsive after switching to review view"
         )
     }
 
     @MainActor
     func testEmptyState() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
 
         signIn(app)
         deleteAllVisibleTasks(app)

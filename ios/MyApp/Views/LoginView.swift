@@ -38,13 +38,14 @@ struct LoginView: View {
             }
             .disabled(isLoading)
 
-            #if DEBUG
-            Button("Development Sign In") {
-                Task { await signInDev() }
+            let devSignInEnabled = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+            if devSignInEnabled {
+                Button("Development Sign In") {
+                    Task { await signInDev() }
+                }
+                .font(.footnote)
+                .disabled(isLoading)
             }
-            .font(.footnote)
-            .disabled(isLoading)
-            #endif
 
             if isLoading {
                 ProgressView()

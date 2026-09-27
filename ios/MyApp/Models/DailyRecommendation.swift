@@ -8,6 +8,7 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
     let partCount: Int
     let minutes: Int
     let priority: TaskPriority
+    let category: String?
     let deadline: Date?
     let isOverdue: Bool
     let reason: String
@@ -26,6 +27,7 @@ struct RecommendedPart: Codable, Identifiable, Hashable, Sendable {
         case partCount = "part_count"
         case minutes
         case priority
+        case category
         case deadline
         case isOverdue = "is_overdue"
         case reason
@@ -46,6 +48,7 @@ struct UnscheduledPart: Codable, Identifiable, Hashable, Sendable {
     let partTitle: String?
     let minutes: Int
     let priority: TaskPriority
+    let category: String?
 
     var id: String { "\(taskId.uuidString)-\(partTitle ?? "")" }
 
@@ -55,6 +58,7 @@ struct UnscheduledPart: Codable, Identifiable, Hashable, Sendable {
         case partTitle = "part_title"
         case minutes
         case priority
+        case category
     }
 }
 

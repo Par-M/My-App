@@ -5,8 +5,8 @@ services:
         restart: unless-stopped
         
         environment:
-            POSTGRES_USER: Parthiv
-            POSTGRES_PASSWORD: testing123
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
             POSTGRES_DB: myapp_db
             
         ports:

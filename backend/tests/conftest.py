@@ -2,7 +2,7 @@ import os
 
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql+psycopg://Parthiv:testing123@localhost:5432/myapp_test",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test",
 )
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("GOOGLE_CLIENT_ID", "")

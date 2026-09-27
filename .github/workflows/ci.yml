@@ -12,8 +12,8 @@ jobs:
       postgres:
         image: postgres:17
         env:
-          POSTGRES_USER: Parthiv
-          POSTGRES_PASSWORD: testing123
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: myapp_test
         ports:
           - 5432:5432
@@ -40,10 +40,10 @@ jobs:
 
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql+psycopg://Parthiv:testing123@localhost:5432/myapp_test
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
         run: alembic upgrade head
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+psycopg://Parthiv:testing123@localhost:5432/myapp_test
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
         run: python -m pytest tests -q

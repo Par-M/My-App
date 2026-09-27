@@ -1,10 +1,20 @@
 # Lock In Bud
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Par-M/lock-in-bud/ci.yml?branch=main&label=backend%20CI&logo=github)](https://github.com/Par-M/lock-in-bud/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Par-M/lock-in-bud/blob/main/LICENSE)
+[![Made with Swift](https://img.shields.io/badge/iOS%20app-SwiftUI-orange.svg)](#)
+[![Backend](https://img.shields.io/badge/backend-FastAPI-009688.svg)](#)
+[![Live](https://img.shields.io/badge/live-lock--in--bud.vercel.app-6f42c1.svg)](https://lock-in-bud.vercel.app)
+
 An AI-powered daily planner for iOS **and Mac**. It shows the events already in your Apple Calendar, then recommends which tasks you can realistically complete each day based on your free time, task durations, priorities, and due dates. No forced time slots, just smart guidance.
 
 - **iOS / Mac app**: SwiftUI, offline-first with local storage and background sync (the Mac app shares the same codebase via Mac Catalyst)
 - **Home Screen / Mac widgets**: family-sized task widgets plus a live focus-timer widget
 - **Backend API**: Python FastAPI + PostgreSQL (hosted on **Neon**), AI scheduling via Google Gemini, deployed on Vercel as a serverless function (no Docker)
+
+## Screenshots
+
+> Screenshots coming soon.
 
 ## Features
 

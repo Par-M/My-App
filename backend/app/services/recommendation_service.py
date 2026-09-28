@@ -219,8 +219,13 @@ class RecommendationService:
         preference = self._preference()
         tasks = self._sort_tasks(self._active_tasks(), now)
 
+        # Free time is only computed for today onward. The window commonly
+        # starts at the beginning of the current month (before today), and
+        # treating those already-elapsed days as free made the recommender
+        # anchor on the past, leaving today's recommendations empty.
+        free_dates = [day for day in dates if day >= today]
         free_slots = find_free_slots(
-            dates=dates,
+            dates=free_dates,
             busy=[
                 TimeSlot(busy.start, busy.end)
                 for busy in busy_times
@@ -507,19 +512,31 @@ class RecommendationService:
         window_end: date,
     ) -> list[int]:
         """Day indices a part may be placed on while still finishing before the
-        deadline. Overdue work is restricted to the earliest days so it is
-        prioritized; otherwise the window runs from today through the deadline
-        (or the whole window when there is no deadline)."""
+        deadline. Overdue work is restricted to the earliest usable days so it
+        is prioritized; otherwise the window runs from today through the
+        deadline (or the whole window when there is no deadline). Days before
+        today are never eligible: the window commonly starts at the beginning
+        of the current month, and recommending into the past leaves today
+        empty."""
         last = len(dates) - 1
+        today_local = _utc_now().astimezone(tz).date()
+        first_usable = next(
+            (i for i, day in enumerate(dates) if day >= today_local), last + 1
+        )
+        if first_usable > last:
+            return []
         if task.deadline is None:
-            return list(range(last + 1))
+            return list(range(first_usable, last + 1))
         deadline_day = task.deadline.astimezone(tz).date()
-        if deadline_day < window_start:
-            return list(range(min(2, last + 1)))
+        if deadline_day < window_start or deadline_day < today_local:
+            return (
+                list(range(first_usable, min(first_usable + 2, last + 1)))
+                or [first_usable]
+            )
         for index, day in enumerate(dates):
             if day > deadline_day:
-                return list(range(index)) or [0]
-        return list(range(last + 1))
+                return list(range(max(first_usable, 0), max(index, first_usable)))
+        return list(range(first_usable, last + 1))
 
     def breakdown_task(self, task: Task) -> dict:
         duration = task.estimated_duration or 30

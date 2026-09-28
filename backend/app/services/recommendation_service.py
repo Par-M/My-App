@@ -295,61 +295,6 @@ class RecommendationService:
             else:
                 pending_by_task.append((task, [(part, part_count)]))
 
-        def _spread(
-            parts: list[tuple[dict, int]],
-            eligible: set[int],
-            start_index: int,
-            used_date: dict[date, int],
-            used_slot: dict[date, list[int]],
-        ) -> list[tuple[dict, int, date, datetime, datetime]] | None:
-            """Place all parts in order, spread across the eligible days from
-            start_index: each part targets an evenly spaced day so a task's parts
-            fan out across the window (one per day where possible) instead of
-            stacking into a single day. If a target day's capacity is gone the
-            part advances to the next day with room, and later parts may back
-            up against the deadline. Parts of a task always stay in index order
-            (part 6/7 never appears before part 1). Returns None if any part
-            cannot be placed."""
-            order = sorted(eligible)
-            if not order:
-                return None
-            last_index = order[-1]
-            n = len(parts)
-            span = last_index - start_index
-            if n == 1:
-                targets = [start_index]
-            else:
-                targets = [
-                    start_index + int(round(i * span / (n - 1)))
-                    for i in range(n)
-                ]
-            placed: list[tuple[dict, int, date, datetime, datetime]] = []
-            previous = start_index
-            for (part, part_count), target in zip(parts, targets):
-                minutes = part["minutes"]
-                day_index = max(previous, target)
-                block_start = block_end = None
-                while day_index <= last_index:
-                    day = dates[day_index]
-                    if (
-                        day_index in eligible
-                        and capacity_by_date[day] - used_date[day] >= minutes
-                    ):
-                        block_start, block_end = self._allocate_window(
-                            slots_by_date[day], used_slot[day], minutes
-                        )
-                        if block_start is not None:
-                            break
-                    day_index += 1
-                if day_index > last_index or block_start is None:
-                    return None
-                used_date[dates[day_index]] += minutes
-                placed.append(
-                    (part, part_count, dates[day_index], block_start, block_end)
-                )
-                previous = day_index
-            return placed
-
         def _pack(
             parts: list[tuple[dict, int]],
             eligible: set[int],
@@ -357,11 +302,12 @@ class RecommendationService:
             used_date: dict[date, int],
             used_slot: dict[date, list[int]],
         ) -> list[tuple[dict, int, date, datetime, datetime]] | None:
-            """Dense fallback: pack every part into the earliest eligible day
-            with room, holding on to that day until it is full before moving to
-            the next one. Unlike _spread this cannot give up on slack left in
-            earlier days, so it fits whenever the eligible capacity suffices and
-            parts stay in index order."""
+            """Pack every part into the earliest eligible day with room,
+            holding on to that day until it is full before moving to the next
+            one, so the recommended section fills today (then tomorrow, ...)
+            with the full time each task needs. Parts stay in index order and
+            never get placed on days before their earliest eligible day.
+            Returns None if any part cannot be placed."""
             last = len(dates) - 1
             current = start_index
             placed: list[tuple[dict, int, date, datetime, datetime]] = []
@@ -391,52 +337,25 @@ class RecommendationService:
             return placed
 
         for task, parts in pending_by_task:
-            minutes_first = parts[0][0]["minutes"]
             eligible = self._eligible_days(
                 task, dates, tz, window_start, window_end
             )
-            anchors = [
-                i
-                for i in eligible
-                if capacity_by_date[dates[i]] - used_by_date[dates[i]]
-                >= minutes_first
-            ]
-            if not anchors:
+            if not eligible:
                 unscheduled.extend(
                     unscheduled_item(task, part) for part, _ in parts
                 )
                 continue
 
-            def load(day_index: int, used_date: dict[date, int]) -> float:
-                day = dates[day_index]
-                capacity = capacity_by_date[day]
-                return used_date[day] / capacity if capacity > 0 else 1.0
-
-            anchor = min(
-                anchors, key=lambda i: (load(i, used_by_date), i)
-            )
-
-            # Prefer spreading the task's parts across the window (so a big
-            # multi-part task fans out one part per day and shares days with
-            # other tasks) anchored at the least-loaded eligible day. If that
-            # leaves slack stranded behind ordered parts, fall back to the
-            # earliest eligible day, then to dense packing so the task still
-            # fits in whatever eligible capacity remains.
+            # Pack the task's parts into the earliest eligible days, holding a
+            # day until it is full before moving forward, so the recommended
+            # section fills today (then tomorrow, ...) with the full time each
+            # task needs. Anchoring at the least-loaded day instead made empty
+            # future days win and starved today.
             used_date = dict(used_by_date)
             used_slot = {d: list(v) for d, v in used_by_slot.items()}
-            placed = _spread(parts, set(eligible), anchor, used_date, used_slot)
-            if placed is None and anchor != eligible[0]:
-                used_date = dict(used_by_date)
-                used_slot = {d: list(v) for d, v in used_by_slot.items()}
-                placed = _spread(
-                    parts, set(eligible), eligible[0], used_date, used_slot
-                )
-            if placed is None:
-                used_date = dict(used_by_date)
-                used_slot = {d: list(v) for d, v in used_by_slot.items()}
-                placed = _pack(
-                    parts, set(eligible), eligible[0], used_date, used_slot
-                )
+            placed = _pack(
+                parts, set(eligible), eligible[0], used_date, used_slot
+            )
             if placed is None:
                 unscheduled.extend(
                     unscheduled_item(task, part) for part, _ in parts

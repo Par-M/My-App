@@ -405,7 +405,10 @@ class TestDailyRecommendationsEndpoint:
         ]
         assert all(item["task_title"] != "All done" for item in items)
 
-    def test_work_does_not_cram_into_earliest_day(self, client):
+    def test_work_packs_into_earliest_day(self, client):
+        # We deliberately pack earliest days first: every task's full time
+        # appears on today (which has plenty of room), not one fanned-out part
+        # per future day.
         data = _login(client)
         _create(client, data["access_token"], title="A", estimated_duration=60)
         _create(client, data["access_token"], title="B", estimated_duration=60)
@@ -417,11 +420,19 @@ class TestDailyRecommendationsEndpoint:
             headers=_auth(data["access_token"]),
         )
         assert response.status_code == 200
-        days = response.json()["days"]
-        titles = [i["task_title"] for i in days[0]["items"]]
-        assert titles == ["A"]
+        body = response.json()
+        titles = [i["task_title"] for i in body["days"][0]["items"]]
+        assert titles == ["A", "B", "C"]
+        later_titles = [
+            i["task_title"]
+            for day in body["days"][1:]
+            for i in day["items"]
+        ]
+        assert later_titles == [], (
+            "tasks with room on today must not spill onto later days"
+        )
 
-    def test_far_deadline_task_spreads_before_deadline(self, client):
+    def test_far_deadline_task_packs_before_deadline(self, client):
         data = _login(client)
         far = (NOW + timedelta(days=14)).isoformat()
         near = (NOW + timedelta(days=1)).isoformat()
@@ -440,7 +451,9 @@ class TestDailyRecommendationsEndpoint:
             for index, day in enumerate(days)
             if any(i["task_title"] == "Far" for i in day["items"])
         ]
-        assert far_day_indices[0] > 0
+        assert far_day_indices and far_day_indices[0] == 0, (
+            "far-deadline work packs from today, not a later spread-out anchor"
+        )
         assert sum(
             i["minutes"]
             for day in days
@@ -514,10 +527,10 @@ class TestDailyRecommendationsEndpoint:
         assert body["days"][0]["items"] == []
         assert len(body["unscheduled"]) == 6
 
-    def test_multi_part_task_spreads_across_days(self, client):
-        # A big multi-part task should fan its parts out across the window (one
-        # per day when there is room) rather than stacking them all into a single
-        # day, and the parts must stay in index order.
+    def test_multi_part_task_packs_earliest_day_first(self, client):
+        # Big multi-part tasks pack their parts into the earliest eligible day
+        # (today) until it is full, spilling forward only when today runs out
+        # of room, and the parts must stay in index order.
         data = _login(client)
         far = (NOW + timedelta(days=14)).isoformat()
         _create(
@@ -542,24 +555,19 @@ class TestDailyRecommendationsEndpoint:
             if item["task_title"] == "Big build"
         ]
         assert sum(item["minutes"] for _, item in parts) == 540
-        days_used = {day_index for day_index, _ in parts}
-        # 540 min at 90-min chunks = 6 parts; an empty 7-day window has room to
-        # give each part its own day.
-        assert len(days_used) == 6, (
-            "parts must be spread across days, not stacked into one day: "
-            f"days used {sorted(days_used)}"
-        )
-        parts_per_day = {day_index: 0 for day_index in days_used}
-        for day_index, _ in parts:
-            parts_per_day[day_index] += 1
-        assert max(parts_per_day.values()) == 1, (
-            "a day should hold at most one part of a task when the window "
-            "has room to spread"
-        )
         indices = [item["part_index"] for _, item in parts]
         assert indices == sorted(indices), (
             "parts must be scheduled in order (part 9 must never appear "
             "before parts 1-8)"
+        )
+        part_days = [day_index for day_index, _ in parts]
+        assert part_days[0] == 0, (
+            "a multi-part task must start packing on the earliest day (today), "
+            f"not a later spread-out anchor: first part on day {part_days[0]}"
+        )
+        assert max(part_days) - min(part_days) <= 1, (
+            "parts must fill today before spilling to the next day: "
+            f"days used {sorted(set(part_days))}"
         )
 
     def test_big_multi_part_tasks_still_fit(self, client):

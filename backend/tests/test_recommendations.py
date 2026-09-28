@@ -1,10 +1,12 @@
 import importlib
+from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
 import pytest
 
+from app.services.recommendation_service import RecommendationService
 from app.services.recommendation_service import split_description_into_steps
 from app.services.recommendation_service import split_task_into_parts
 
@@ -90,6 +92,74 @@ class TestSplitHelpers:
         assert sum(p["minutes"] for p in parts) == 90
 
 
+class TestEligibleDays:
+    def _dates(self, start=date(2026, 9, 1), end=date(2026, 9, 30)):
+        days = []
+        cursor = start
+        while cursor <= end:
+            days.append(cursor)
+            cursor += timedelta(days=1)
+        return days
+
+    def test_window_starting_before_today_never_eligible(self):
+        from types import SimpleNamespace
+
+        # Frozen "today" is 2026-09-22. A window starting 2026-09-01 must not
+        # expose any day before today, or the anchor would fill the past and
+        # leave today empty.
+        eligible = RecommendationService._eligible_days(
+            SimpleNamespace(deadline=None),
+            self._dates(),
+            timezone.utc,
+            date(2026, 9, 1),
+            date(2026, 9, 30),
+        )
+        assert eligible[0] == 21  # index of 2026-09-22
+        assert eligible[-1] == 29
+
+    def test_overdue_task_restricted_to_earliest_usable_days(self):
+        from types import SimpleNamespace
+
+        overdue = SimpleNamespace(
+            deadline=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+        )
+        eligible = RecommendationService._eligible_days(
+            overdue,
+            self._dates(),
+            timezone.utc,
+            date(2026, 9, 1),
+            date(2026, 9, 30),
+        )
+        assert eligible == [21, 22], (
+            "overdue work must land on today/tomorrow, not the elapsed "
+            f"start of the window: {eligible}"
+        )
+
+
+class TestFindFreeSlots:
+    def test_past_days_are_fully_free_without_regression(self, monkeypatch):
+        # The generic free_slots helper is shared with the scheduler, which
+        # passes its own (possibly past) window dates and blocks out the past
+        # via explicit busy times. Recommendations handle "never schedule in
+        # the past" at the recommendation layer instead, so the helper itself
+        # must keep exposing full past-day windows.
+        from app.services.scheduling.free_slots import find_free_slots
+
+        slots = find_free_slots(
+            dates=[date(2026, 9, 20), date(2026, 9, 21), date(2026, 9, 22)],
+            busy=[],
+            start_hour=9,
+            end_hour=17,
+            timezone="UTC",
+        )
+        days = {slot.start.date() for slot in slots}
+        # Full past days are treated as plain windows here; the recommender
+        # drops them to avoid starvation. Only today's window is clamped to now.
+        assert date(2026, 9, 20) in days
+        assert date(2026, 9, 21) in days
+        assert date(2026, 9, 22) in days
+
+
 class TestDailyRecommendationsEndpoint:
     def test_requires_authentication(self, client):
         response = client.post("/api/v1/recommendations/daily", json={})
@@ -127,6 +197,78 @@ class TestDailyRecommendationsEndpoint:
         item = today["items"][0]
         assert item["task_title"] == "Write report"
         assert item["minutes"] == 60
+
+    def test_window_starting_before_today_still_fills_today(self, client):
+        # Regression: iOS plans from the start of the visible month (a past
+        # date when opened mid-month). Past days must not absorb the
+        # recommendation, or today is left empty.
+        data = _login(client)
+        _create(client, data["access_token"], estimated_duration=60)
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": "2026-09-01",
+                "end_date": "2026-09-30",
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        today_iso = _fake_now().date().isoformat()
+        today_index = next(
+            i for i, day in enumerate(body["days"]) if day["date"] == today_iso
+        )
+        assert any(
+            item["task_title"] == "Write report"
+            for item in body["days"][today_index]["items"]
+        )
+        for day in body["days"][:today_index]:
+            assert day["items"] == [], (
+                f'no recommendations may land on past day {day["date"]}'
+            )
+
+    def test_overdue_task_lands_on_today_not_past_days(self, client):
+        # Overdue tasks are restricted to the earliest eligible days; when the
+        # window begins before today those earliest days must be today (not the
+        # already-elapsed start of the window).
+        data = _login(client)
+        _create(
+            client,
+            data["access_token"],
+            title="Overdue report",
+            estimated_duration=60,
+            deadline=(datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)).isoformat(),
+        )
+
+        response = client.post(
+            "/api/v1/recommendations/daily",
+            json={
+                "timezone": "UTC",
+                "start_date": "2026-09-01",
+                "end_date": "2026-09-30",
+            },
+            headers=_auth(data["access_token"]),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        today_iso = _fake_now().date().isoformat()
+        today_items = next(
+            day["items"]
+            for day in body["days"]
+            if day["date"] == today_iso
+        )
+        assert any(
+            item["task_title"] == "Overdue report" for item in today_items
+        )
+        past_items = [
+            item
+            for day in body["days"]
+            if day["date"] < today_iso
+            for item in day["items"]
+        ]
+        assert past_items == [], "overdue task must be recommended today"
 
     def test_scheduled_tasks_are_not_recommended(self, client):
         from datetime import timedelta

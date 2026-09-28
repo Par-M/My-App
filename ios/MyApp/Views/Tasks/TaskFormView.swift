@@ -35,6 +35,7 @@ struct TaskFormView: View {
     @State private var checklist: [ChecklistItem]
     @State private var beforeTaskIDs: Set<UUID>
     @State private var afterTaskIDs: Set<UUID>
+    @State private var isOrderingExpanded: Bool
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -68,6 +69,7 @@ struct TaskFormView: View {
             _checklist = State(initialValue: [])
             _beforeTaskIDs = State(initialValue: [])
             _afterTaskIDs = State(initialValue: [])
+            _isOrderingExpanded = State(initialValue: false)
         case .edit(let task):
             _title = State(initialValue: task.title)
             _detail = State(initialValue: task.description ?? "")
@@ -98,6 +100,7 @@ struct TaskFormView: View {
             _checklist = State(initialValue: task.checklist ?? [])
             _beforeTaskIDs = State(initialValue: Set(task.beforeTaskIds ?? []))
             _afterTaskIDs = State(initialValue: Set(task.afterTaskIds ?? []))
+            _isOrderingExpanded = State(initialValue: true)
         }
     }
 
@@ -353,7 +356,7 @@ struct TaskFormView: View {
                 }
 
                 if !candidateTasks.isEmpty {
-                    Section("Ordering") {
+                    Section("Ordering", isExpanded: $isOrderingExpanded) {
                         VStack(alignment: .leading, spacing: 12) {
                             orderingList(title: "Do before", selection: $beforeTaskIDs)
                             orderingList(title: "Do after", selection: $afterTaskIDs)

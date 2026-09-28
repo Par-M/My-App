@@ -15,7 +15,7 @@ An AI-powered daily planner for iOS **and Mac**. It shows the events already in 
 ## Screenshots
 
 <img width="1284" height="2778" alt="IMG_4250" src="https://github.com/user-attachments/assets/1a5bab4e-eeb1-4179-8249-8b959567caa7" />
-<img width="1284" height="2778" alt="IMG_4252" src="https://github.com/user-attachments/assets/6f02280a-07b7-4b53-94f6-410abc8c3822" />
+<img width="1284" height="2778" alt="IMG_4252" src="https://github.com/user-attachments/assets/3b7f3155-c8f4-4f2e-b69a-0ed3fb98e45c" />
 <img width="1284" height="2778" alt="IMG_4251" src="https://github.com/user-attachments/assets/4751b187-99ac-452a-9f9b-bd31a962ddc7" />
 
 

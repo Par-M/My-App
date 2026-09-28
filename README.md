@@ -82,7 +82,7 @@ The backend can push reminders outside the app. Delivery requires APNs credentia
 │   │   ├── services/         Business logic, AI scheduling, Google + APNs clients
 │   ├── alembic/              Database migrations
 │   ├── tests/                pytest suite
-│   └── docker-compose.yml    Local PostgreSQL only — no Docker in production (Vercel serverless runs the backend directly)
+│   └── docker-compose.yml    Local PostgreSQL only - no Docker in production (Vercel serverless runs the backend directly)
 ├── ios/MyApp/                SwiftUI app (iOS + Mac Catalyst)
 │   ├── App/                  Entry point, app delegate
 │   ├── Models/               Codable models mirroring the API
@@ -175,7 +175,7 @@ Open `ios/MyApp.xcodeproj` in Xcode, select the **MyApp** scheme, and run on a s
 
 ## Deployment
 
-The backend deploys to **Vercel** (project `lock-in-bud`) as a serverless function — **no Docker** — so there is no container image or Dockerfile for the deployed backend. The only Docker usage in the repo is `backend/docker-compose.yml`, which spins up a local Postgres for development. The project is Git-connected: every push to `main` auto-deploys production with the backend root at `backend/`. The database lives on **Neon**, so no Vercel-managed Postgres is required.
+The backend deploys to **Vercel** (project `lock-in-bud`) as a serverless function - **no Docker** - so there is no container image or Dockerfile for the deployed backend. The only Docker usage in the repo is `backend/docker-compose.yml`, which spins up a local Postgres for development. The project is Git-connected: every push to `main` auto-deploys production with the backend root at `backend/`. The database lives on **Neon**, so no Vercel-managed Postgres is required.
 
 - `backend/api/index.py` runs `alembic upgrade head` on cold start, so migrations apply automatically before requests are served.
 - Live URL: `https://lock-in-bud.vercel.app`

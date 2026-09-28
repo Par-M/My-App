@@ -298,6 +298,14 @@ private var dayContent: some View {
 
                 Spacer()
 
+                Button {
+                    selectedDate = Date()
+                    calendarMonth = Date()
+                } label: {
+                    Label("Today", systemImage: "sun.max")
+                }
+                .accessibilityLabel("Jump to today")
+
                 if calendarExpanded {
                     Button {
                         stepMonth(-1)

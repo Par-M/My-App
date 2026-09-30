@@ -24,8 +24,11 @@ class AuthSession(Base):
 
     Every refresh token now carries a ``jti`` that maps to one of these rows.
     Refreshing rotates the row (the old one is revoked and linked to its
-    replacement), and presenting an already-revoked token is treated as reuse:
-    the entire user's session set is revoked.
+    replacement). Presenting an already-rotated token follows the rotation
+    chain forward to the current live session and rotates that instead, so a
+    benign duplicate (e.g. concurrent refreshes from one device) never signs
+    the user out. Only an explicitly logged-out or expired session refuses to
+    refresh.
     """
 
     __tablename__ = "auth_sessions"

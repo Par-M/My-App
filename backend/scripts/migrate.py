@@ -14,23 +14,42 @@ concurrent instances raced, and failures were swallowed.
 """
 
 import argparse
+import os
 import sys
 
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine
 
-from app.core.config import settings
-from app.db.database import engine
 from app.db.schema_check import SchemaOutOfDateError
 from app.db.schema_check import schema_location
 from app.db.schema_check import verify_schema_at_head
 
 
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not url:
+        print(
+            "DATABASE_URL is not set. Refusing to guess a target database.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg://", 1)
+    return url
+
+
 def _config() -> Config:
     config = Config("alembic.ini")
     config.set_main_option("script_location", schema_location())
-    config.set_main_option("sqlalchemy.url", settings.database_url)
+    config.set_main_option("sqlalchemy.url", _database_url())
     return config
+
+
+def _engine():
+    return create_engine(_database_url(), pool_pre_ping=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    engine = _engine()
+
     if args.check:
         try:
             revision = verify_schema_at_head(engine, script_location=schema_location())
@@ -52,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     target = "head"
-    print(f"applying migrations to {settings.database_url.rsplit('@')[-1]}")
+    print(f"applying migrations to {_database_url().rsplit('@')[-1]}")
     command.upgrade(_config(), target)
     print(f"migrations applied: now at {verify_schema_at_head(engine, script_location=schema_location())}")
     return 0

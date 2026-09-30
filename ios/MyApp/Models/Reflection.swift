@@ -25,20 +25,6 @@ struct ReflectionCreate: Encodable, Sendable {
     let text: String
 }
 
-struct ReflectionAnalysisResponse: Codable, Hashable, Sendable {
-    let id: UUID
-    let userId: UUID?
-    let date: Date
-    let analysis: String
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case date
-        case analysis
-    }
-}
-
 struct MorningMessage: Codable, Hashable, Sendable {
     let message: String
     let date: Date

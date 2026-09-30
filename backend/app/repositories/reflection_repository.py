@@ -56,15 +56,6 @@ def list_reflections(
     )
 
 
-def update_reflection_analysis(
-    db: Session, reflection: Reflection, *, analysis: str
-) -> Reflection:
-    reflection.analysis = analysis
-    db.flush()
-    db.refresh(reflection)
-    return reflection
-
-
 def delete_reflection(db: Session, reflection: Reflection) -> None:
     db.delete(reflection)
     db.flush()

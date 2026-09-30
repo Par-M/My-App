@@ -21,9 +21,7 @@ struct ReflectionListView: View {
                 } else {
                     Section("Previous reflections") {
                         ForEach(focus.reflections) { reflection in
-                            ReflectionCard(reflection: reflection) { id in
-                                Task { await focus.requestAnalysis(reflectionID: id) }
-                            }
+                            ReflectionCard(reflection: reflection)
                             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                             .listRowBackground(Color.clear)
                         }

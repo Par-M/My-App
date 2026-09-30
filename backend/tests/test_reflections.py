@@ -75,7 +75,7 @@ def test_create_daily_and_get(client: TestClient) -> None:
     assert got.json()["text"].startswith("Daily check-in")
 
 
-def test_reflection_analysis(client: TestClient) -> None:
+def test_reflection_analysis_endpoint_is_gone(client: TestClient) -> None:
     headers = _auth_headers(client, email="analyze@test.dev")
     created = _create(client, headers)
     reflection_id = created["id"]
@@ -84,8 +84,7 @@ def test_reflection_analysis(client: TestClient) -> None:
         f"/api/v1/reflections/{reflection_id}/analysis",
         headers=headers,
     )
-    assert analyzed.status_code == 200, analyzed.text
-    assert "analysis" in analyzed.json()
+    assert analyzed.status_code == 404, analyzed.text
 
 
 def test_list_reflections(client: TestClient) -> None:

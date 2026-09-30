@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from app.schemas.reflection import ReflectionAnalysisResponse, ReflectionResponse
+from app.schemas.reflection import ReflectionResponse
 
 
 def _uid() -> uuid.UUID:
@@ -23,13 +23,8 @@ def test_reflection_response_serializes_date_only() -> None:
     assert '"2026-09-22T00:00:00"' not in body
 
 
-def test_analysis_response_includes_user_and_date_only() -> None:
-    payload = ReflectionAnalysisResponse(
-        id=_uid(),
-        user_id=_uid(),
-        date=date(2026, 9, 22),
-        analysis="strong flow",
-    )
-    body = payload.model_dump_json()
-    assert '"user_id"' in body
-    assert '"date":"2026-09-22"' in body
+def test_analysis_endpoint_no_longer_exists() -> None:
+    import app.api.routes.reflections as reflections_route
+
+    paths = {route.path for route in reflections_route.router.routes}
+    assert not any(path.endswith("/analysis") for path in paths)

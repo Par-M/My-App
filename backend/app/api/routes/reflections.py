@@ -12,7 +12,6 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.reflection import MorningMessageResponse
-from app.schemas.reflection import ReflectionAnalysisResponse
 from app.schemas.reflection import ReflectionCreate
 from app.schemas.reflection import ReflectionCreateDaily
 from app.schemas.reflection import ReflectionResponse
@@ -83,20 +82,6 @@ def get_reflection(
 ) -> ReflectionResponse:
     try:
         return service.get_reflection(reflection_id)
-    except ReflectionNotFoundError as exc:
-        _handle_not_found(exc)
-
-
-@router.post(
-    "/{reflection_id}/analysis",
-    response_model=ReflectionAnalysisResponse,
-)
-def analyze_reflection(
-    reflection_id: uuid.UUID,
-    service: ReflectionService = Depends(_service),
-) -> ReflectionAnalysisResponse:
-    try:
-        return service.analyze_reflection(reflection_id)
     except ReflectionNotFoundError as exc:
         _handle_not_found(exc)
 

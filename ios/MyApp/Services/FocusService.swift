@@ -162,19 +162,6 @@ final class FocusService {
         }
     }
 
-    func requestAnalysis(reflectionID: UUID) async -> String? {
-        do {
-            let response: ReflectionAnalysisResponse = try await client.request(
-                FocusEndpoint.analysis(reflectionID)
-            )
-            dataVersion += 1
-            return response.analysis
-        } catch {
-            errorMessage = error.localizedDescription
-            return nil
-        }
-    }
-
     @discardableResult
     func loadMorningMessage() async -> MorningMessage? {
         do {

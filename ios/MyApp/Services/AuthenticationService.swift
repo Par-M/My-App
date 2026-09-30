@@ -31,7 +31,7 @@ final class AuthenticationService {
     }
 
     func restoreSession() async {
-        guard keychain.loadSession() != nil else {
+        guard let stored = keychain.loadSession() else {
             state = .signedOut
             return
         }
@@ -40,14 +40,49 @@ final class AuthenticationService {
             user = try await apiClient.me()
             state = .signedIn
         } catch {
-            do {
-                let session = try await apiClient.refreshSession()
-                apply(session)
-            } catch {
+            if isDefinitiveSignOut(error) {
+                keychain.clear()
+                user = nil
+                state = .signedOut
+            } else {
+                // Transient failure (offline, server hiccup). Keep the cached
+                // session so the next opportunity can refresh instead of
+                // forcing an unnecessary sign-in. `me()` already refreshed
+                // through the client's 401 path, so a definitive 401 here
+                // really does mean the refresh token was rejected.
+                user = stored.user
+                state = .signedIn
+            }
+        }
+    }
+
+    /// Revalidate the session when the app returns to the foreground.
+    ///
+    /// The access token expires after a short window, so without this a user
+    /// who backgrounds the app for a while would hit a wall of 401s (and the
+    /// scary "sign in again" banner) on their next interaction. `me()` goes
+    /// through the client's 401 path, which transparently refreshes the tokens
+    /// before retrying, so revalidation is invisible to the user.
+    func revalidateSession() async {
+        guard keychain.loadSession() != nil else {
+            if state != .signedOut {
+                user = nil
+                state = .signedOut
+            }
+            return
+        }
+
+        do {
+            user = try await apiClient.me()
+            state = .signedIn
+        } catch {
+            if isDefinitiveSignOut(error) {
                 keychain.clear()
                 user = nil
                 state = .signedOut
             }
+            // Transient failures are swallowed here on purpose: a backgrounded
+            // app that reconnects later must not be logged out.
         }
     }
 
@@ -63,15 +98,25 @@ final class AuthenticationService {
     }
 
     func signOut() {
-        Task {
-            try? await apiClient.logout()
-            await NotificationService.shared.unregisterDevice()
-            NotificationService.shared.clearLocalState()
-        }
-        keychain.clear()
         user = nil
         state = .signedOut
         localStore?.clearAll()
+
+        let hasSession = keychain.loadSession() != nil
+        Task {
+            if hasSession {
+                try? await apiClient.logout()
+            }
+            await NotificationService.shared.unregisterDevice()
+            NotificationService.shared.clearLocalState()
+            keychain.clear()
+        }
+    }
+
+    private func isDefinitiveSignOut(_ error: Error) -> Bool {
+        guard let networkError = error as? NetworkError else { return false }
+        if case .unauthorized = networkError { return true }
+        return false
     }
 
     private func apply(_ session: AuthSession) {

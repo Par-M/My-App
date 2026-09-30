@@ -581,7 +581,8 @@ class TaskService:
         cursor = now
         for block in pending_blocks:
             if not total_duration:
-                self.db.delete(block)
+                # Tombstone rather than remove, so the deletion is replicable.
+                block.deleted_at = datetime.now(_utc())
                 continue
             duration = max(
                 1,

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -13,6 +14,7 @@ from app.schemas.auth import GoogleLoginRequest
 from app.schemas.auth import RefreshRequest
 from app.schemas.auth import TokenResponse
 from app.schemas.auth import UserOut
+from app.services.auth_service import AuthError
 from app.services.auth_service import AuthService
 from app.services.google import GoogleTokenVerificationError
 
@@ -68,15 +70,42 @@ async def refresh_token(
     service = AuthService(db)
     try:
         return service.refresh(request.refresh_token)
-    except ValueError as exc:
+    except (ValueError, AuthError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
         ) from exc
 
 
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None
+
+
 @router.post("/logout")
-async def logout():
+async def logout(
+    request: LogoutRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke the caller's refresh sessions.
+
+    Requires authentication. Previously this returned success without revoking
+    anything, so a copied refresh token stayed valid until it expired.
+
+    With a refresh token in the body only that session is revoked; without one
+    every session for the user is revoked.
+    """
+    service = AuthService(db)
+    try:
+        service.logout(
+            current_user,
+            refresh_token=request.refresh_token if request else None,
+        )
+    except (ValueError, AuthError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
     return {"message": "Logged out"}
 
 

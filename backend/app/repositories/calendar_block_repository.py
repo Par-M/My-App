@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from datetime import timezone
 
 from sqlalchemy import Select
 from sqlalchemy import select
@@ -11,7 +12,15 @@ from app.schemas.calendar import CalendarBlockUpdate
 
 
 def base_query(user_id: uuid.UUID) -> Select:
-    return select(CalendarBlock).where(CalendarBlock.user_id == user_id)
+    """Live blocks only.
+
+    Deletes are tombstones so other devices can learn about them through the
+    change log; tombstoned rows must not show up in ordinary reads.
+    """
+    return select(CalendarBlock).where(
+        CalendarBlock.user_id == user_id,
+        CalendarBlock.deleted_at.is_(None),
+    )
 
 
 def list_blocks(
@@ -32,9 +41,16 @@ def get_block(
 
 
 def create_block(
-    db: Session, *, user_id: uuid.UUID, data: CalendarBlockCreate
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    data: CalendarBlockCreate,
+    block_id: uuid.UUID | None = None,
 ) -> CalendarBlock:
-    block = CalendarBlock(user_id=user_id, **data.model_dump())
+    fields: dict = data.model_dump()
+    if block_id is not None:
+        fields["id"] = block_id
+    block = CalendarBlock(user_id=user_id, **fields)
     db.add(block)
     db.flush()
     db.refresh(block)
@@ -52,5 +68,6 @@ def update_block(
 
 
 def delete_block(db: Session, block: CalendarBlock) -> None:
-    db.delete(block)
+    """Tombstone a block so the deletion is replicable. See delete_task."""
+    block.deleted_at = datetime.now(timezone.utc)
     db.flush()

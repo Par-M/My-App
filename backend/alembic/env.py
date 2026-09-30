@@ -11,17 +11,22 @@ from app.models.user import User
 # access to the values within the .ini file in use.
 config = context.config
 
-if os.getenv("DATABASE_URL"):
-    database_url = os.getenv("DATABASE_URL")
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace(
-            "postgresql://", "postgresql+psycopg://", 1
-        )
-    elif database_url.startswith("postgres://"):
-        database_url = database_url.replace(
-            "postgres://", "postgresql+psycopg://", 1
-        )
-    config.set_main_option("sqlalchemy.url", database_url)
+# The URL must come from DATABASE_URL. alembic.ini deliberately leaves
+# sqlalchemy.url empty so a bare "alembic upgrade head" cannot silently target
+# a developer's local database.
+database_url = os.getenv("DATABASE_URL", "").strip()
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Refusing to guess a target database. "
+        "Run migrations explicitly, for example:\n"
+        "    DATABASE_URL=postgresql+psycopg://user:pass@host:5432/dbname "
+        "alembic upgrade head"
+    )
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+elif database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql+psycopg://", 1)
+config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

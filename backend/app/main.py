@@ -12,6 +12,7 @@ from app.api.routes.planner import router as planner_router
 from app.api.routes.preferences import router as preferences_router
 from app.api.routes.recommendations import router as recommendations_router
 from app.api.routes.schedule import router as schedule_router
+from app.api.routes.sync import router as sync_router
 from app.api.routes.tasks import router as tasks_router
 
 app = FastAPI(
@@ -20,6 +21,7 @@ app = FastAPI(
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
+app.include_router(sync_router, prefix="/api/v1")
 app.include_router(calendar_router, prefix="/api/v1")
 app.include_router(schedule_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1")

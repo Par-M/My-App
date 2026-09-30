@@ -18,7 +18,10 @@ struct OccurrenceEditorView: View {
     }
 
     private var occurrenceCompleted: Bool {
-        task.repeatOverrides?[OccurrenceDateKey.key(for: date)]?.completed == true
+        guard isRepeating else {
+            return task.status == .completed
+        }
+        return task.repeatOverrides?[OccurrenceDateKey.key(for: date)]?.completed == true
     }
 
     init(task: TaskItem, date: Date) {

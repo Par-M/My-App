@@ -154,17 +154,35 @@ PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The deployed backend 
    ```sh
    python -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
-   alembic upgrade head
+   python -m scripts.migrate
    uvicorn app.main:app --reload
    ```
 
+   Migrations are a **deployment step**, not something the app does at startup.
+   `python -m scripts.migrate` applies them; `python -m scripts.migrate --check`
+   only reports whether the database is at the expected revision, which is what
+   the serverless entrypoint uses. `alembic upgrade head` also works, but only
+   with `DATABASE_URL` set — `alembic.ini` deliberately has no default so a
+   bare invocation cannot migrate the wrong database.
+
 4. **Test**
 
+   The suite **drops and recreates the schema**, so it refuses to run unless
+   `TEST_DATABASE_URL` names a disposable database:
+
    ```sh
+   export TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
    python -m pytest tests -q
    ```
 
-   CI runs the same suite against a fresh PostgreSQL instance on every push (`.github/workflows/ci.yml`), so tests stay portable regardless of whether local/dev DBs point at Docker or Neon.
+   The suite never reads `DATABASE_URL` as its target, and additionally rejects
+   a test URL that resolves to the application's own database or that lacks a
+   `test` token in its name. The schema is built by running the real Alembic
+   migrations, so tests exercise the migrated schema rather than the ORM
+   metadata. It creates `TEST_DATABASE_URL` if it does not exist.
+
+   CI runs the same suite against a fresh PostgreSQL instance on every push
+   (`.github/workflows/ci.yml`).
 
 ### iOS
 

@@ -91,6 +91,38 @@ class TestSplitHelpers:
         assert len(parts) == 3
         assert sum(p["minutes"] for p in parts) == 90
 
+    def test_description_steps_never_inflate_the_estimate(self):
+        # Regression: four steps against a 30 minute budget used to be floored
+        # to 15 minutes each, producing 60 minutes of work from a 30 minute
+        # task. The minimum must not be re-applied once the budget is spent.
+        description = "1. Research\n2. Outline\n3. Write\n4. Polish"
+        parts = split_task_into_parts("Essay", description, 30)
+        assert len(parts) == 4
+        assert sum(p["minutes"] for p in parts) == 30
+
+    @pytest.mark.parametrize("minutes", [15, 20, 30, 45, 60, 90, 120, 200])
+    @pytest.mark.parametrize("step_count", [2, 3, 4, 5, 6, 8])
+    def test_parts_are_a_partition_of_the_budget(
+        self, minutes, step_count
+    ):
+        description = "\n".join(
+            f"{i + 1}. Step {i + 1}" for i in range(step_count)
+        )
+        parts = split_task_into_parts("Task", description, minutes)
+        # MIN_PART_MINUTES floors the budget for very short tasks, and a single
+        # step is not a breakdown, but the parts must always sum to the budget
+        # that was actually planned.
+        planned = max(15, minutes)
+        assert sum(p["minutes"] for p in parts) == planned
+        assert all(p["minutes"] > 0 for p in parts)
+        assert [p["index"] for p in parts] == list(range(len(parts)))
+
+    @pytest.mark.parametrize("minutes", [15, 30, 90, 200, 365])
+    def test_chunked_parts_cover_total(self, minutes):
+        parts = split_task_into_parts("Task", None, minutes)
+        assert sum(p["minutes"] for p in parts) == max(15, minutes)
+        assert all(p["minutes"] <= 90 for p in parts)
+
 
 class TestEligibleDays:
     def _dates(self, start=date(2026, 9, 1), end=date(2026, 9, 30)):

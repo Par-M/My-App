@@ -38,12 +38,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Apply migrations
+      # The test suite builds its own schema from the migrations, so this step
+      # exists to prove the migration chain is runnable end to end and that
+      # --check agrees with what a fresh migrate produces.
+      - name: Apply migrations to a scratch database
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
-        run: alembic upgrade head
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_migrate_check
+        run: |
+          python -c "
+          import psycopg
+          c = psycopg.connect('postgresql://postgres:postgres@localhost:5432/postgres', autocommit=True)
+          c.execute('CREATE DATABASE myapp_migrate_check')
+          c.close()
+          "
+          python -m scripts.migrate
+          python -m scripts.migrate --check
 
+      # tests/conftest.py builds the schema from the Alembic migrations into
+      # the disposable TEST_DATABASE_URL and truncates between tests. Setting
+      # DATABASE_URL is still required for the app's own Settings, but the
+      # suite never reads it as its test target.
       - name: Run tests
         env:
+          TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
         run: python -m pytest tests -q

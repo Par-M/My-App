@@ -18,35 +18,51 @@ def _create_token(
     subject: str,
     token_type: str,
     expires_delta: timedelta,
-) -> str:
+    jti: str | None = None,
+) -> tuple[str, str]:
+    """Return ``(token, jti)``.
+
+    The ``jti`` is returned as well as embedded so callers can persist a
+    server-side session row keyed by it.
+    """
     now = datetime.now(timezone.utc)
+    token_jti = jti or str(uuid4())
     claims = {
         "sub": str(subject),
         "type": token_type,
         "iat": now,
         "exp": now + expires_delta,
-        "jti": str(uuid4()),
+        "jti": token_jti,
     }
-    return jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
+    token = jwt.encode(claims, settings.jwt_secret, algorithm=ALGORITHM)
+    return token, token_jti
 
 
 def create_access_token(subject: str) -> str:
-    return _create_token(
+    token, _ = _create_token(
         subject,
         TOKEN_TYPE_ACCESS,
         timedelta(minutes=settings.access_token_expire_minutes),
     )
+    return token
 
 
-def create_refresh_token(subject: str) -> str:
-    return _create_token(
+def create_refresh_token(subject: str, jti: str | None = None) -> str:
+    token, _ = _create_token(
         subject,
         TOKEN_TYPE_REFRESH,
         timedelta(days=settings.refresh_token_expire_days),
+        jti=jti,
     )
+    return token
 
 
-def verify_token(token: str, token_type: str) -> str:
+def decode_token(token: str, token_type: str) -> dict:
+    """Verify a token and return its claims.
+
+    Raises:
+        ValueError: if the token is invalid or is of the wrong type.
+    """
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
     except JWTError:
@@ -55,8 +71,14 @@ def verify_token(token: str, token_type: str) -> str:
     if payload.get("type") != token_type:
         raise ValueError("Invalid token type")
 
-    subject = payload.get("sub")
-    if not subject:
+    if not payload.get("sub"):
         raise ValueError("Invalid token")
 
-    return subject
+    if not payload.get("jti"):
+        raise ValueError("Invalid token")
+
+    return payload
+
+
+def verify_token(token: str, token_type: str) -> str:
+    return decode_token(token, token_type)["sub"]

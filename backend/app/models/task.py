@@ -189,6 +189,25 @@ class Task(Base):
         default=False,
     )
 
+    # Replication support.
+    #
+    # Deletes are tombstones rather than hard deletes so another device can
+    # learn that a task disappeared during an incremental download.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    # Bumped on every server-side change. A client sends the revision it last
+    # saw; if it no longer matches, another device edited the task in between.
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

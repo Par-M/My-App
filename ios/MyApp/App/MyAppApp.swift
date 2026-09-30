@@ -74,6 +74,8 @@ struct MyAppApp: App {
                         // The access token is short-lived, so returning to the
                         // app after a while needs a silent revalidation.
                         await authService.revalidateSession()
+                        // Replay any focus sessions that could not upload.
+                        await focusService.flushPendingSessions()
                     }
                 }
                 .onOpenURL { url in

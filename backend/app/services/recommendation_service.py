@@ -58,36 +58,47 @@ def split_description_into_steps(description: str) -> list[str]:
     return sentences
 
 
+def _distribute_minutes(total: int, count: int) -> list[int]:
+    """Split ``total`` minutes into ``count`` parts summing to exactly ``total``.
+
+    Parts are allowed to be shorter than ``MIN_PART_MINUTES``. A task estimated
+    at 30 minutes that describes four steps is 30 minutes of work; re-applying
+    the minimum to each part after the budget runs out silently doubles the
+    user's estimate, which is what this used to do.
+
+    If the budget cannot give every step at least one minute the step count is
+    capped rather than inflating the total.
+    """
+    if count <= 0 or total <= 0:
+        return []
+    count = min(count, total)
+    base, extra = divmod(total, count)
+    return [base + (1 if index < extra else 0) for index in range(count)]
+
+
 def split_task_into_parts(
     title: str,
     description: str | None,
     duration_minutes: int,
 ) -> list[dict]:
-    """Break a task into parts.
+    """Break a task into parts whose durations sum to the task's duration.
 
-    Description steps become named parts (duration split evenly). Without a
-    usable description the task is chunked into <= MAX_PART_MINUTES pieces.
+    Description steps become named parts. Without a usable description the task
+    is chunked into <= MAX_PART_MINUTES pieces. Either way the parts are a
+    partition of the budget, never an expansion of it.
     """
     total = max(MIN_PART_MINUTES, duration_minutes)
 
     if description:
         steps = split_description_into_steps(description)
         if len(steps) >= 2:
-            per_part = max(MIN_PART_MINUTES, round(total / len(steps)))
             parts = []
-            remaining = total
-            for index, step in enumerate(steps):
-                minutes = per_part if index < len(steps) - 1 else remaining
-                minutes = max(MIN_PART_MINUTES, min(minutes, remaining))
-                if minutes <= 0:
-                    break
+            for index, (step, minutes) in enumerate(
+                zip(steps, _distribute_minutes(total, len(steps)))
+            ):
                 label = step if len(step) <= 80 else step[:77] + "…"
-                parts.append(
-                    {"index": index, "title": label, "minutes": minutes}
-                )
-                remaining -= minutes
-            if parts:
-                return parts
+                parts.append({"index": index, "title": label, "minutes": minutes})
+            return parts
 
     chunk = min(total, MAX_PART_MINUTES)
     parts = []

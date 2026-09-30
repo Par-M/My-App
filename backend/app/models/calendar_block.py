@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Text
 from sqlalchemy import func
@@ -67,6 +68,20 @@ class CalendarBlock(Base):
     completion_note: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # Replication support. See Task.deleted_at / Task.revision.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
     )
 
     created_at: Mapped[datetime] = mapped_column(

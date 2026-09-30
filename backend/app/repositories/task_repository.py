@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from datetime import timezone
 
 from sqlalchemy import Select
 from sqlalchemy import case
@@ -49,8 +50,27 @@ def _base_query(user_id: uuid.UUID) -> Select:
     return select(Task).where(Task.user_id == user_id)
 
 
-def create_task(db: Session, *, user_id: uuid.UUID, data: TaskCreate) -> Task:
-    task = Task(user_id=user_id, **data.model_dump())
+def _live(statement: Select) -> Select:
+    """Exclude tombstoned tasks.
+
+    Deletes are soft so that another device's incremental download can learn
+    that a task disappeared; hard-deleted rows would look identical to rows the
+    device had never seen.
+    """
+    return statement.where(Task.deleted_at.is_(None))
+
+
+def create_task(
+    db: Session,
+    *,
+    user_id: uuid.UUID,
+    data: TaskCreate,
+    task_id: uuid.UUID | None = None,
+) -> Task:
+    fields: dict = data.model_dump()
+    if task_id is not None:
+        fields["id"] = task_id
+    task = Task(user_id=user_id, **fields)
     db.add(task)
     db.flush()
     db.refresh(task)
@@ -59,7 +79,7 @@ def create_task(db: Session, *, user_id: uuid.UUID, data: TaskCreate) -> Task:
 
 def get_task(db: Session, *, user_id: uuid.UUID, task_id: uuid.UUID) -> Task | None:
     return db.scalar(
-        _base_query(user_id).where(Task.id == task_id)
+        _live(_base_query(user_id)).where(Task.id == task_id)
     )
 
 
@@ -80,7 +100,7 @@ def filter_tasks(
     if category is not None:
         statement = statement.where(Task.category == category)
     statement = statement.where(Task.is_archived.is_(archived))
-    return statement
+    return _live(statement)
 
 
 def list_tasks(
@@ -140,5 +160,11 @@ def set_archived(db: Session, task: Task, archived: bool) -> Task:
 
 
 def delete_task(db: Session, task: Task) -> None:
-    db.delete(task)
+    """Tombstone a task rather than removing the row.
+
+    The change log records the deletion so other devices learn about it, but
+    the row itself has to survive to carry that fact: a hard delete is
+    indistinguishable from a row the other device never downloaded.
+    """
+    task.deleted_at = datetime.now(timezone.utc)
     db.flush()

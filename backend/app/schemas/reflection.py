@@ -101,13 +101,6 @@ class ReflectionResponse(BaseModel):
     updated_at: datetime
 
 
-class ReflectionAnalysisResponse(BaseModel):
-    id: uuid.UUID
-    user_id: uuid.UUID
-    date: date
-    analysis: str
-
-
 class MorningMessageResponse(BaseModel):
     message: str
     date: date

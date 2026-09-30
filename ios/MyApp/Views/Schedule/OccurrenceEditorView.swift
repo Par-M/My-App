@@ -17,6 +17,10 @@ struct OccurrenceEditorView: View {
         !(task.repeatWeekdays ?? []).isEmpty
     }
 
+    private var occurrenceCompleted: Bool {
+        task.repeatOverrides?[OccurrenceDateKey.key(for: date)]?.completed == true
+    }
+
     init(task: TaskItem, date: Date) {
         self.task = task
         self.date = date
@@ -30,6 +34,17 @@ struct OccurrenceEditorView: View {
             Form {
                 Section("Event") {
                     Text(task.title)
+                }
+                Section {
+                    Button {
+                        Task { await toggleCompletion() }
+                    } label: {
+                        Label(
+                            completionLabel,
+                            systemImage: occurrenceCompleted ? "xmark.circle" : "checkmark.circle"
+                        )
+                    }
+                    .disabled(isSaving)
                 }
                 Section("Time") {
                     DatePicker("Start", selection: $start)
@@ -86,6 +101,32 @@ struct OccurrenceEditorView: View {
             } message: {
                 Text("Choose how the new time should apply to this repeating event.")
             }
+        }
+    }
+
+    private var completionLabel: String {
+        if occurrenceCompleted {
+            return "Reopen this event"
+        }
+        return isRepeating ? "Complete this occurrence" : "Mark complete"
+    }
+
+    private func toggleCompletion() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            if occurrenceCompleted {
+                if isRepeating {
+                    _ = try await taskService.reopenOccurrence(task, on: date)
+                } else {
+                    _ = try await taskService.setStatus(.pending, for: task)
+                }
+            } else {
+                _ = try await taskService.completeOccurrence(task, on: date)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

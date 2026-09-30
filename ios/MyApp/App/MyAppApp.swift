@@ -19,6 +19,8 @@ struct MyAppApp: App {
     @State private var habitService = HabitService()
     @State private var focusService = FocusService()
 
+    @Environment(\.scenePhase) private var scenePhase
+
     init() {
         let store = LocalStore()
         let connectivity = ConnectivityMonitor()
@@ -65,6 +67,16 @@ struct MyAppApp: App {
                 .preferredColorScheme(appearance.theme.colorScheme)
                 .task {
                     await authService.restoreSession()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
+                    Task {
+                        // The access token is short-lived, so returning to the
+                        // app after a while needs a silent revalidation.
+                        await authService.revalidateSession()
+                        // Replay any focus sessions that could not upload.
+                        await focusService.flushPendingSessions()
+                    }
                 }
                 .onOpenURL { url in
                     guard url.scheme == "app" else { return }

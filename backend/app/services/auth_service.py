@@ -26,6 +26,11 @@ REVOKED_LOGOUT = "logout"
 REVOKED_REUSE = "reuse_detected"
 REVOKED_EXPIRED = "expired"
 
+# Upper bound on how far we will walk a rotation chain forward for a token
+# that was already rotated. Newer links are real tokens; an unbounded walk
+# risks an attacker minting endless sessions from a single leaked token.
+MAX_ROTATION_CHAIN_WALK = 10
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -69,9 +74,14 @@ class AuthService:
     def refresh(self, refresh_token: str) -> TokenResponse:
         """Rotate a refresh token.
 
-        The presented token is single use: it is revoked and linked to its
-        replacement. Presenting one that was already rotated means it leaked, so
-        every session for that user is revoked.
+        Rotation is serialized per token with a row lock so overlapping
+        refreshes for the same token cannot race. A token that was already
+        rotated is followed forward along its rotation chain to the current
+        live session, which is rotated instead. This keeps a benign duplicate
+        (for example two concurrent refreshes fired by the same device) from
+        signing the user out everywhere: the whole chain stays usable until an
+        explicit logout or expiry. Only a session that was explicitly revoked
+        (logout) or expired refuses to refresh.
         """
         try:
             claims = decode_token(refresh_token, TOKEN_TYPE_REFRESH)
@@ -83,7 +93,7 @@ class AuthService:
         if user is None:
             raise AuthError("Invalid token")
 
-        session = self.db.get(AuthSession, jti)
+        session = self._locked_session(jti)
         if session is None:
             # Correctly signed but unknown. Either the row was deleted or the
             # signing secret is compromised. Reject without revoking the user's
@@ -93,22 +103,52 @@ class AuthService:
         if session.user_id != user.id:
             raise AuthError("Invalid token")
 
-        if session.revoked_at is not None:
-            self._revoke_all_for_user(
-                user.id, reason=REVOKED_REUSE, except_jti=session.jti
-            )
-            self.db.commit()
-            raise AuthError("Refresh token has already been used")
+        # Follow the rotation chain forward. The presented token may have been
+        # rotated by a concurrent refresh that won the race; rotate whatever
+        # live session the chain currently points at so every holder of a token
+        # in the chain keeps a working session.
+        current = session
+        walk = 0
+        while (
+            current.revoked_at is not None
+            and current.replaced_by_jti is not None
+            and walk < MAX_ROTATION_CHAIN_WALK
+        ):
+            next_link = self._locked_session(current.replaced_by_jti)
+            if next_link is None or next_link.user_id != user.id:
+                break
+            current = next_link
+            walk += 1
 
-        if session.expires_at <= _now():
-            session.revoked_at = _now()
-            session.revoked_reason = REVOKED_EXPIRED
+        if current.user_id != user.id:
+            raise AuthError("Invalid token")
+
+        if current.revoked_at is not None:
+            # The chain ends in a session that was explicitly revoked (logout)
+            # rather than rotated. Do not resurrect it, and do not revoke the
+            # user's other sessions either.
+            raise AuthError("Refresh token has been revoked")
+
+        if current.expires_at <= _now():
+            self._revoke(current, REVOKED_EXPIRED)
             self.db.commit()
             raise AuthError("Refresh token has expired")
 
         # Rotate: revoke this row, then issue and link a fresh one.
-        response = self._issue_tokens(user, previous_jti=session.jti)
+        response = self._issue_tokens(user, previous_jti=current.jti)
         return response
+
+    def _locked_session(self, jti: str) -> AuthSession | None:
+        """Fetch a session row, locking it for the rest of this transaction.
+
+        Serializes concurrent rotations of the same token so that overlapping
+        refreshes cannot both read the row as active and diverge.
+        """
+        return self.db.scalar(
+            select(AuthSession)
+            .where(AuthSession.jti == jti)
+            .with_for_update()
+        )
 
     # ------------------------------------------------------------------
     # Logout
@@ -182,7 +222,8 @@ class AuthService:
         user: User,
         previous_jti: str | None = None,
     ) -> TokenResponse:
-        expires_at = _now() + timedelta(days=settings.refresh_token_expire_days)
+        now = _now()
+        expires_at = now + timedelta(days=settings.refresh_token_expire_days)
         session = AuthSession(
             user_id=user.id,
             expires_at=expires_at,
@@ -196,6 +237,7 @@ class AuthService:
         if previous_jti is not None:
             previous = self.db.get(AuthSession, previous_jti)
             if previous is not None:
+                previous.last_used_at = now
                 self._revoke(previous, REVOKED_ROTATED)
                 previous.replaced_by_jti = session.jti
 

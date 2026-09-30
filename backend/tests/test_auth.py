@@ -203,43 +203,69 @@ class TestLogout:
 
 
 class TestRefreshRotation:
-    def test_old_refresh_token_is_single_use(self, client):
+    def test_replaying_rotated_token_recovers_instead_of_signing_out(self, client):
         data = _login(client)
 
-        first_refresh = client.post(
+        first = client.post(
             "/api/v1/auth/refresh",
             json={"refresh_token": data["refresh_token"]},
         )
-        assert first_refresh.status_code == 200
+        assert first.status_code == 200
 
-        # Replaying the token that was just rotated must fail.
+        # Replaying an already-rotated token (e.g. a duplicate concurrent
+        # refresh from the device) must NOT log the user out. It follows the
+        # rotation chain forward to the live session and succeeds.
         replay = client.post(
             "/api/v1/auth/refresh",
             json={"refresh_token": data["refresh_token"]},
         )
-        assert replay.status_code == 401
+        assert replay.status_code == 200
+        assert replay.json()["refresh_token"] != data["refresh_token"]
 
-    def test_reuse_detection_revokes_every_session(self, client):
+        # The token returned by the FIRST refresh was overtaken by the replay,
+        # but it also recovers through the chain.
+        recovered = client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": first.json()["refresh_token"]},
+        )
+        assert recovered.status_code == 200
+
+    def test_concurrent_refreshes_serialize_without_mass_revocation(self, client):
         data = _login(client)
 
-        rotated = client.post(
-            "/api/v1/auth/refresh",
-            json={"refresh_token": data["refresh_token"]},
-        ).json()
+        # Two overlapping refreshes presenting the same token. Both must return
+        # a fresh pair, and neither must invalidate the other.
+        responses = [
+            client.post(
+                "/api/v1/auth/refresh",
+                json={"refresh_token": data["refresh_token"]},
+            )
+            for _ in range(2)
+        ]
+        assert all(r.status_code == 200 for r in responses)
+        assert responses[0].json()["refresh_token"] != responses[1].json()["refresh_token"]
 
-        # The legitimate holder of the newest token is signed out too, because
-        # we cannot tell them apart from whoever replayed the old token.
-        reuse = client.post(
+        # Every token handed out by the race remains usable afterwards.
+        for response in responses:
+            follow_up = client.post(
+                "/api/v1/auth/refresh",
+                json={"refresh_token": response.json()["refresh_token"]},
+            )
+            assert follow_up.status_code == 200
+
+    def test_logged_out_session_cannot_be_resurrected(self, client):
+        data = _login(client)
+
+        client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {data['access_token']}"},
+        )
+
+        response = client.post(
             "/api/v1/auth/refresh",
             json={"refresh_token": data["refresh_token"]},
         )
-        assert reuse.status_code == 401
-
-        newest = client.post(
-            "/api/v1/auth/refresh",
-            json={"refresh_token": rotated["refresh_token"]},
-        )
-        assert newest.status_code == 401
+        assert response.status_code == 401
 
     def test_rotation_chain_keeps_working(self, client):
         data = _login(client)

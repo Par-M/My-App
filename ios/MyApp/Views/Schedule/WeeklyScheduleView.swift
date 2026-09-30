@@ -1092,30 +1092,67 @@ private var dayContent: some View {
         let ignored = isApp ? false : calendarService.isIgnored(event)
         let completed = occurrenceCompleted(event)
 
-        let content = eventRowContent(
-            event,
-            ignored: ignored,
-            completed: completed,
-            isApp: isApp,
-            isAppBlock: isAppBlock
-        )
-
         if isApp && !isAppBlock {
             if let task = task(for: event) {
+                let date = calendar.startOfDay(for: event.start)
+                // A task occurrence: tap the row to edit its time, or tap the
+                // trailing checkmark to mark it done for that day. Once done it
+                // shows an X so an accidental check can be undone.
                 return AnyView(
-                    Button {
-                        editingOccurrence = OccurrenceEditContext(
-                            task: task,
-                            date: calendar.startOfDay(for: event.start)
-                        )
-                    } label: {
-                        content
+                    HStack(spacing: 0) {
+                        Button {
+                            editingOccurrence = OccurrenceEditContext(task: task, date: date)
+                        } label: {
+                            eventRowContent(event, ignored: false, completed: completed) {
+                                EmptyView()
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            toggleOccurrenceCompletion(task: task, date: date, currentlyCompleted: completed)
+                        } label: {
+                            completionToggleIcon(completed: completed)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 10)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel(completed ? "Reopen event" : "Mark event complete")
+                        .accessibilityAddTraits(.isButton)
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 8)
+                    .padding(.leading, 8)
+                    .background(
+                        Color(UIColor.quaternarySystemFill),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
                 )
             }
-            return AnyView(content)
+            return AnyView(
+                eventRowContent(event, ignored: false, completed: completed) {
+                    if completed {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            )
         } else {
+            let content = eventRowContent(event, ignored: ignored, completed: completed) {
+                if ignored {
+                    Image(systemName: "nosign")
+                        .foregroundStyle(.secondary)
+                } else if isAppBlock {
+                    Image(systemName: "pencil")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Ignore")
+                        .foregroundStyle(.secondary)
+                }
+            }
             return AnyView(
                 Button {
                     if let block = block(for: event) {
@@ -1128,6 +1165,42 @@ private var dayContent: some View {
                 }
                 .buttonStyle(.plain)
             )
+        }
+    }
+
+    @ViewBuilder
+    private func completionToggleIcon(completed: Bool) -> some View {
+        if completed {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+                .font(.title3)
+        } else {
+            Image(systemName: "circle")
+                .foregroundStyle(.green)
+                .font(.title3)
+        }
+    }
+
+    private func toggleOccurrenceCompletion(
+        task: TaskItem,
+        date: Date,
+        currentlyCompleted: Bool
+    ) {
+        let isRepeating = !((task.repeatWeekdays ?? []).isEmpty)
+        Task {
+            do {
+                if currentlyCompleted {
+                    if isRepeating {
+                        _ = try await taskService.reopenOccurrence(task, on: date)
+                    } else {
+                        _ = try await taskService.setStatus(.pending, for: task)
+                    }
+                } else {
+                    _ = try await taskService.completeOccurrence(task, on: date)
+                }
+            } catch {
+                taskService.presentError(error.localizedDescription)
+            }
         }
     }
 
@@ -1161,12 +1234,11 @@ private var dayContent: some View {
         _ event: CalendarEventItem,
         ignored: Bool,
         completed: Bool,
-        isApp: Bool,
-        isAppBlock: Bool
+        @ViewBuilder trailing: () -> some View
     ) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(completed ? Color.green : (isApp ? Color.accentColor : .gray))
+                .fill(completed ? Color.green : (isAppEvent(event) ? Color.accentColor : .gray))
                 .frame(width: 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title)
@@ -1178,29 +1250,8 @@ private var dayContent: some View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if ignored {
-                Image(systemName: "nosign")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if isAppBlock {
-                Image(systemName: "pencil")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if isApp {
-                if completed {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                } else {
-                    Image(systemName: "checklist")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text("Ignore")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            trailing()
+                .font(.caption)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)

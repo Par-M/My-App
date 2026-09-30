@@ -1087,6 +1087,80 @@ class TestOccurrenceCompletion:
         )
         assert response.status_code == 401
 
+    def _set_occurrence(self, client, token, task_id, day, completed):
+        return client.patch(
+            f"/api/v1/tasks/{task_id}/occurrence/completion",
+            json={
+                "date": day.isoformat(),
+                "completed": completed,
+                "timezone": "UTC",
+            },
+            headers=_auth(token),
+        )
+
+    def test_occurrence_can_be_marked_complete_and_reopened(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        target = (_now() + timedelta(days=2)).date()
+
+        marked = self._set_occurrence(
+            client, data["access_token"], task["id"], target, True
+        )
+        assert marked.status_code == 200
+        body = marked.json()
+        assert body["repeat_overrides"][target.isoformat()]["completed"] is True
+        # The series keeps running, so the task itself is not completed.
+        assert body["status"] != "completed"
+
+        reopened = self._set_occurrence(
+            client, data["access_token"], task["id"], target, False
+        )
+        assert reopened.status_code == 200
+        assert (
+            reopened.json()["repeat_overrides"][target.isoformat()]["completed"]
+            is False
+        )
+        assert reopened.json()["status"] != "completed"
+
+    def test_reopening_an_occurrence_reopens_that_days_block(self, client):
+        data = _login(client)
+        task = self._repeating_task(client, data["access_token"])
+        now = _now()
+        day = now.date()
+        block_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        _create_block(
+            client,
+            data["access_token"],
+            task["id"],
+            block_start,
+            block_start + timedelta(minutes=30),
+        )
+
+        self._set_occurrence(client, data["access_token"], task["id"], day, True)
+        self._set_occurrence(client, data["access_token"], task["id"], day, False)
+
+        blocks = client.get(
+            "/api/v1/calendar/blocks",
+            headers=_auth(data["access_token"]),
+        ).json()["items"]
+        assert all(b["completed_at"] is None for b in blocks)
+
+    def test_occurrence_completion_rejects_non_repeating_task(self, client):
+        data = _login(client)
+        task = _create_task(client, data["access_token"], title="One-off")
+
+        response = self._set_occurrence(
+            client, data["access_token"], task["id"], _now().date(), True
+        )
+        assert response.status_code == 409
+
+    def test_occurrence_completion_requires_authentication(self, client):
+        response = client.patch(
+            f"/api/v1/tasks/{uuid.uuid4()}/occurrence/completion",
+            json={"date": "2026-09-22", "completed": True},
+        )
+        assert response.status_code == 401
+
 
 class TestMissedReasons:
     def _reschedule(self, client, token, title, category):

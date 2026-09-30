@@ -222,6 +222,15 @@ class OccurrenceUpdateRequest(BaseModel):
         return self
 
 
+class OccurrenceCompletionRequest(BaseModel):
+    # Toggle a single occurrence of a repeating task as done / not done.
+    # Either field may be omitted: a missing value is rejected rather than
+    # guessed so a malformed request never silently flips a date.
+    date: date
+    completed: bool
+    timezone: str = "UTC"
+
+
 class OccurrenceUpdateResponse(BaseModel):
     task: TaskResponse
     new_task: TaskResponse | None = None

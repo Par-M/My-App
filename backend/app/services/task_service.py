@@ -351,6 +351,61 @@ class TaskService:
         self.db.refresh(task)
         return task
 
+    def set_occurrence_completed(
+        self,
+        task_id: uuid.UUID,
+        *,
+        occurrence_date: date,
+        completed: bool,
+        timezone_name: str = "UTC",
+    ) -> Task:
+        """Mark a single occurrence of a repeating task done or not done.
+
+        Records the state in ``repeat_overrides[date]["completed"]`` and updates
+        the block(s) that fall inside that local day, leaving the task's overall
+        status untouched so future occurrences keep appearing in the calendar.
+        This is the undo counterpart of ``_complete_occurrence``.
+        """
+        task = self.get_task(task_id)
+        if not task.repeat_weekdays:
+            raise InvalidTaskTransitionError(
+                "Only a repeating task has occurrences"
+            )
+
+        tz = ZoneInfo(timezone_name)
+        local_date = occurrence_date or datetime.now(tz).date()
+
+        overrides = dict(task.repeat_overrides or {})
+        key = local_date.isoformat()
+        entry = dict(overrides.get(key) or {})
+        entry["completed"] = bool(completed)
+        overrides[key] = entry
+        task.repeat_overrides = overrides
+
+        day_start = datetime.combine(local_date, dt_time.min, tzinfo=tz)
+        day_end = day_start + timedelta(days=1)
+        now_ts = datetime.now(_utc())
+        day_blocks = list(
+            self.db.scalars(
+                select(CalendarBlock).where(
+                    CalendarBlock.task_id == task.id,
+                    CalendarBlock.start_at >= day_start,
+                    CalendarBlock.start_at < day_end,
+                )
+            ).all()
+        )
+        for blk in day_blocks:
+            if completed:
+                if blk.completed_at is None:
+                    blk.completed_at = now_ts
+            else:
+                blk.completed_at = None
+                blk.completion_note = None
+        recompute_task_progress(self.db, task.id)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
     def list_overdue(self) -> list[Task]:
         now = datetime.now(_utc())
         deadline_ids = {

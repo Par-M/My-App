@@ -430,6 +430,18 @@ struct OccurrenceUpdateRequest: Encodable, Sendable {
     }
 }
 
+struct OccurrenceCompletionRequest: Encodable, Sendable {
+    let date: String
+    let completed: Bool
+    let timezone: String
+
+    private enum CodingKeys: String, CodingKey {
+        case date
+        case completed
+        case timezone
+    }
+}
+
 struct OccurrenceUpdateResponse: Codable, Sendable {
     let task: TaskItem
     let newTask: TaskItem?

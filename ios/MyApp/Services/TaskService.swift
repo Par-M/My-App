@@ -385,13 +385,22 @@ final class TaskService {
     func completeTask(
         id: UUID,
         minutes: Int?,
-        productivity: TaskProductivity? = nil
+        productivity: TaskProductivity? = nil,
+        occurrenceDate: Date? = nil
     ) async throws -> TaskItem {
         let current = tasks.first(where: { $0.id == id })
         let isRepeating = !((current?.repeatWeekdays ?? []).isEmpty)
+        let completionDate = occurrenceDate ?? Date()
 
         if !connectivity.isConnected, let store, let current {
-            let local = bump(completeLocally(current, minutes: minutes, productivity: productivity))
+            let local = bump(
+                completeLocally(
+                    current,
+                    minutes: minutes,
+                    productivity: productivity,
+                    occurrenceDate: completionDate
+                )
+            )
             store.upsert(local, dirty: true)
             replace(local)
             isOfflineMode = true
@@ -405,7 +414,7 @@ final class TaskService {
                     id: id,
                     minutes: minutes,
                     productivity: productivity,
-                    occurrenceDate: isRepeating ? OccurrenceDateKey.key(for: Date()) : nil,
+                    occurrenceDate: isRepeating ? OccurrenceDateKey.key(for: completionDate) : nil,
                     timezone: TimeZone.current.identifier
                 )
             )
@@ -416,7 +425,14 @@ final class TaskService {
             return updated
         } catch {
             if let store, isNetworkUnavailable(error), let current {
-                let local = bump(completeLocally(current, minutes: minutes, productivity: productivity))
+                let local = bump(
+                    completeLocally(
+                        current,
+                        minutes: minutes,
+                        productivity: productivity,
+                        occurrenceDate: completionDate
+                    )
+                )
                 store.upsert(local, dirty: true)
                 replace(local)
                 isOfflineMode = true
@@ -430,14 +446,15 @@ final class TaskService {
     private func completeLocally(
         _ current: TaskItem,
         minutes: Int?,
-        productivity: TaskProductivity?
+        productivity: TaskProductivity?,
+        occurrenceDate: Date
     ) -> TaskItem {
         var updated = current
         if !((current.repeatWeekdays ?? []).isEmpty) {
-            // Complete today's occurrence only so the repeated series keeps
-            // going. The backend picks this up on the next sync.
+            // Complete this occurrence only so the repeated series keeps going.
+            // The backend picks this up on the next sync.
             var overrides = updated.repeatOverrides ?? [:]
-            let key = OccurrenceDateKey.key(for: Date())
+            let key = OccurrenceDateKey.key(for: occurrenceDate)
             var entry = overrides[key] ?? RepeatOverride(startAt: nil, endAt: nil)
             entry.completed = true
             overrides[key] = entry
@@ -450,6 +467,78 @@ final class TaskService {
                 updated.actualDuration = minutes
             }
         }
+        return updated
+    }
+
+    /// Mark a task shown in the calendar as done for the tapped day.
+    ///
+    /// A repeating task records a per-occurrence completion so the rest of the
+    /// series keeps running; a one-off task is completed as a whole.
+    func completeOccurrence(_ task: TaskItem, on date: Date) async throws -> TaskItem {
+        try await completeTask(
+            id: task.id,
+            minutes: nil,
+            productivity: task.productivity,
+            occurrenceDate: date
+        )
+    }
+
+    /// Reopen a single occurrence of a repeating task so it stops showing as
+    /// completed in the calendar. Hits the occurrence-completion endpoint so
+    /// the server clears both the override marker and that day's block.
+    func reopenOccurrence(
+        _ task: TaskItem,
+        on date: Date
+    ) async throws -> TaskItem {
+        if !connectivity.isConnected, let store {
+            let local = bump(reopenOccurrenceLocally(task, on: date))
+            store.upsert(local, dirty: true)
+            replace(local)
+            isOfflineMode = true
+            dataVersion += 1
+            return local
+        }
+
+        do {
+            let updated: TaskItem = try await client.request(
+                TaskEndpoint.occurrenceCompletion(
+                    id: task.id,
+                    request: OccurrenceCompletionRequest(
+                        date: OccurrenceDateKey.key(for: date),
+                        completed: false,
+                        timezone: TimeZone.current.identifier
+                    )
+                )
+            )
+            store?.upsert(updated)
+            replace(updated)
+            isOfflineMode = false
+            dataVersion += 1
+            return updated
+        } catch {
+            if let store, isNetworkUnavailable(error) {
+                let local = bump(reopenOccurrenceLocally(task, on: date))
+                store.upsert(local, dirty: true)
+                replace(local)
+                isOfflineMode = true
+                dataVersion += 1
+                return local
+            }
+            throw error
+        }
+    }
+
+    private func reopenOccurrenceLocally(
+        _ current: TaskItem,
+        on date: Date
+    ) -> TaskItem {
+        var updated = current
+        var overrides = updated.repeatOverrides ?? [:]
+        let key = OccurrenceDateKey.key(for: date)
+        var entry = overrides[key] ?? RepeatOverride(startAt: nil, endAt: nil)
+        entry.completed = false
+        overrides[key] = entry
+        updated.repeatOverrides = overrides
         return updated
     }
 

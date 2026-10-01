@@ -186,6 +186,16 @@ class CompleteTaskRequest(BaseModel):
     timezone: str = "UTC"
 
 
+class RecordTimeRequest(BaseModel):
+    """Minutes of focus to ADD to a task's tracked time.
+
+    Focus sessions accumulate, so this increments ``actual_duration``
+    rather than replacing it.
+    """
+
+    minutes: int = Field(ge=1, le=525600)
+
+
 class SnoozeRequest(BaseModel):
     minutes: int = Field(ge=1, le=1440)
     timezone: str = "UTC"

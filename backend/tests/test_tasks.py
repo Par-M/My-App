@@ -688,6 +688,80 @@ class TestDeleteTask:
         assert response.status_code == 404
 
 
+class TestRecordTime:
+    def _record(self, client, token, task_id, minutes):
+        return client.patch(
+            f"/api/v1/tasks/{task_id}/time",
+            json={"minutes": minutes},
+            headers=_auth(token),
+        )
+
+    def test_time_accumulates_across_sessions(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        task = _create(
+            client, token, estimated_duration=180, actual_duration=120
+        ).json()
+
+        # A second 40-minute session must add to the 120 already logged
+        # rather than overwrite it.
+        response = self._record(client, token, task["id"], 40)
+        assert response.status_code == 200, response.text
+        assert response.json()["actual_duration"] == 160
+
+    def test_time_records_from_zero(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        task = _create(client, token, estimated_duration=180).json()
+        assert task["actual_duration"] is None
+
+        response = self._record(client, token, task["id"], 40)
+        assert response.status_code == 200, response.text
+        assert response.json()["actual_duration"] == 40
+
+    def test_time_updates_progress_percent(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        task = _create(client, token, estimated_duration=200).json()
+
+        response = self._record(client, token, task["id"], 50)
+        assert response.status_code == 200, response.text
+        assert response.json()["progress_percent"] == 25
+
+    def test_repeated_sessions_sum_correctly(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        task = _create(client, token, estimated_duration=180).json()
+
+        for minutes in (40, 30, 15):
+            assert self._record(client, token, task["id"], minutes).status_code == 200
+
+        final = self._record(client, token, task["id"], 1)
+        assert final.json()["actual_duration"] == 86
+
+    def test_time_requires_positive_minutes(self, client):
+        data = _login(client)
+        token = data["access_token"]
+        task = _create(client, token, estimated_duration=180).json()
+
+        response = self._record(client, token, task["id"], 0)
+        assert response.status_code == 422
+
+    def test_time_requires_authentication(self, client):
+        response = client.patch(
+            f"/api/v1/tasks/{uuid.uuid4()}/time",
+            json={"minutes": 40},
+        )
+        assert response.status_code == 401
+
+    def test_time_rejects_unknown_task(self, client):
+        data = _login(client)
+        response = self._record(
+            client, data["access_token"], uuid.uuid4(), 40
+        )
+        assert response.status_code == 404
+
+
 class TestArchiveRestore:
     def test_archive_and_restore(self, client):
         data = _login(client)

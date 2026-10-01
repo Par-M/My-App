@@ -81,8 +81,6 @@ struct MyAppApp: App {
                 .onOpenURL { url in
                     guard url.scheme == "app" else { return }
                     switch url.host {
-                    case "reflect":
-                        NotificationCenter.default.post(name: .openReflection, object: nil)
                     case "focus":
                         NotificationCenter.default.post(name: .openFocus, object: nil)
                     default:

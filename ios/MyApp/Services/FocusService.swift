@@ -5,7 +5,6 @@ import Observation
 @Observable
 final class FocusService {
     private(set) var dailySessions: [FocusSession] = []
-    private(set) var reflections: [Reflection] = []
     private(set) var summary: FocusSummary?
     private(set) var morningMessage: MorningMessage?
     private(set) var isLoading = false
@@ -27,8 +26,7 @@ final class FocusService {
         defer { isLoading = false }
         async let sessions = loadSessions(after: after, before: before)
         async let summary = loadSummary(after: after, before: before)
-        async let reflections = loadReflections()
-        _ = await (sessions, summary, reflections)
+        _ = await (sessions, summary)
     }
 
     @discardableResult
@@ -149,20 +147,6 @@ final class FocusService {
     }
 
     @discardableResult
-    func createReflection(date: Date, text: String) async -> Reflection? {
-        let payload = ReflectionCreate(date: date, text: text)
-        do {
-            let reflection: Reflection = try await client.request(FocusEndpoint.createReflection(payload))
-            dataVersion += 1
-            await loadReflections()
-            return reflection
-        } catch {
-            errorMessage = error.localizedDescription
-            return nil
-        }
-    }
-
-    @discardableResult
     func loadMorningMessage() async -> MorningMessage? {
         do {
             let message: MorningMessage = try await client.request(FocusEndpoint.morningMessage)
@@ -191,16 +175,6 @@ final class FocusService {
                 FocusEndpoint.summary(after: after, before: before)
             )
             summary = response
-            dataVersion += 1
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func loadReflections() async {
-        do {
-            let response: [Reflection] = try await client.request(FocusEndpoint.reflections)
-            reflections = response
             dataVersion += 1
         } catch {
             errorMessage = error.localizedDescription

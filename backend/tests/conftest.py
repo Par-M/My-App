@@ -29,10 +29,6 @@ BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-DEFAULT_TEST_DATABASE_URL = (
-    "postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test"
-)
-
 # Matches a database name that is obviously disposable, e.g. "myapp_test",
 # "test", "myapp_test_2", "myapp-test". Deliberately does not match
 # "myapp_latest" or "contest".
@@ -43,9 +39,10 @@ _ENV_FILE = BACKEND_ROOT / ".env"
 _HOW_TO_FIX = (
     "Point the suite at a disposable database, for example:\n"
     "    export TEST_DATABASE_URL="
-    "postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test\n"
-    "or use the bundled Postgres:\n"
-    "    docker compose -f backend/docker-compose.yml up -d postgres"
+    "postgresql+psycopg://$USER@localhost:5432/myapp_test\n"
+    "Make sure a local PostgreSQL 17 is running:\n"
+    "    brew services start postgresql@17\n"
+    "The suite creates the test database if it does not exist."
 )
 
 
@@ -124,20 +121,23 @@ def _ensure_database_exists(url: str) -> None:
     )
 
     try:
-        conn = psycopg.connect(maintenance_url, connect_timeout=5)
+        # autocommit is required: CREATE DATABASE cannot run inside a
+        # transaction block, and `with conn` would otherwise open one.
+        conn = psycopg.connect(maintenance_url, connect_timeout=5, autocommit=True)
     except Exception as exc:  # pragma: no cover - connection diagnostics
         raise RuntimeError(
             f"Could not reach PostgreSQL at {parsed.host}:{parsed.port}. "
             f"Is the server running?\n{_HOW_TO_FIX}"
         ) from exc
 
-    with conn, conn.cursor() as cur:
+    with conn.cursor() as cur:
         exists = cur.execute(
             "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
         ).fetchone()
         if exists is None:
             cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
             print(f"created test database {name!r}")
+    conn.close()
 
 
 def _build_schema(url: str) -> None:

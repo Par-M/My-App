@@ -84,8 +84,7 @@ The backend can push reminders outside the app. Delivery requires APNs credentia
 │   │   ├── security/         JWT access + refresh tokens
 │   │   ├── services/         Business logic, AI scheduling, Google + APNs clients
 │   ├── alembic/              Database migrations
-│   ├── tests/                pytest suite
-│   └── docker-compose.yml    Local PostgreSQL only — no Docker in production (Vercel serverless runs the backend directly)
+│   ├── tests/                pytest suite (local PostgreSQL via Homebrew)
 ├── ios/MyApp/                SwiftUI app (iOS + Mac Catalyst)
 │   ├── App/                  Entry point, app delegate
 │   ├── Models/               Codable models mirroring the API
@@ -121,7 +120,7 @@ Interactive docs are available at `/docs` when running locally.
 
 ### Database
 
-PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The deployed backend uses a **Neon** Postgres instance (`DATABASE_URL` from Neon's connection string), with a local Postgres via Docker for development. In addition to the core tables, this update adds:
+PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The deployed backend uses a **Neon** Postgres instance (`DATABASE_URL` from Neon's connection string), with a local PostgreSQL 17 via Homebrew for development. In addition to the core tables, this update adds:
 
 - `task_breakdowns`: stores description-derived subtask parts per task
 - `daily_task_recommendations`: persisted daily recommendation rows (per user/date/task/subtask)
@@ -134,11 +133,18 @@ PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The deployed backend 
 
 ### Backend
 
-1. **Start local PostgreSQL** (Docker is only for local development; the deployed backend doesn't use Docker)
+1. **Start local PostgreSQL** (native Homebrew install — no Docker required)
 
    ```sh
-   cd backend
-   docker compose up -d
+   brew install postgresql@17
+   brew services start postgresql@17
+   ```
+
+   Provision the role and development database once (Homebrew's cluster
+   ships a database per OS user, not the `postgres` role):
+
+   ```sh
+   createdb myapp_db
    ```
 
 2. **Configure environment**: copy the settings from the repo's environment template into `backend/.env` (or export them). Required values:
@@ -174,9 +180,13 @@ PostgreSQL with SQLAlchemy 2.0 and Alembic for migrations. The deployed backend 
    `TEST_DATABASE_URL` names a disposable database:
 
    ```sh
-   export TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/myapp_test
+   export TEST_DATABASE_URL="postgresql+psycopg://$(whoami)@localhost:5432/myapp_test"
    python -m pytest tests -q
    ```
+
+   Homebrew's PostgreSQL makes the installing OS user a superuser, so no
+   password is needed locally. The suite creates `myapp_test` (and the schema
+   inside it) if it does not exist.
 
    The suite never reads `DATABASE_URL` as its target, and additionally rejects
    a test URL that resolves to the application's own database or that lacks a
@@ -196,7 +206,7 @@ Open `ios/MyApp.xcodeproj` in Xcode, select the **MyApp** scheme, and run on a s
 
 ## Deployment
 
-The backend deploys to **Vercel** (project `lock-in-bud`) as a serverless function — **no Docker** — so there is no container image or Dockerfile for the deployed backend. The only Docker usage in the repo is `backend/docker-compose.yml`, which spins up a local Postgres for development. The project is Git-connected: every push to `main` auto-deploys production with the backend root at `backend/`. The database lives on **Neon**, so no Vercel-managed Postgres is required.
+The backend deploys to **Vercel** (project `lock-in-bud`) as a serverless function, so there is no container image or Dockerfile for the deployed backend. Local development and tests use a native PostgreSQL 17 installed with Homebrew (`brew services start postgresql@17`) — no Docker required. The project is Git-connected: every push to `main` auto-deploys production with the backend root at `backend/`. The database lives on **Neon**, so no Vercel-managed Postgres is required.
 
 - `backend/api/index.py` runs `alembic upgrade head` on cold start, so migrations apply automatically before requests are served.
 - Live URL: `https://lock-in-bud.vercel.app`

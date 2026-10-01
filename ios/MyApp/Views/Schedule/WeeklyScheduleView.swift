@@ -1259,16 +1259,12 @@ private var dayContent: some View {
     private func rescheduleNotifications() {
         let workStart = scheduleService.preference?.workHoursStart ?? 9
         let workEnd = scheduleService.preference?.workHoursEnd ?? 17
-        let hasReflectionToday = focusService.reflections.contains {
-            Calendar.current.isDateInToday($0.date)
-        }
         notificationService.scheduleAll(
             tasks: taskService.tasks,
             events: [],
             blocks: scheduleService.blocks,
             workHoursStart: workStart,
             workHoursEnd: workEnd,
-            hasReflectionToday: hasReflectionToday,
             hasOngoingFocus: focusTimerStartedAt > 0,
             morningMessage: focusService.morningMessage?.message
         )

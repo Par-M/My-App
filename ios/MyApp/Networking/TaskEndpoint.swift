@@ -46,7 +46,7 @@ enum TaskEndpoint: Endpoint {
         case .complete(let id, _, _, _, _):
             return "/api/v1/tasks/\(id.uuidString.lowercased())/complete"
         case .recordTime(let id, _):
-            return "/api/v1/tasks/\(id.uuidString.lowercased())"
+            return "/api/v1/tasks/\(id.uuidString.lowercased())/time"
         case .overdue:
             return "/api/v1/tasks/overdue"
         case .reschedule(let id, _, _, _, _):

@@ -14,6 +14,7 @@ from app.models.task import TaskPriority
 from app.models.task import TaskStatus
 from app.models.user import User
 from app.schemas.task import CompleteTaskRequest
+from app.schemas.task import RecordTimeRequest
 from app.schemas.task import OccurrenceCompletionRequest
 from app.schemas.task import OccurrenceUpdateRequest
 from app.schemas.task import OccurrenceUpdateResponse
@@ -241,6 +242,18 @@ def complete_task(
             occurrence_date=payload.occurrence_date,
             timezone_name=payload.timezone,
         )
+    except TaskNotFoundError as exc:
+        _handle_service_errors(exc)
+
+
+@router.patch("/{task_id}/time", response_model=TaskResponse)
+def record_task_time(
+    task_id: uuid.UUID,
+    payload: RecordTimeRequest,
+    service: TaskService = Depends(_service),
+) -> TaskResponse:
+    try:
+        return service.record_time(task_id, payload.minutes)
     except TaskNotFoundError as exc:
         _handle_service_errors(exc)
 

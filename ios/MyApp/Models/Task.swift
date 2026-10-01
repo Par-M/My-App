@@ -381,10 +381,6 @@ struct CompleteTaskRequest: Encodable, Sendable {
 
 struct RecordTimeRequest: Encodable, Sendable {
     let minutes: Int
-
-    private enum CodingKeys: String, CodingKey {
-        case minutes = "actual_duration"
-    }
 }
 
 struct RescheduleRequest: Encodable, Sendable {

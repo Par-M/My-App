@@ -41,7 +41,6 @@ final class NotificationService {
     private struct RescheduleContext {
         var workHoursStart: Double
         var workHoursEnd: Double
-        var hasReflectionToday: Bool
         var morningMessage: String?
         var blocks: [CalendarBlock]
     }
@@ -144,7 +143,6 @@ final class NotificationService {
             blocks: context?.blocks ?? [],
             workHoursStart: context?.workHoursStart ?? 9,
             workHoursEnd: context?.workHoursEnd ?? 17,
-            hasReflectionToday: context?.hasReflectionToday ?? false,
             hasOngoingFocus: false,
             morningMessage: context?.morningMessage
         )
@@ -156,14 +154,12 @@ final class NotificationService {
         blocks: [CalendarBlock],
         workHoursStart: Double,
         workHoursEnd: Double,
-        hasReflectionToday: Bool,
         hasOngoingFocus: Bool,
         morningMessage: String?
     ) {
         lastRescheduleContext = RescheduleContext(
             workHoursStart: workHoursStart,
             workHoursEnd: workHoursEnd,
-            hasReflectionToday: hasReflectionToday,
             morningMessage: morningMessage,
             blocks: blocks
         )
@@ -174,7 +170,6 @@ final class NotificationService {
         }
 
         scheduleTaskReminders(tasks: tasks)
-        scheduleReflectionReminder(workHoursEnd: workHoursEnd, hasReflectionToday: hasReflectionToday)
         scheduleGoodMorning(workHoursStart: workHoursStart, message: morningMessage)
         scheduleEventReminders(events: events)
         scheduleFocusNudges(blocks: blocks, hasOngoingFocus: hasOngoingFocus)
@@ -258,28 +253,6 @@ final class NotificationService {
                 }
             }
         }
-    }
-
-    private func scheduleReflectionReminder(workHoursEnd: Double, hasReflectionToday: Bool) {
-        guard !hasReflectionToday else { return }
-        let calendar = Calendar.current
-        let now = Date()
-        let wholeHours = Int(workHoursEnd)
-        let minutes = Int((workHoursEnd - Double(wholeHours)) * 60)
-        var components = calendar.dateComponents([.year, .month, .day], from: now)
-        components.hour = min(max(wholeHours, 0), 23)
-        components.minute = minutes
-        guard let workEnd = calendar.date(from: components) else { return }
-        let fireAt = workEnd.addingTimeInterval(-30 * 60)
-        guard fireAt > now else { return }
-        addAlert(
-            identifier: "end-of-day-reflection",
-            date: fireAt,
-            title: "Daily reflection",
-            body: "The day is wrapping up — take a minute to reflect on how you focused.",
-            taskId: nil,
-            url: "app://today"
-        )
     }
 
     private func scheduleGoodMorning(workHoursStart: Double, message: String?) {

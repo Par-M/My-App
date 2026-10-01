@@ -2,7 +2,6 @@ import SwiftUI
 import WidgetKit
 
 extension Notification.Name {
-    static let openReflection = Notification.Name("openReflection")
     static let openFocus = Notification.Name("openFocus")
 }
 
@@ -47,7 +46,6 @@ struct FocusDashboardView: View {
     }
 
     @State private var range: RangeOption = .week
-    @State private var showingReflections = false
     @State private var showingStats = false
     @State private var pendingSessionStop: SessionStop?
     @AppStorage("focusTimerStartedAt") private var timerStartedAtRef = 0.0
@@ -76,8 +74,6 @@ struct FocusDashboardView: View {
 
                     statsButton
 
-                    reflectionsButton
-
                     if let summary = focus.summary, let analysis = summary.analysis, !analysis.isEmpty {
                         analysisCard(analysis)
                     }
@@ -95,9 +91,6 @@ struct FocusDashboardView: View {
                     }
                     .accessibilityIdentifier("refreshFocusButton")
                 }
-            }
-            .sheet(isPresented: $showingReflections) {
-                ReflectionListView()
             }
             .sheet(isPresented: $showingStats) {
                 FocusStatsView()
@@ -124,9 +117,6 @@ struct FocusDashboardView: View {
             }
             .onChange(of: range) {
                 Task { await focus.loadFocus(after: range.dateStart, before: .now) }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .openReflection)) { _ in
-                showingReflections = true
             }
         }
     }
@@ -266,9 +256,6 @@ struct FocusDashboardView: View {
             || notificationService.authorizationStatus == .provisional else { return }
         let workStart = scheduleService.preference?.workHoursStart ?? 9
         let workEnd = scheduleService.preference?.workHoursEnd ?? 17
-        let hasReflectionToday = focus.reflections.contains {
-            Calendar.current.isDateInToday($0.date)
-        }
         let hasOngoingFocus = isTimerRunning
         notificationService.scheduleAll(
             tasks: taskService.tasks,
@@ -276,7 +263,6 @@ struct FocusDashboardView: View {
             blocks: scheduleService.blocks,
             workHoursStart: workStart,
             workHoursEnd: workEnd,
-            hasReflectionToday: hasReflectionToday,
             hasOngoingFocus: hasOngoingFocus,
             morningMessage: focus.morningMessage?.message
         )
@@ -313,26 +299,6 @@ struct FocusDashboardView: View {
         .padding()
         .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
-
-    private var reflectionsButton: some View {
-        Button {
-            showingReflections = true
-        } label: {
-            HStack {
-                Label("View reflections", systemImage: "square.and.pencil")
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("viewReflectionsButton")
-    }
-
 }
 
 struct SessionStop: Identifiable {

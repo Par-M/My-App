@@ -304,6 +304,32 @@ class TaskService:
             pass
         return task
 
+    def record_time(self, task_id: uuid.UUID, minutes: int) -> Task:
+        """Add focused minutes to a task's tracked time.
+
+        Focus sessions accumulate on top of time already logged, so this
+        increments ``actual_duration``. Writing the value instead would
+        discard earlier sessions (e.g. 120 previously logged plus a new
+        40 would end up recorded as 40).
+        """
+        task = self.get_task(task_id)
+        task.actual_duration = (task.actual_duration or 0) + minutes
+        self._refresh_progress(task)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    @staticmethod
+    def _refresh_progress(task: Task) -> None:
+        """Recompute ``progress_percent`` from tracked time vs. estimate."""
+        if task.estimated_duration and task.estimated_duration > 0:
+            done = task.actual_duration or 0
+            task.progress_percent = min(
+                100, int(round(done * 100 / task.estimated_duration))
+            )
+        elif task.status == TaskStatus.completed:
+            task.progress_percent = 100
+
     def _complete_occurrence(
         self,
         task: Task,
